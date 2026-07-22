@@ -1287,3 +1287,118 @@ Los bloques deben desarrollarse e integrarse en el orden indicado. Cada bloque d
 | 12 | B12 Integración final | B01-B11 |
 
 Daniel y Jorge desarrollan en equipo todos los submódulos. Pueden avanzar en tareas distintas dentro del mismo submódulo, pero ambos deben integrar y conocer el resultado completo. No se cierra una entrega con migraciones pendientes, endpoints sin documentación OpenAPI, reglas sin auditoría, PHPDoc desactualizado o pruebas negativas ausentes.
+
+---
+
+# MisVales-Acceso-Backend-Faltantes
+
+# MisVales — M01 Acceso — Implementaciones faltantes
+
+El documento actual ya cubre contraseña, WebAuthn y TOTP. No volver a desarrollarlos. Agregar únicamente lo siguiente.
+
+## 1. OTP
+
+- Implementar OTP generado por MisVales, separado de TOTP.
+- Usarlo para verificación de dispositivo, riesgo moderado, recuperación y eventos excepcionales.
+- Guardar desafíos temporales en Redis con propósito, vigencia, intentos, reenvíos, estado y relaciones con cuenta, sesión y dispositivo.
+- Invalidar el OTP anterior al reenviar y permitir un solo consumo.
+- Aplicar límites por cuenta, IP, dispositivo y periodo.
+- Enviarlo mediante worker y registrar sus eventos sin almacenar el código en logs.
+- Crear:
+    - `POST /api/v1/auth/otp/request`
+    - `POST /api/v1/auth/otp/verify`
+- Dejar configurables canal, longitud, vigencia, intentos y reenvíos; esos valores siguen pendientes de definición.
+
+## 2. Dispositivos y contexto
+
+- Crear `account_devices` para registrar dispositivos `NEW`, `KNOWN` y `REVOKED`.
+- Guardar propietario, identificador protegido, nombre, primer y último acceso, contexto, verificación y revocación.
+- Generar una cookie segura de dispositivo desde el backend.
+- Permitir al usuario consultar, renombrar y revocar únicamente sus dispositivos.
+- Al revocar un dispositivo, revocar también sus sesiones, refresh tokens y autorizaciones temporales.
+- Crear:
+    - `GET /api/v1/auth/devices`
+    - `PATCH /api/v1/auth/devices/{deviceId}`
+    - `DELETE /api/v1/auth/devices/{deviceId}`
+- Capturar IP, ubicación aproximada, agente de usuario, navegador, sistema operativo y tipo de dispositivo.
+- Relacionar el contexto con intentos, dispositivos, sesiones, riesgo y autorizaciones.
+
+## 3. Riesgo y sesión
+
+- Evaluar dispositivo nuevo o revocado, cambios de IP o ubicación, cambio de navegador o dispositivo, accesos simultáneos incompatibles, horarios atípicos, intentos fallidos y cambios recientes de credenciales.
+- Registrar en la sesión los factores realmente utilizados: `PASSWORD`, `WEBAUTHN`, `TOTP` y `OTP`.
+- Registrar la fecha de validación de cada factor, propósito del OTP, nivel alcanzado y si la sesión proviene de recuperación.
+- Calcular todo en el backend; Angular solo lo consulta.
+
+## 4. Autorizaciones de coordinadores y gerentes
+
+Crear:
+
+- `authorization_requests`: solicitud, acción, módulo, solicitante, registro, sucursal, datos autorizados, estado y vigencia.
+- `authorization_steps`: etapas requeridas, orden, autoridad y estado.
+- `authorization_decisions`: aprobador, decisión, rol, alcance, sesión, dispositivo, reautenticación y fecha.
+- Extender `operational_authorization_tokens` para relacionar la solicitud, el ejecutor, los datos autorizados, el consumo y la revocación.
+
+Implementar este flujo:
+
+1. El módulo funcional crea la solicitud.
+2. M01 determina quién puede revisarla según rol, permiso, sucursal y asignación.
+3. El autorizador se reautentica y aprueba o rechaza.
+4. M01 controla las etapas y emite un token operativo de un uso al completar todas.
+5. El módulo funcional consume el token en la misma transacción que ejecuta la acción.
+
+Crear:
+
+- `GET /api/v1/access/authorization-requests`
+- `GET /api/v1/access/authorization-requests/{id}`
+- `POST /api/v1/access/authorization-requests/{id}/approve`
+- `POST /api/v1/access/authorization-requests/{id}/reject`
+
+## 5. Policies de cada módulo
+
+Cada módulo funcional debe indicar a M01:
+
+- Acción que requiere autorización.
+- Quién solicita, autoriza y ejecuta.
+- Etapas y orden.
+- Alcance por sucursal o asignación.
+- Datos e importe autorizados.
+- Reautenticación, vigencia e invalidaciones.
+
+Registrar inicialmente estas reglas:
+
+| Proceso | Autorización |
+| --- | --- |
+| Alta final de distribuidora | Gerente de sucursal o gerente general. |
+| Modificación solicitada por cajera | Coordinador de sucursal, gerente de sucursal o gerente general. |
+| Conciliación manual | Coordinador responsable, gerente de sucursal o gerente general. |
+| Incremento de línea | Preautorización de coordinador y autorización final de gerente. |
+| Transferencia de cliente | Aceptaciones de la receptora y autorización del coordinador de origen. |
+| Retiro de morosidad | Coordinador prepara y gerente decide. |
+| Canje de puntos | Gerente de sucursal o gerente general. |
+| Devolución de excedente | Gerente autoriza y cajera ejecuta. |
+
+M01 administra la autorización. El módulo propietario valida y ejecuta la regla de negocio.
+
+## 6. Auditoría, errores y pruebas
+
+- Auditar OTP, dispositivos, cambios de contexto, solicitudes, decisiones y tokens operativos.
+- Agregar errores de API para OTP inválido o bloqueado, dispositivo pendiente o revocado y autorización requerida, pendiente, rechazada, vencida o incompatible.
+- Probar expiración, límites, reenvío y consumo único de OTP.
+- Probar alta, verificación y revocación de dispositivos.
+- Probar cambios de IP, ubicación, agente y dispositivo.
+- Probar alcance de coordinador, gerente de sucursal y gerente general.
+- Probar separación entre solicitante, autorizador y ejecutor.
+- Probar autorizaciones multietapa, cambios de datos y concurrencia.
+- Probar consumo único y transaccional del token operativo.
+- Actualizar OpenAPI y `.env.example`.
+
+## Orden
+
+1. Migraciones.
+2. OTP.
+3. Dispositivos y contexto.
+4. Riesgo y factores de sesión.
+5. Motor de autorizaciones.
+6. Auditoría, errores, documentación y pruebas.
+7. Policies específicas conforme se desarrolle cada módulo funcional.
