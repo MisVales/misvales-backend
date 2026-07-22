@@ -1,0 +1,55 @@
+openapi: 3.1.0
+info:
+  title: MisVales API
+  version: 1.0.0
+paths: {}
+components:
+  schemas:
+    RoleCode:
+      type: string
+      enum:
+        - GENERAL_MANAGER
+        - SUCURSAL_MANAGER
+        - COORDINATOR
+        - VERIFIER
+        - ADMINISTRATOR
+        - DISTRIBUTOR
+        - CASHIER
+    PermissionCode:
+      type: string
+      enum:
+        - auth.context.read
+        - auth.sessions.read_own
+        - auth.sessions.revoke_own
+        - auth.password.change_own
+        - auth.mfa.manage_own
+        - accounts.global.create
+        - accounts.branch.request
+        - accounts.global.approve
+        - accounts.global.disable
+        - accounts.branch.disable_request
+        - security.alerts.global.read
+        - security.alerts.branch.read
+        - security.audit.global.read
+    AccountState:
+      type: string
+      enum:
+        - PENDING_ACTIVATION
+        - ACTIVE
+        - SECURITY_SUSPENDED
+        - DISABLED
+    AccountRequestState:
+      type: string
+      enum:
+        - PENDING_APPROVAL
+        - APPROVED
+        - REJECTED
+        - CANCELLED
+    TokenState:
+      type: string
+      enum:
+        - ACTIVE
+        - USED
+        - REPLACED
+        - EXPIRED
+        - REVOKED
