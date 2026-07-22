@@ -2,6 +2,9 @@
 
 namespace App\Providers;
 
+use App\Modules\Access\Application\Accounts\DistributorAccessProvisioner;
+use App\Modules\Access\Domain\Accounts\DistributorFinalAuthorizationCompleted;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
@@ -19,6 +22,6 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        //
+        Event::listen(DistributorFinalAuthorizationCompleted::class, [DistributorAccessProvisioner::class, 'handle']);
     }
 }

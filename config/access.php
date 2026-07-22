@@ -3,6 +3,14 @@
 return [
     'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'America/Monterrey'),
 
+    'initial_general_manager' => [
+        'enabled' => (bool) env('INITIAL_GENERAL_MANAGER_ENABLED', false),
+        'email' => env('INITIAL_GENERAL_MANAGER_EMAIL'),
+        'name' => env('INITIAL_GENERAL_MANAGER_NAME'),
+    ],
+
+    'revocation_cache_store' => env('ACCESS_REVOCATION_CACHE_STORE', env('CACHE_STORE', 'database')),
+
     'tokens' => [
         'access_ttl_minutes' => (int) env('ACCESS_TOKEN_TTL_MINUTES', 10),
         'admin_refresh_ttl_minutes' => (int) env('ACCESS_ADMIN_REFRESH_TTL_MINUTES', 480),

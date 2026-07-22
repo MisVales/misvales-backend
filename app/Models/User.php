@@ -12,17 +12,18 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
+use Laravel\Sanctum\HasApiTokens;
 
 #[Hidden(['password', 'remember_token'])]
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasFactory, Notifiable;
+    use HasApiTokens, HasFactory, Notifiable;
 
     use HasPublicUuid;
 
     /** @var list<string> */
-    protected $fillable = ['name', 'email', 'password'];
+    protected $fillable = ['name', 'email'];
 
     /** @return BelongsTo<Role, $this> */
     public function role(): BelongsTo
@@ -48,6 +49,9 @@ class User extends Authenticatable
             'password' => 'hashed',
             'state' => AccountState::class,
             'context_version' => 'integer',
+            'credential_version' => 'integer',
+            'invited_at' => 'immutable_datetime',
+            'activated_at' => 'immutable_datetime',
             'password_changed_at' => 'immutable_datetime',
             'mfa_enrolled_at' => 'immutable_datetime',
             'last_login_at' => 'immutable_datetime',

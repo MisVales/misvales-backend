@@ -35,6 +35,7 @@ class UserFactory extends Factory
             'password' => static::$password ??= Hash::make('password'),
             'state' => AccountState::ACTIVE,
             'context_version' => 1,
+            'credential_version' => 1,
             'role_id' => fn () => $this->role(RoleCode::DISTRIBUTOR)->id,
             'branch_id' => Branch::factory(),
             'remember_token' => Str::random(10),
