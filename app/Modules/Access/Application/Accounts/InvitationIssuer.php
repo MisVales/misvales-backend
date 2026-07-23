@@ -15,7 +15,7 @@ final readonly class InvitationIssuer
         private InvitationTokenFactory $tokens,
     ) {}
 
-    public function issue(User $user, InvitationPurpose $purpose): AccountInvitation
+    public function issue(User $user, InvitationPurpose $purpose, ?int $ttlMinutes = null): AccountInvitation
     {
         if ($user->credential_version === null) {
             $user->refresh();
@@ -37,7 +37,7 @@ final readonly class InvitationIssuer
             'token_hash' => hash('sha256', $plainToken),
             'state' => TokenState::ACTIVE,
             'issued_at' => now(),
-            'expires_at' => now()->addMinutes((int) config('access.tokens.invitation_ttl_minutes')),
+            'expires_at' => now()->addMinutes($ttlMinutes ?? (int) config('access.tokens.invitation_ttl_minutes')),
         ]);
 
         unset($plainToken);
@@ -52,7 +52,7 @@ final readonly class InvitationIssuer
         return $invitation;
     }
 
-    public function currentOrIssue(User $user, InvitationPurpose $purpose): AccountInvitation
+    public function currentOrIssue(User $user, InvitationPurpose $purpose, ?int $ttlMinutes = null): AccountInvitation
     {
         $current = AccountInvitation::query()
             ->where('user_id', $user->id)
@@ -61,6 +61,6 @@ final readonly class InvitationIssuer
             ->where('expires_at', '>', now())
             ->first();
 
-        return $current ?? $this->issue($user, $purpose);
+        return $current ?? $this->issue($user, $purpose, $ttlMinutes);
     }
 }

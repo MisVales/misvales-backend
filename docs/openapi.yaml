@@ -137,6 +137,68 @@ paths:
               required: [reauth_token]
               properties: { reauth_token: { type: string, writeOnly: true } }
       responses: { '200': { description: Invitación reemplazada } }
+  /api/v1/auth/invitations/inspect:
+    post:
+      operationId: inspectAccountInvitation
+      summary: Intercambia una invitación por un estado temporal restringido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties: { token: { type: string, writeOnly: true } }
+      responses:
+        '200': { description: Estado temporal de activación sin sesión operativa }
+        '409': { description: Invitación usada, vencida, revocada o de otro propósito }
+  /api/v1/auth/invitations/complete:
+    post:
+      operationId: completeAccountInvitation
+      summary: Establece contraseña propia, registra MFA y activa la cuenta
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CompleteInvitationInput' } } }
+      responses:
+        '200': { description: Primero devuelve diez códigos una sola vez; tras confirmarlos activa la cuenta y exige login }
+        '409': { description: Estado temporal o invitación consumidos }
+        '422': { description: Contraseña o inscripción MFA inválidas }
+  /api/v1/auth/recovery/password:
+    post:
+      operationId: requestPasswordRecovery
+      summary: Solicita recuperación con respuesta pública constante
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses: { '202': { description: Respuesta genérica independiente de la existencia de la cuenta } }
+  /api/v1/auth/recovery/password/complete:
+    post:
+      operationId: completePasswordRecovery
+      summary: Cambia la contraseña tras validar un segundo factor
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CompleteRecoveryInput' } } }
+      responses:
+        '200': { description: Credenciales cambiadas y todo acceso revocado }
+        '403': { description: Segundo factor inválido }
+        '409': { description: Token consumido, vencido o revocado }
+  /api/v1/auth/password/change:
+    post:
+      operationId: changeOwnPassword
+      summary: Cambia la contraseña propia con autorización temporal
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChangePasswordInput' } } }
+      responses:
+        '200': { description: Contraseña cambiada; sesiones y tokens revocados }
+        '403': { description: Autorización temporal inválida }
+        '422': { description: Contraseña fuera de política o reutilizada }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -153,6 +215,50 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/LifecycleInput' }
   schemas:
+    PasswordWithConfirmation:
+      type: object
+      required: [password, password_confirmation]
+      properties:
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        password_confirmation: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+    CompleteInvitationInput:
+      type: object
+      required: [exchange_token]
+      properties:
+        exchange_token: { type: string, writeOnly: true }
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        password_confirmation: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        recovery_codes_confirmed: { type: boolean, description: Segunda fase; confirma que los códigos mostrados fueron guardados }
+        mfa:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [PASSKEY, TOTP] }
+            secret: { type: string, writeOnly: true }
+            code: { type: string, pattern: '^\d{6}$', writeOnly: true }
+            credential_identifier: { type: string }
+            public_key: { type: string, writeOnly: true }
+            attestation_token: { type: string, writeOnly: true }
+      anyOf:
+        - { required: [password, password_confirmation, mfa] }
+        - properties: { recovery_codes_confirmed: { const: true } }
+          required: [recovery_codes_confirmed]
+    CompleteRecoveryInput:
+      allOf:
+        - { $ref: '#/components/schemas/PasswordWithConfirmation' }
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, writeOnly: true }
+            factor_type: { type: string, enum: [TOTP, RECOVERY_CODE, PASSKEY_AUTHORIZATION] }
+            factor_value: { type: string, writeOnly: true }
+            mfa: { type: object, description: Requerido para recuperación administrativa }
+    ChangePasswordInput:
+      allOf:
+        - { $ref: '#/components/schemas/PasswordWithConfirmation' }
+        - type: object
+          required: [reauth_token]
+          properties: { reauth_token: { type: string, writeOnly: true } }
     CreateAccountInput:
       type: object
       required: [name, email, role, authorization_token]

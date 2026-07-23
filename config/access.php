@@ -38,5 +38,7 @@ return [
     'security' => [
         'recovery_code_count' => (int) env('ACCESS_RECOVERY_CODE_COUNT', 10),
         'password_history_count' => (int) env('ACCESS_PASSWORD_HISTORY_COUNT', 5),
+        'invitation_exchange_ttl_minutes' => (int) env('ACCESS_INVITATION_EXCHANGE_TTL_MINUTES', 10),
+        'compromised_passwords_file' => resource_path('security/compromised-passwords-v1.txt'),
     ],
 ];

@@ -2,9 +2,11 @@
 
 use App\Modules\Access\Presentation\Http\Controllers\AccountController;
 use App\Modules\Access\Presentation\Http\Controllers\AccountRequestController;
+use App\Modules\Access\Presentation\Http\Controllers\CredentialController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware('auth:sanctum')->group(function (): void {
+    Route::post('auth/password/change', [CredentialController::class, 'change'])->name('auth.password.change');
     Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
     Route::post('accounts/{account}/disable', [AccountController::class, 'disable'])->name('accounts.disable');
     Route::post('accounts/{account}/disable-request', [AccountRequestController::class, 'disableRequest'])->name('account-requests.disable');
@@ -19,3 +21,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('account-requests/{accountRequest}/approve', [AccountRequestController::class, 'approve'])->name('account-requests.approve');
     Route::post('account-requests/{accountRequest}/reject', [AccountRequestController::class, 'reject'])->name('account-requests.reject');
 });
+
+Route::post('auth/invitations/inspect', [CredentialController::class, 'inspect'])->name('auth.invitations.inspect');
+Route::post('auth/invitations/complete', [CredentialController::class, 'completeInvitation'])->name('auth.invitations.complete');
+Route::post('auth/recovery/password', [CredentialController::class, 'requestRecovery'])->name('auth.recovery.password');
+Route::post('auth/recovery/password/complete', [CredentialController::class, 'completeRecovery'])->name('auth.recovery.password.complete');
