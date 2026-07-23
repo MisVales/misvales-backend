@@ -3,10 +3,11 @@
 namespace App\Modules\Access\Application\MFA;
 
 use App\Modules\Access\Domain\MFA\MfaType;
+use Illuminate\Support\Facades\Redis;
 use OTPHP\TOTP;
 
 /**
- * Verifies TOTP (Time-based One-Time Password) codes.
+ * Verifies TOTP (Time-based One-Time Password) codes with replay protection.
  * 
  * Per spec B05.2:
  * - 6 digits, 30-second period
@@ -23,6 +24,7 @@ final class TotpVerifier
     private const DIGITS = 6;
     private const PERIOD = 30;
     private const WINDOW = 1; // ±1 period tolerance per spec
+    private const REPLAY_PROTECTION_TTL = 60; // seconds = 2 periods
 
     /**
      * Generate a new TOTP secret for user enrollment.
@@ -47,13 +49,17 @@ final class TotpVerifier
     }
 
     /**
-     * Verify a TOTP code against a secret.
+     * Verify a TOTP code against a secret with replay protection.
+     * 
+     * Prevents accepting the same TOTP code twice within its validity window.
+     * Per spec B05.2: "Impedir reutilización de un TOTP ya aceptado en su ventana"
      * 
      * @param string $secret The TOTP secret (unencrypted)
      * @param string $code The 6-digit code to verify
-     * @return bool True if code is valid
+     * @param string $credentialHash Optional: Hash of MFA credential for replay tracking
+     * @return bool True if code is valid and not previously used
      */
-    public function verify(string $secret, string $code): bool
+    public function verify(string $secret, string $code, ?string $credentialHash = null): bool
     {
         if (!preg_match('/^\d{6}$/', $code)) {
             return false;
@@ -68,7 +74,24 @@ final class TotpVerifier
             );
 
             // Verify with window tolerance per spec B05.2
-            return $totp->verify($code, null, self::WINDOW);
+            if (!$totp->verify($code, null, self::WINDOW)) {
+                return false;
+            }
+
+            // Check replay protection if credential hash provided
+            if ($credentialHash !== null) {
+                $replayKey = "totp:used:{$credentialHash}:{$code}";
+                
+                if (Redis::exists($replayKey)) {
+                    // TOTP already used within validity window
+                    return false;
+                }
+
+                // Mark this code as used for the next N seconds (covers current + next period window)
+                Redis::setex($replayKey, self::REPLAY_PROTECTION_TTL, '1');
+            }
+
+            return true;
         } catch (\Exception) {
             return false;
         }
