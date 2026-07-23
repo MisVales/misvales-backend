@@ -1,0 +1,24 @@
+<?php
+
+namespace App\Modules\Access\Infrastructure\Persistence\Models;
+
+use Illuminate\Database\Eloquent\Attributes\Hidden;
+use Illuminate\Database\Eloquent\Model;
+
+/**
+ * Persists short-lived reauthentication grants for sensitive actions.
+ */
+#[Hidden(['token_hash'])]
+final class ReauthAuthorization extends Model
+{
+    protected $guarded = [];
+
+    protected function casts(): array
+    {
+        return [
+            'expires_at' => 'immutable_datetime',
+            'used_at' => 'immutable_datetime',
+            'revoked_at' => 'immutable_datetime',
+        ];
+    }
+}

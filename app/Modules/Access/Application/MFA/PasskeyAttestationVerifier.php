@@ -3,11 +3,10 @@
 namespace App\Modules\Access\Application\MFA;
 
 use App\Models\User;
-use App\Modules\Access\Domain\MFA\MfaType;
 
 /**
  * Verifies WebAuthn passkey attestations and assertions.
- * 
+ *
  * Per spec B05.1:
  * - Use maintained library compatible with PHP 8.5
  * - Configure rpId and origin exactly per environment
@@ -19,11 +18,8 @@ use App\Modules\Access\Domain\MFA\MfaType;
  * - Allow multiple passkeys
  * - Add/remove passkey requires reauthentication
  * - Cannot remove last passkey if TOTP not confirmed
- * 
- * NOTE: This is a placeholder implementation.
- * Production deployment requires integrating web-auth/webauthn library:
- * - composer require web-auth/webauthn
- * - See https://github.com/web-auth/webauthn-framework
+ *
+ * This verifier fails closed until the WebAuthn framework is wired in.
  */
 final class PasskeyAttestationVerifier
 {
@@ -35,16 +31,16 @@ final class PasskeyAttestationVerifier
 
     /**
      * Generate WebAuthn creation options for passkey registration.
-     * 
-     * @param string $userId User's public ID in UUID format
-     * @param string $userEmail User's email
-     * @param string $userName User's display name
-     * @return array Options for navigator.credentials.create()
+     *
+     * @param  string  $userId  User's public ID in UUID format
+     * @param  string  $userEmail  User's email
+     * @param  string  $userName  User's display name
+     * @return array<string, mixed> Options for navigator.credentials.create()
      */
     public function generateCreationOptions(string $userId, string $userEmail, string $userName): array
     {
         $challenge = bin2hex(random_bytes(32));
-        
+
         return [
             'rp' => [
                 'id' => $this->rpId,
@@ -61,53 +57,43 @@ final class PasskeyAttestationVerifier
                 ['type' => 'public-key', 'alg' => -257], // RS256
             ],
             'timeout' => 300000, // 5 minutes per spec
-            'userVerification' => 'preferred',
-            'attestation' => 'direct',
+            'userVerification' => 'required',
+            'attestation' => 'none',
         ];
+    }
+
+    public function expectedOrigin(): string
+    {
+        return $this->origin;
     }
 
     /**
      * Verify a passkey attestation response during registration.
-     * 
+     *
      * Returns array with credential_identifier and public_key if valid.
      * Per spec, we must validate:
      * - Attestation signature
      * - Challenge matches
      * - Origin matches
      * - rpId matches
-     * 
-     * @param User $user
-     * @param string $credentialId Credential ID from client
-     * @param string $publicKey Public key from attestation
-     * @param string $attestationToken Attestation object from client
+     *
+     * @param  string  $credentialId  Credential ID from client
+     * @param  string  $publicKey  Public key from attestation
+     * @param  string  $attestationToken  Attestation object from client
      * @return bool True if attestation is valid
      */
     public function verify(User $user, string $credentialId, string $publicKey, string $attestationToken): bool
     {
-        // TODO: Implement real WebAuthn attestation verification
-        // For now, this is a placeholder that accepts any attestation
-        // Production must use web-auth/webauthn library
-        
         if (empty($credentialId) || empty($publicKey) || empty($attestationToken)) {
             return false;
         }
 
-        // Validate public key format (must be valid JWK)
-        try {
-            $decoded = json_decode($publicKey, true);
-            if (!is_array($decoded) || empty($decoded['x']) || empty($decoded['y'])) {
-                return false;
-            }
-        } catch (\Exception) {
-            return false;
-        }
-
-        return true;
+        return false;
     }
 
     /**
      * Verify a passkey assertion during login/reauthentication.
-     * 
+     *
      * Validates:
      * - Signature with stored public key
      * - Counter is greater than stored counter (prevent cloning)
@@ -121,14 +107,10 @@ final class PasskeyAttestationVerifier
         string $assertion,
         int $storedCounter,
     ): bool {
-        // TODO: Implement real WebAuthn assertion verification
-        // For now, this is a placeholder
-        // Production must use web-auth/webauthn library
-        
         if (empty($credentialId) || empty($publicKey) || empty($assertion)) {
             return false;
         }
 
-        return true;
+        return false;
     }
 }

@@ -22,6 +22,7 @@ use App\Modules\Access\Infrastructure\Persistence\Models\MfaRecoveryCode;
 use App\Modules\Access\Infrastructure\Persistence\Models\PasswordHistory;
 use App\Modules\Access\Infrastructure\Persistence\Models\ReauthAuthorization;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use SensitiveParameter;
@@ -145,7 +146,8 @@ final readonly class CredentialLifecycleService
         $normalized = mb_strtolower(trim($email));
         DB::transaction(function () use ($normalized): void {
             $user = User::query()->where('normalized_email', $normalized)->lockForUpdate()->first();
-            if ($user === null || $user->state !== AccountState::ACTIVE || $user->password === null || $user->mfa_enrolled_at === null) {
+            $state = $user === null ? null : AccountState::tryFrom((string) $user->getRawOriginal('state'));
+            if ($user === null || $state !== AccountState::ACTIVE || $user->password === null || $user->mfa_enrolled_at === null) {
                 return;
             }
             $this->invitations->currentOrIssue($user, InvitationPurpose::PASSWORD_RECOVERY, (int) config('access.tokens.password_recovery_ttl_minutes'));
@@ -159,8 +161,10 @@ final readonly class CredentialLifecycleService
         return self::GENERIC_RECOVERY_RESPONSE;
     }
 
-    /** @param array{type?:string,secret?:string,code?:string,credential_identifier?:string,public_key?:string,attestation_token?:string}|null $replacementMfa */
-    /** @return array{login_required:bool,recovery_codes?:list<string>} */
+    /**
+     * @param  array{type?:string,secret?:string,code?:string,credential_identifier?:string,public_key?:string,attestation_token?:string}|null  $replacementMfa
+     * @return array{login_required:bool,recovery_codes?:list<string>}
+     */
     public function completeRecovery(
         #[SensitiveParameter] string $plainToken,
         #[SensitiveParameter] string $password,
@@ -181,7 +185,7 @@ final readonly class CredentialLifecycleService
 
             $normalized = $this->passwords->validateAndNormalize($user, $password);
             if ($purpose === InvitationPurpose::ACCOUNT_RECOVERY) {
-                $this->enrollMfa($user, $replacementMfa ?? []);
+                $this->enrollMfa($user, $replacementMfa);
             }
             $this->recordExistingPassword($user);
             $hash = Hash::make($normalized);
@@ -267,7 +271,7 @@ final readonly class CredentialLifecycleService
                 'user_id' => $user->id,
                 'type' => MfaType::TOTP,
                 'credential_identifier' => hash('sha256', $secret),
-                'encrypted_secret' => $secret,
+                'encrypted_secret' => Crypt::encryptString($secret),
                 'state' => 'ACTIVE',
             ]);
 
@@ -296,12 +300,15 @@ final readonly class CredentialLifecycleService
     {
         if ($type === 'TOTP') {
             $credential = MfaCredential::query()->where('user_id', $user->id)->where('type', MfaType::TOTP->value)->where('state', 'ACTIVE')->first();
-            if ($credential !== null && is_string($credential->encrypted_secret) && $this->totp->verify($credential->encrypted_secret, $value)) {
-                return;
+            if ($credential !== null && is_string($credential->encrypted_secret)) {
+                $secret = Crypt::decryptString($credential->encrypted_secret);
+                if ($this->totp->verify($secret, $value, $credential->credential_identifier)) {
+                    return;
+                }
             }
         }
         if ($type === 'RECOVERY_CODE') {
-            $code = MfaRecoveryCode::query()->where('user_id', $user->id)->where('code_hash', hash('sha256', strtoupper($value)))
+            $code = MfaRecoveryCode::query()->where('user_id', $user->id)->where('code_hash', RecoveryCodeGenerator::hashCode($value))
                 ->whereNull('used_at')->whereNull('revoked_at')->lockForUpdate()->first();
             if ($code !== null) {
                 $code->forceFill(['used_at' => now()])->save();

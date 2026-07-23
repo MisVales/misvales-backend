@@ -2,13 +2,12 @@
 
 namespace App\Modules\Access\Application\MFA;
 
-use App\Modules\Access\Domain\MFA\MfaType;
 use Illuminate\Support\Facades\Redis;
 use OTPHP\TOTP;
 
 /**
  * Verifies TOTP (Time-based One-Time Password) codes with replay protection.
- * 
+ *
  * Per spec B05.2:
  * - 6 digits, 30-second period
  * - Tolerance: ±1 period
@@ -22,25 +21,27 @@ use OTPHP\TOTP;
 final class TotpVerifier
 {
     private const DIGITS = 6;
+
     private const PERIOD = 30;
-    private const WINDOW = 1; // ±1 period tolerance per spec
-    private const REPLAY_PROTECTION_TTL = 60; // seconds = 2 periods
+
+    private const REPLAY_PROTECTION_TTL = self::PERIOD * 3;
 
     /**
      * Generate a new TOTP secret for user enrollment.
-     * 
+     *
      * @return array{secret: string, uri: string}
      */
     public function generateSecret(string $userEmail, string $issuer = 'MisVales'): array
     {
         $totp = TOTP::create(
-            secret: bin2hex(random_bytes(32)),
-            label: $userEmail,
-            issuer: $issuer,
-            digits: self::DIGITS,
-            digest: 'sha1',
+            secret: null,
             period: self::PERIOD,
+            digest: 'sha1',
+            digits: self::DIGITS,
+            secretSize: 32,
         );
+        $totp->setLabel($userEmail);
+        $totp->setIssuer($issuer);
 
         return [
             'secret' => $totp->getSecret(),
@@ -49,51 +50,67 @@ final class TotpVerifier
     }
 
     /**
-     * Verify a TOTP code against a secret with replay protection.
-     * 
-     * Prevents accepting the same TOTP code twice within its validity window.
-     * Per spec B05.2: "Impedir reutilización de un TOTP ya aceptado en su ventana"
-     * 
-     * @param string $secret The TOTP secret (unencrypted)
-     * @param string $code The 6-digit code to verify
-     * @param string $credentialHash Optional: Hash of MFA credential for replay tracking
-     * @return bool True if code is valid and not previously used
+     * Verify a TOTP code against a secret at a deterministic timestamp.
      */
-    public function verify(string $secret, string $code, ?string $credentialHash = null): bool
+    public function verifyAt(string $secret, string $code, int $timestamp, ?string $credentialHash = null): bool
     {
-        if (!preg_match('/^\d{6}$/', $code)) {
+        if (! preg_match('/^\d{6}$/', $code)) {
             return false;
         }
 
         try {
             $totp = TOTP::create(
                 secret: $secret,
-                digits: self::DIGITS,
-                digest: 'sha1',
                 period: self::PERIOD,
+                digest: 'sha1',
+                digits: self::DIGITS,
             );
 
-            // Verify with window tolerance per spec B05.2
-            if (!$totp->verify($code, null, self::WINDOW)) {
+            $matchedTimestamp = $this->matchingTimestamp($totp, $code, $timestamp);
+            if ($matchedTimestamp === null) {
                 return false;
             }
 
-            // Check replay protection if credential hash provided
-            if ($credentialHash !== null) {
-                $replayKey = "totp:used:{$credentialHash}:{$code}";
-                
-                if (Redis::exists($replayKey)) {
-                    // TOTP already used within validity window
-                    return false;
-                }
-
-                // Mark this code as used for the next N seconds (covers current + next period window)
-                Redis::setex($replayKey, self::REPLAY_PROTECTION_TTL, '1');
+            if ($credentialHash !== null && ! $this->markCodeAsUsed($credentialHash, $code, $matchedTimestamp)) {
+                return false;
             }
 
             return true;
-        } catch (\Exception) {
+        } catch (\Throwable) {
             return false;
         }
+    }
+
+    /**
+     * Verify a TOTP code against a secret with replay protection.
+     *
+     * @param  string  $secret  The decrypted TOTP secret
+     * @param  string  $code  The 6-digit code to verify
+     * @param  string|null  $credentialHash  Stable credential hash for replay tracking
+     */
+    public function verify(string $secret, string $code, ?string $credentialHash = null): bool
+    {
+        return $this->verifyAt($secret, $code, time(), $credentialHash);
+    }
+
+    private function matchingTimestamp(TOTP $totp, string $code, int $timestamp): ?int
+    {
+        foreach ([-self::PERIOD, 0, self::PERIOD] as $offset) {
+            $candidate = $timestamp + $offset;
+            if ($candidate >= 0 && $totp->verify($code, $candidate)) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function markCodeAsUsed(string $credentialHash, string $code, int $matchedTimestamp): bool
+    {
+        $timeStep = intdiv($matchedTimestamp, self::PERIOD);
+        $replayKey = "totp:used:{$credentialHash}:{$timeStep}:{$code}";
+        $stored = Redis::command('set', [$replayKey, '1', 'EX', self::REPLAY_PROTECTION_TTL, 'NX']);
+
+        return $stored === true || $stored === 'OK';
     }
 }
