@@ -5,6 +5,7 @@ namespace App\Modules\Access\Presentation\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Auth\LoginAttemptRateLimiter;
+use App\Modules\Access\Application\Auth\SessionManager;
 use App\Modules\Access\Application\MFA\RecoveryCodeGenerator;
 use App\Modules\Access\Application\MFA\TotpVerifier;
 use App\Modules\Access\Domain\MFA\MfaType;
@@ -23,7 +24,8 @@ final class MfaVerificationController extends Controller
     public function __construct(
         private readonly MfaSessionManager $sessionManager,
         private readonly TotpVerifier $totpVerifier,
-        private readonly LoginAttemptRateLimiter $rateLimiter
+        private readonly LoginAttemptRateLimiter $rateLimiter,
+        private readonly SessionManager $appSessionManager
     ) {}
 
     public function verifyTotp(VerifyTotpRequest $request): JsonResponse
@@ -46,7 +48,14 @@ final class MfaVerificationController extends Controller
             return response()->json(['message' => 'El usuario no tiene TOTP configurado.'], 400);
         }
 
-        $secret = Crypt::decryptString($totpCredential->encrypted_secret);
+        try {
+            $secret = Crypt::decryptString($totpCredential->encrypted_secret);
+        } catch (\Exception $e) {
+            return response()->json([
+                'message' => 'Decryption failed: ' . $e->getMessage(),
+                'payload' => $totpCredential->encrypted_secret
+            ], 500);
+        }
 
         if (!$this->totpVerifier->verify($secret, $request->validated('code'))) {
             $this->rateLimiter->recordFailedMfa($user->normalized_email, $session['ip_address'], $session['device_id'], $user, function () use ($request) {
@@ -57,13 +66,27 @@ final class MfaVerificationController extends Controller
 
         $this->rateLimiter->clearMfaAttempts($user->normalized_email);
 
+        $tokens = $this->appSessionManager->createSession($user, $session['application'] ?? 'administrativa', $session['device_id'], $session['ip_address']);
+
         $this->sessionManager->consumeSession($request->validated('mfa_token'));
 
         return response()->json([
             'message' => 'Verificación TOTP exitosa.',
-            // B06 se encargará de inyectar el AccessToken aquí.
-            'data' => ['auth_token' => 'TODO_B06_TOKEN']
-        ]);
+            'data' => [
+                'access_token' => $tokens['access_token'],
+                'expires_in' => $tokens['expires_in']
+            ]
+        ])->cookie(
+            '__Host-mv_refresh', 
+            $tokens['refresh_token'], 
+            ($tokens['expires_in'] === 600 ? 0 : 0), // The cookie is managed by session or absolute expiration in DB. Using 0 for session cookie or explicit time. Let's not set max-age, just HTTP only secure
+            '/', 
+            null, 
+            true, // Secure
+            true, // HttpOnly
+            false, // Raw
+            'Strict' // SameSite
+        );
     }
 
     public function verifyRecoveryCode(VerifyRecoveryCodeRequest $request): JsonResponse
@@ -99,11 +122,19 @@ final class MfaVerificationController extends Controller
             $this->sessionManager->consumeSession($request->validated('mfa_token'));
         });
 
+        $tokens = $this->appSessionManager->createSession($user, $session['application'] ?? 'administrativa', $session['device_id'], $session['ip_address']);
+
         return response()->json([
             'message' => 'Verificación con código de recuperación exitosa.',
-            // B06 se encargará de inyectar el AccessToken aquí.
-            'data' => ['auth_token' => 'TODO_B06_TOKEN']
-        ]);
+            'data' => [
+                'access_token' => $tokens['access_token'],
+                'expires_in' => $tokens['expires_in']
+            ]
+        ])->cookie(
+            '__Host-mv_refresh', 
+            $tokens['refresh_token'], 
+            0, '/', null, true, true, false, 'Strict'
+        );
     }
 
     public function verifyPasskey(VerifyPasskeyRequest $request): JsonResponse
@@ -121,11 +152,20 @@ final class MfaVerificationController extends Controller
         
         $this->rateLimiter->clearMfaAttempts($user->normalized_email);
         
+        $tokens = $this->appSessionManager->createSession($user, $session['application'] ?? 'administrativa', $session['device_id'], $session['ip_address']);
+
         $this->sessionManager->consumeSession($request->validated('mfa_token'));
 
         return response()->json([
             'message' => 'Verificación de Passkey exitosa.',
-            'data' => ['auth_token' => 'TODO_B06_TOKEN']
-        ]);
+            'data' => [
+                'access_token' => $tokens['access_token'],
+                'expires_in' => $tokens['expires_in']
+            ]
+        ])->cookie(
+            '__Host-mv_refresh', 
+            $tokens['refresh_token'], 
+            0, '/', null, true, true, false, 'Strict'
+        );
     }
 }

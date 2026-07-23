@@ -36,6 +36,7 @@ final class MfaSessionManager
      */
     public function createSession(
         User $user,
+        string $application,
         string $ipAddress,
         string $deviceId,
         array $allowedFactors,
@@ -47,6 +48,7 @@ final class MfaSessionManager
         $sessionData = [
             'user_id' => $user->id,
             'user_public_id' => $user->public_id,
+            'application' => $application,
             'ip_address' => $ipAddress,
             'device_id' => $deviceId,
             'allowed_factors' => $allowedFactors,

@@ -22,6 +22,7 @@ final class LoginController extends Controller
     {
         $email = $request->validated('email');
         $password = $request->validated('password');
+        $application = $request->validated('application');
         $ip = $request->ip() ?? '0.0.0.0';
         $deviceId = $request->cookie('device_id') ?? 'unknown-device';
 
@@ -52,7 +53,7 @@ final class LoginController extends Controller
         // Por ahora, generamos la sesión transitoria.
 
         // 6. Generar Sesión MFA temporal (5 minutos)
-        $mfaSession = $this->mfaSessionManager->createSession($user, $ip, $deviceId, $allowedFactors);
+        $mfaSession = $this->mfaSessionManager->createSession($user, $application, $ip, $deviceId, $allowedFactors);
 
         return response()->json([
             'message' => 'Credenciales válidas. Verificación de dos pasos requerida.',

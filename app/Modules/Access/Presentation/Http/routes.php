@@ -46,3 +46,6 @@ Route::prefix('auth/mfa')->group(function () {
     Route::post('totp/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyTotp'])->name('auth.mfa.totp.verify');
     Route::post('recovery-code/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyRecoveryCode'])->name('auth.mfa.recovery-codes.verify');
 });
+
+// B07 Refresh Token
+Route::post('auth/refresh', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'refresh'])->name('auth.refresh');
