@@ -16,6 +16,22 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('accounts/{account}/recovery-request', [AccountRequestController::class, 'recoveryRequest'])->name('account-requests.recovery');
     Route::post('accounts/{account}/invitation/resend', [AccountController::class, 'resend'])->name('accounts.invitation.resend');
 
+    Route::prefix('auth/mfa')->group(function () {
+        Route::post('totp/setup', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'setup'])->name('auth.mfa.totp.setup');
+        Route::post('totp/confirm', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'confirm'])->name('auth.mfa.totp.confirm');
+        Route::delete('totp', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'destroy'])->name('auth.mfa.totp.destroy');
+        
+        Route::post('passkeys/options', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'options'])->name('auth.mfa.passkeys.options');
+        Route::post('passkeys', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'store'])->name('auth.mfa.passkeys.store');
+        Route::delete('passkeys/{credentialId}', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'destroy'])->name('auth.mfa.passkeys.destroy');
+        
+        Route::post('recovery-codes/regenerate', [\App\Modules\Access\Presentation\Http\Controllers\RecoveryCodeController::class, 'regenerate'])->name('auth.mfa.recovery-codes.regenerate');
+        
+        Route::post('webauthn/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyPasskey'])->name('auth.mfa.passkeys.verify');
+        Route::post('totp/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyTotp'])->name('auth.mfa.totp.verify');
+        Route::post('recovery-code/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyRecoveryCode'])->name('auth.mfa.recovery-codes.verify');
+    });
+
     Route::get('account-requests', [AccountRequestController::class, 'index'])->name('account-requests.index');
     Route::post('account-requests', [AccountRequestController::class, 'store'])->name('account-requests.store');
     Route::post('account-requests/{accountRequest}/approve', [AccountRequestController::class, 'approve'])->name('account-requests.approve');
