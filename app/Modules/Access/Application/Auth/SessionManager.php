@@ -58,8 +58,11 @@ final class SessionManager
                 now()->addMinutes(10)
             );
 
-            // Link token to session
-            $token->accessToken->forceFill(['auth_session_id' => $session->id])->save();
+            // Link token to session and context version
+            $token->accessToken->forceFill([
+                'auth_session_id' => $session->id,
+                'context_version' => $user->context_version
+            ])->save();
 
             return [
                 'access_token' => $token->plainTextToken,
@@ -134,7 +137,10 @@ final class SessionManager
                 ['*'], 
                 now()->addMinutes(10)
             );
-            $token->accessToken->forceFill(['auth_session_id' => $session->id])->save();
+            $token->accessToken->forceFill([
+                'auth_session_id' => $session->id,
+                'context_version' => $session->user->context_version
+            ])->save();
 
             // Rotar inactividad (renovación silenciosa NO debería actualizar actividad real según spec, 
             // pero si la llamada es legitima puede actualizar. El spec dice: "La renovación silenciosa no actualiza actividad.")
