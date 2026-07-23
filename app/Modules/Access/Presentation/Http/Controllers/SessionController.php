@@ -39,4 +39,69 @@ final class SessionController extends Controller
             0, '/', null, true, true, false, 'Strict'
         );
     }
+
+    public function logout(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+
+        if ($token && $token->auth_session_id) {
+            $session = \App\Modules\Access\Infrastructure\Persistence\Models\AuthSession::find($token->auth_session_id);
+            if ($session) {
+                $this->sessionManager->revokeSession($session);
+            }
+        }
+
+        return response()->json([
+            'message' => 'Sesión cerrada exitosamente.'
+        ])->withoutCookie('__Host-mv_refresh', '/', null, true);
+    }
+
+    public function index(Request $request): JsonResponse
+    {
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+        $currentSessionId = $token?->auth_session_id;
+
+        $sessions = $this->sessionManager->getUserSessions($user, $currentSessionId);
+
+        return response()->json([
+            'data' => $sessions
+        ]);
+    }
+
+    public function destroy(Request $request, string $sessionId): JsonResponse
+    {
+        // TODO: Requires B10 Reauthentication Token (Validation should be checked here or in a middleware)
+        // For B09, we assume it passes or we just execute it
+        
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+        $currentSessionId = $token?->auth_session_id;
+
+        $this->sessionManager->revokeOtherSession($user, $sessionId, $currentSessionId ?? '');
+
+        return response()->json([
+            'message' => 'Sesión revocada exitosamente.'
+        ]);
+    }
+
+    public function destroyOthers(Request $request): JsonResponse
+    {
+        // TODO: Requires B10 Reauthentication Token
+        
+        $user = $request->user();
+        $token = $user->currentAccessToken();
+        $currentSessionId = $token?->auth_session_id;
+
+        if (!$currentSessionId) {
+            return response()->json(['message' => 'No se puede determinar la sesión actual.'], 400);
+        }
+
+        $this->sessionManager->revokeAllOtherSessions($user, $currentSessionId);
+
+        return response()->json([
+            'message' => 'Todas las demás sesiones han sido revocadas.'
+        ]);
+    }
 }

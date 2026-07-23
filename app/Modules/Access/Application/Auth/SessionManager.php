@@ -186,6 +186,71 @@ final class SessionManager
         $session->accessTokens()->delete();
     }
 
+    public function getUserSessions(User $user, ?string $currentSessionId = null): array
+    {
+        $sessions = AuthSession::where('user_id', $user->id)
+            ->where('state', 'ACTIVE')
+            ->where('expires_at', '>', now())
+            ->get();
+
+        return $sessions->map(function ($session) use ($currentSessionId) {
+            return [
+                'id' => $session->id,
+                'application' => $session->application,
+                'device_id' => $session->device_id, // This would be approx device/browser in a real app if parsed from UA
+                'created_at' => $session->created_at->toIso8601String(),
+                'last_activity_at' => $session->last_activity_at->toIso8601String(),
+                'ip_address' => $this->maskIpAddress($session->ip_address),
+                'is_current' => $session->id == $currentSessionId,
+            ];
+        })->toArray();
+    }
+
+    private function maskIpAddress(?string $ip): ?string
+    {
+        if (!$ip) return null;
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
+            return preg_replace('/(\d+\.\d+)\.\d+\.\d+/', '$1.***.***', $ip);
+        }
+        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
+            $parts = explode(':', $ip);
+            if (count($parts) >= 4) {
+                return implode(':', array_slice($parts, 0, 4)) . ':***:***';
+            }
+            return '***:***:***:***';
+        }
+        return '***.***.***.***';
+    }
+
+    public function revokeOtherSession(User $user, string $sessionIdToRevoke, string $currentSessionId): void
+    {
+        $session = AuthSession::where('user_id', $user->id)
+            ->where('id', $sessionIdToRevoke)
+            ->first();
+
+        if (!$session) {
+            throw new HttpResponseException(response()->json(['message' => 'Sesión no encontrada.'], 404));
+        }
+
+        if ($session->id === $currentSessionId) {
+            throw new HttpResponseException(response()->json(['message' => 'No puedes usar este método para cerrar la sesión actual.'], 400));
+        }
+
+        $this->revokeSession($session);
+    }
+
+    public function revokeAllOtherSessions(User $user, string $currentSessionId): void
+    {
+        $sessions = AuthSession::where('user_id', $user->id)
+            ->where('id', '!=', $currentSessionId)
+            ->where('state', 'ACTIVE')
+            ->get();
+
+        foreach ($sessions as $session) {
+            $this->revokeSession($session);
+        }
+    }
+
     private function ensureUnderSessionLimit(User $user): void
     {
         $activeSessions = AuthSession::where('user_id', $user->id)

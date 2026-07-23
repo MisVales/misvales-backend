@@ -7,6 +7,13 @@ use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum', \App\Modules\Access\Presentation\Http\Middleware\VerifyContextVersionMiddleware::class])->group(function (): void {
     Route::get('auth/context', [\App\Modules\Access\Presentation\Http\Controllers\ContextController::class, 'getContext'])->name('auth.context.index');
+    
+    // B09 Session Management
+    Route::post('auth/logout', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'logout'])->name('auth.logout');
+    Route::get('auth/sessions', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'index'])->name('auth.sessions.index');
+    Route::delete('auth/sessions/others', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'destroyOthers'])->name('auth.sessions.destroyOthers');
+    Route::delete('auth/sessions/{sessionId}', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'destroy'])->name('auth.sessions.destroy');
+
     Route::post('auth/password/change', [CredentialController::class, 'change'])->name('auth.password.change');
     Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
     Route::post('accounts/{account}/disable', [AccountController::class, 'disable'])->name('accounts.disable');
