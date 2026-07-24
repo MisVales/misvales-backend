@@ -27,3 +27,15 @@ Homestead.json
 Homestead.yaml
 Thumbs.db
 /AGENTS.md
+/CLAUDE.md
+/.github/copilot-instructions.md
+/.claude/
+/.windsurf/
+/.continue/
+/.cline/
+/.roo/
+/.agents/
+/.agent-cache/
+/.ai-cache/
+/mcp.local.json
+/.mcp.local.json
