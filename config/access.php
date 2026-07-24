@@ -36,4 +36,11 @@ return [
         'rp_id' => env('WEBAUTHN_RP_ID', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         'origin' => env('WEBAUTHN_ORIGIN', env('APP_URL', 'http://localhost')),
     ],
+
+    'risk' => [
+        'high_failure_threshold' => (int) env('ACCESS_RISK_HIGH_FAILURE_THRESHOLD', 10),
+        'new_location_requires_mfa' => (bool) env('ACCESS_RISK_NEW_LOCATION_REQUIRES_MFA', true),
+        'impossible_travel_rejects' => (bool) env('ACCESS_RISK_IMPOSSIBLE_TRAVEL_REJECTS', true),
+        'suspend_on_critical_compromise' => (bool) env('ACCESS_RISK_SUSPEND_ON_CRITICAL_COMPROMISE', true),
+    ],
 ];

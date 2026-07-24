@@ -5,17 +5,19 @@ namespace App\Modules\Access\Presentation\Http\Controllers;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Auth\LoginAttemptRateLimiter;
+use App\Modules\Access\Application\Security\SecurityAuditService;
+use App\Modules\Access\Infrastructure\Persistence\Models\MfaCredential;
 use App\Modules\Access\Infrastructure\Redis\MfaSessionManager;
 use App\Modules\Access\Presentation\Http\Requests\LoginRequest;
 use Illuminate\Http\JsonResponse;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
 final class LoginController extends Controller
 {
     public function __construct(
         private readonly LoginAttemptRateLimiter $rateLimiter,
-        private readonly MfaSessionManager $mfaSessionManager
+        private readonly MfaSessionManager $mfaSessionManager,
+        private readonly SecurityAuditService $audit,
     ) {}
 
     public function login(LoginRequest $request): JsonResponse
@@ -34,8 +36,13 @@ final class LoginController extends Controller
         $user = User::where('normalized_email', mb_strtolower($email))->first();
 
         // 3. Validar estado y contraseña
-        if (!$user || !Hash::check($password, $user->password) || $user->state !== 'ACTIVE') {
+        if (! $user || ! Hash::check($password, $user->password) || $user->state !== 'ACTIVE') {
             $this->rateLimiter->recordFailedLogin($email, $ip, $deviceId, $user);
+            $this->audit->record('AUTHENTICATION_PASSWORD_FAILED', 'DENIED', null, $user, [
+                'ip_address' => $ip,
+                'device_id' => $deviceId,
+            ]);
+
             return response()->json(['message' => 'No fue posible iniciar sesión con la información proporcionada.'], 401);
         }
 
@@ -43,7 +50,7 @@ final class LoginController extends Controller
         $this->rateLimiter->clearLoginAttempts($email);
 
         // 5. Determinar métodos MFA permitidos
-        $allowedFactors = \App\Modules\Access\Infrastructure\Persistence\Models\MfaCredential::query()
+        $allowedFactors = MfaCredential::query()
             ->where('user_id', $user->id)
             ->where('state', 'ACTIVE')
             ->pluck('type')
@@ -54,6 +61,11 @@ final class LoginController extends Controller
 
         // 6. Generar Sesión MFA temporal (5 minutos)
         $mfaSession = $this->mfaSessionManager->createSession($user, $application, $ip, $deviceId, $allowedFactors);
+        $this->audit->record('AUTHENTICATION_PASSWORD_ACCEPTED', 'MFA_REQUIRED', $user, $user, [
+            'application' => $application,
+            'ip_address' => $ip,
+            'device_id' => $deviceId,
+        ]);
 
         return response()->json([
             'message' => 'Credenciales válidas. Verificación de dos pasos requerida.',

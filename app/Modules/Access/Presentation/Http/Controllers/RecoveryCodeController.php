@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Application\MFA\MfaRecoveryService;
+use App\Modules\Access\Application\Security\SecurityAuditService;
 use App\Modules\Access\Domain\Authorization\AuthorizationBinding;
 use App\Modules\Access\Domain\Authorization\CriticalAction;
 use Illuminate\Http\JsonResponse;
@@ -17,6 +18,7 @@ final class RecoveryCodeController extends Controller
     public function __construct(
         private readonly MfaRecoveryService $recoveryService,
         private readonly TemporaryAuthorization $authorization,
+        private readonly SecurityAuditService $audit,
     ) {}
 
     public function regenerate(Request $request): JsonResponse
@@ -37,7 +39,13 @@ final class RecoveryCodeController extends Controller
                 ),
             );
 
-            return $this->recoveryService->regenerate($user);
+            $codes = $this->recoveryService->regenerate($user);
+            $this->audit->record('MFA_RECOVERY_CODES_REGENERATED', 'SUCCESS', $user, $user, [
+                'resource_type' => 'users',
+                'resource_id' => $user->public_id,
+            ]);
+
+            return $codes;
         });
 
         return response()->json([

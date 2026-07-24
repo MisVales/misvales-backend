@@ -3,12 +3,16 @@
 namespace App\Modules\Access\Application\Auth;
 
 use App\Models\User;
+use App\Modules\Access\Application\Security\RiskCoordinator;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Redis;
 
 final class LoginAttemptRateLimiter
 {
+    public function __construct(private readonly RiskCoordinator $risk) {}
+
     private const WINDOW_MINUTES = 15;
+
     private const WINDOW_HOURS = 24;
 
     public function ensureCanAttemptLogin(string $email, string $ip, string $device): void
@@ -19,7 +23,7 @@ final class LoginAttemptRateLimiter
     public function ensureCanAttemptMfa(string $email, string $ip, string $device): void
     {
         $this->checkThresholds($email, $ip, $device);
-        
+
         if (Redis::exists("throttle:penalty:15m:{$email}")) {
             $this->abortWithDelay((int) Redis::ttl("throttle:penalty:15m:{$email}"), 'El acceso MFA está temporalmente restringido.');
         }
@@ -51,7 +55,12 @@ final class LoginAttemptRateLimiter
         // 4. Suspensión de cuenta por intentos excesivos (15 en 24h)
         if ($fails24h >= 15 && $user) {
             $user->update(['state' => 'SECURITY_SUSPENDED']);
-            // TODO: Emitir evento de recuperación obligatoria
+            $this->risk->assessAndRespond(
+                'AUTHENTICATION_FAILURE_THRESHOLD_REACHED',
+                $user,
+                null,
+                ['recent_failures' => $fails24h, 'compromise_account' => true],
+            );
         } elseif ($fails24h === 10) {
             Redis::setex("throttle:penalty:60m:{$email}", 60 * 60, '1');
             $this->abortWithDelay(60 * 60, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
@@ -95,6 +104,12 @@ final class LoginAttemptRateLimiter
         $accountFails24h = (int) Redis::get("throttle:account:24h:{$email}");
         if ($fails24h + $accountFails24h >= 15) {
             $user->update(['state' => 'SECURITY_SUSPENDED']);
+            $this->risk->assessAndRespond(
+                'MFA_FAILURE_THRESHOLD_REACHED',
+                $user,
+                null,
+                ['recent_failures' => $fails24h + $accountFails24h, 'compromise_account' => true],
+            );
         } elseif ($fails24h + $accountFails24h === 10) {
             Redis::setex("throttle:penalty:60m:{$email}", 60 * 60, '1');
             $this->abortWithDelay(60 * 60, 'El acceso está temporalmente restringido.');
@@ -141,7 +156,7 @@ final class LoginAttemptRateLimiter
         if ($deviceFails === 15) {
             Redis::setex("throttle:penalty:device:{$device}", 15 * 60, '1');
         }
-        
+
         $subnet = $this->getSubnet($ip);
         if ($subnet) {
             $subnetKey = "throttle:network:15m:{$subnet}";
@@ -173,8 +188,8 @@ final class LoginAttemptRateLimiter
             $this->abortWithDelay((int) Redis::ttl("throttle:penalty:60m:{$email}"), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
-        if (Redis::exists("throttle:penalty:network:".$this->getSubnet($ip))) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:network:".$this->getSubnet($ip)), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (Redis::exists('throttle:penalty:network:'.$this->getSubnet($ip))) {
+            $this->abortWithDelay((int) Redis::ttl('throttle:penalty:network:'.$this->getSubnet($ip)), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
     }
 
@@ -182,8 +197,10 @@ final class LoginAttemptRateLimiter
     {
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
             $parts = explode('.', $ip);
-            return $parts[0] . '.' . $parts[1] . '.' . $parts[2] . '.0/24';
+
+            return $parts[0].'.'.$parts[1].'.'.$parts[2].'.0/24';
         }
+
         return null; // Omit IPv6 logic for simplicity here
     }
 
@@ -191,7 +208,7 @@ final class LoginAttemptRateLimiter
     {
         throw new HttpResponseException(
             response()->json(['message' => $message], 429)
-                ->header('Retry-After', $seconds)
+                ->header('Retry-After', (string) $seconds)
         );
     }
 }

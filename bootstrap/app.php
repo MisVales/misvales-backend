@@ -1,6 +1,7 @@
 <?php
 
 use App\Modules\Access\Domain\Accounts\AccessRuleViolation;
+use App\Modules\Access\Presentation\Http\Middleware\CaptureSecurityContextMiddleware;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -16,6 +17,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->append(CaptureSecurityContextMiddleware::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(

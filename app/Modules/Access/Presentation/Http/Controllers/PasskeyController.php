@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Application\MFA\PasskeyService;
+use App\Modules\Access\Application\Security\SecurityAuditService;
 use App\Modules\Access\Domain\Authorization\AuthorizationBinding;
 use App\Modules\Access\Domain\Authorization\CriticalAction;
 use App\Modules\Access\Presentation\Http\Requests\StorePasskeyRequest;
@@ -21,6 +22,7 @@ final class PasskeyController extends Controller
     public function __construct(
         private readonly PasskeyService $passkeyService,
         private readonly TemporaryAuthorization $authorization,
+        private readonly SecurityAuditService $audit,
     ) {}
 
     public function options(Request $request): JsonResponse
@@ -54,6 +56,10 @@ final class PasskeyController extends Controller
                     $request->validated('clientDataJSON'),
                     $request->validated('attestationObject'),
                 );
+                $this->audit->record('MFA_PASSKEY_ENROLLED', 'SUCCESS', $user, $user, [
+                    'resource_type' => 'users',
+                    'resource_id' => $user->public_id,
+                ]);
             });
 
             return response()->json([
@@ -77,6 +83,10 @@ final class PasskeyController extends Controller
                     $this->binding($user, CriticalAction::MFA_PASSKEY_REMOVE, (string) $credentialId),
                 );
                 $this->passkeyService->destroy($user, $credentialId);
+                $this->audit->record('MFA_PASSKEY_REMOVED', 'SUCCESS', $user, $user, [
+                    'resource_type' => 'mfa_credentials',
+                    'resource_id' => (string) $credentialId,
+                ]);
             });
 
             return response()->json([

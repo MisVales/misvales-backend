@@ -4,6 +4,8 @@ namespace App\Modules\Access\Application\Auth;
 
 use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
+use App\Modules\Access\Application\Security\RiskCoordinator;
+use App\Modules\Access\Application\Security\SecurityAuditService;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
 use Illuminate\Http\Exceptions\HttpResponseException;
@@ -12,7 +14,11 @@ use Illuminate\Support\Str;
 
 final class SessionManager
 {
-    public function __construct(private readonly TemporaryAuthorization $authorizations) {}
+    public function __construct(
+        private readonly TemporaryAuthorization $authorizations,
+        private readonly RiskCoordinator $risk,
+        private readonly SecurityAuditService $audit,
+    ) {}
 
     private const MAX_SESSIONS = 3;
 
@@ -22,6 +28,7 @@ final class SessionManager
         'distribuidora' => ['absolute' => 24, 'inactivity' => 30],
     ];
 
+    /** @return array{access_token: string, refresh_token: string, expires_in: int} */
     public function createSession(User $user, string $application, ?string $deviceId, ?string $ipAddress): array
     {
         $this->ensureUnderSessionLimit($user);
@@ -38,7 +45,7 @@ final class SessionManager
                 'application' => $application,
                 'device_id' => $deviceId,
                 'ip_address' => $ipAddress,
-                'context_version' => 1,
+                'context_version' => $user->context_version,
                 'last_activity_at' => now(),
                 'expires_at' => now()->addHours($durations['absolute']),
                 'state' => 'ACTIVE',
@@ -65,6 +72,14 @@ final class SessionManager
                 'auth_session_id' => $session->id,
                 'context_version' => $user->context_version,
             ])->save();
+            $this->audit->record('SESSION_CREATED', 'SUCCESS', $user, $user, [
+                'session_id' => $session->id,
+                'application' => $application,
+                'ip_address' => $ipAddress,
+                'device_id' => $deviceId,
+                'resource_type' => 'auth_sessions',
+                'resource_id' => (string) $session->id,
+            ]);
 
             return [
                 'access_token' => $token->plainTextToken,
@@ -74,6 +89,7 @@ final class SessionManager
         });
     }
 
+    /** @return array{access_token: string, refresh_token: string, expires_in: int} */
     public function refreshSession(string $plainRefreshToken, string $application, ?string $ipAddress): array
     {
         $tokenHash = hash('sha256', $plainRefreshToken);
@@ -116,7 +132,7 @@ final class SessionManager
         // Validar contexto
         // TODO: Validate context_version match if implemented
 
-        return DB::transaction(function () use ($refreshToken, $session, $application) {
+        return DB::transaction(function () use ($refreshToken, $session, $application, $ipAddress) {
             // Marcar usado
             $refreshToken->update(['used_at' => now()]);
 
@@ -143,6 +159,13 @@ final class SessionManager
                 'auth_session_id' => $session->id,
                 'context_version' => $session->user->context_version,
             ])->save();
+            $this->audit->record('SESSION_REFRESHED', 'SUCCESS', $session->user, $session->user, [
+                'session_id' => $session->id,
+                'application' => $application,
+                'ip_address' => $ipAddress,
+                'resource_type' => 'auth_sessions',
+                'resource_id' => (string) $session->id,
+            ]);
 
             // Rotar inactividad (renovación silenciosa NO debería actualizar actividad real según spec,
             // pero si la llamada es legitima puede actualizar. El spec dice: "La renovación silenciosa no actualiza actividad.")
@@ -158,24 +181,15 @@ final class SessionManager
 
     private function revokeCompromisedFamily(RefreshToken $token): void
     {
-        DB::transaction(function () use ($token) {
-            $session = $token->session;
-            if ($session) {
-                $this->revokeSession($session);
-            }
-            // Registrar incidente
-            // TODO: Log security event (Block B08)
-            /*
-            SecurityEvent::create([
-                'user_id' => $tokenRecord->user_id,
-                'event_type' => 'TOKEN_REUSE_DETECTED',
-                'ip_address' => request()->ip(),
-                'device_id' => $session->device_id ?? 'unknown',
-                'severity' => 'HIGH',
-                'metadata' => ['family_id' => $tokenRecord->family_id]
-            ]);
-            */
-        });
+        $this->risk->assessAndRespond(
+            'REFRESH_TOKEN_REUSE_DETECTED',
+            $token->user,
+            $token->session,
+            [
+                'refresh_reuse' => true,
+                'reason' => 'Se presentó nuevamente un refresh token ya consumido o revocado.',
+            ],
+        );
     }
 
     public function revokeSession(AuthSession $session): void
@@ -187,8 +201,17 @@ final class SessionManager
         ]);
         $session->refreshTokens()->update(['revoked_at' => now()]);
         $session->accessTokens()->delete();
+        $this->audit->record('SESSION_REVOKED', 'SUCCESS', $session->user, $session->user, [
+            'session_id' => $session->id,
+            'application' => $session->application,
+            'resource_type' => 'auth_sessions',
+            'resource_id' => (string) $session->id,
+        ]);
     }
 
+    /**
+     * @return list<array{id: int, application: string, device_id: string|null, created_at: string, last_activity_at: string, ip_address: string|null, is_current: bool}>
+     */
     public function getUserSessions(User $user, ?string $currentSessionId = null): array
     {
         $sessions = AuthSession::where('user_id', $user->id)
@@ -239,7 +262,7 @@ final class SessionManager
             throw new HttpResponseException(response()->json(['message' => 'Sesión no encontrada.'], 404));
         }
 
-        if ($session->id === $currentSessionId) {
+        if ((string) $session->id === $currentSessionId) {
             throw new HttpResponseException(response()->json(['message' => 'No puedes usar este método para cerrar la sesión actual.'], 400));
         }
 

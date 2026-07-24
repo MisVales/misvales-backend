@@ -9,6 +9,7 @@ use App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController;
 use App\Modules\Access\Presentation\Http\Controllers\PasskeyController;
 use App\Modules\Access\Presentation\Http\Controllers\ReauthenticationController;
 use App\Modules\Access\Presentation\Http\Controllers\RecoveryCodeController;
+use App\Modules\Access\Presentation\Http\Controllers\SecurityAlertController;
 use App\Modules\Access\Presentation\Http\Controllers\SessionController;
 use App\Modules\Access\Presentation\Http\Controllers\TotpController;
 use App\Modules\Access\Presentation\Http\Middleware\VerifyContextVersionMiddleware;
@@ -17,6 +18,9 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:sanctum', VerifyContextVersionMiddleware::class])->group(function (): void {
     Route::get('auth/context', [ContextController::class, 'getContext'])->name('auth.context.index');
     Route::post('auth/reauthenticate', [ReauthenticationController::class, 'store'])->name('auth.reauthenticate');
+    Route::get('security/alerts', [SecurityAlertController::class, 'index'])->name('security.alerts.index');
+    Route::post('security/alerts/{alert}/acknowledge', [SecurityAlertController::class, 'acknowledge'])->name('security.alerts.acknowledge');
+    Route::post('security/alerts/{alert}/request-action', [SecurityAlertController::class, 'requestAction'])->name('security.alerts.request-action');
 
     // B09 Session Management
     Route::post('auth/logout', [SessionController::class, 'logout'])->name('auth.logout');

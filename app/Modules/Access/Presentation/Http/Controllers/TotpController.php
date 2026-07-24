@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Application\MFA\TotpService;
+use App\Modules\Access\Application\Security\SecurityAuditService;
 use App\Modules\Access\Domain\Authorization\AuthorizationBinding;
 use App\Modules\Access\Domain\Authorization\CriticalAction;
 use App\Modules\Access\Presentation\Http\Requests\ConfirmTotpRequest;
@@ -19,6 +20,7 @@ final class TotpController extends Controller
     public function __construct(
         private readonly TotpService $totpService,
         private readonly TemporaryAuthorization $authorization,
+        private readonly SecurityAuditService $audit,
     ) {}
 
     public function setup(Request $request): JsonResponse
@@ -50,6 +52,10 @@ final class TotpController extends Controller
                     $request->validated('secret'),
                     $request->validated('code'),
                 );
+                $this->audit->record('MFA_TOTP_ENROLLED', 'SUCCESS', $user, $user, [
+                    'resource_type' => 'users',
+                    'resource_id' => $user->public_id,
+                ]);
             });
 
             return response()->json([
@@ -73,6 +79,10 @@ final class TotpController extends Controller
                     $this->binding($user, CriticalAction::MFA_TOTP_REMOVE),
                 );
                 $this->totpService->destroy($user);
+                $this->audit->record('MFA_TOTP_REMOVED', 'SUCCESS', $user, $user, [
+                    'resource_type' => 'users',
+                    'resource_id' => $user->public_id,
+                ]);
             });
 
             return response()->json([
