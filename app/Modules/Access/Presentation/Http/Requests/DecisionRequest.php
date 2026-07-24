@@ -16,7 +16,7 @@ class DecisionRequest extends FormRequest
     {
         return [
             'reason' => ['required', 'string', 'min:5', 'max:1000'],
-            'reauth_token' => ['required', 'string', 'min:32', 'max:512'],
+            'reauth_token' => ['nullable', 'string', 'min:32', 'max:512'],
         ];
     }
 }

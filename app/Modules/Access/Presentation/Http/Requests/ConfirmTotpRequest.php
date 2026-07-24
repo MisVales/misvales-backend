@@ -16,6 +16,7 @@ final class ConfirmTotpRequest extends FormRequest
         return [
             'secret' => ['required', 'string'],
             'code' => ['required', 'string', 'regex:/^\d{6}$/'],
+            'reauth_token' => ['nullable', 'string', 'min:32', 'max:512'],
         ];
     }
 }

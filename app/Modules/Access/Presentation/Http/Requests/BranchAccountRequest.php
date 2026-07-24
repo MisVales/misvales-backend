@@ -26,7 +26,7 @@ class BranchAccountRequest extends FormRequest
             'email' => ['required', 'email:rfc', 'max:255'],
             'role' => ['required', Rule::in([RoleCode::COORDINATOR->value, RoleCode::VERIFIER->value, RoleCode::CASHIER->value])],
             'reason' => ['required', 'string', 'min:5', 'max:1000'],
-            'reauth_token' => ['required', 'string', 'min:32', 'max:512'],
+            'reauth_token' => ['nullable', 'string', 'min:32', 'max:512'],
             'idempotency_key' => ['required', 'string', 'max:100'],
             'branch_id' => ['prohibited'],
             'password' => ['prohibited'],

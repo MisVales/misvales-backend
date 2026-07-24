@@ -3,29 +3,31 @@
 namespace App\Modules\Access\Application\Auth;
 
 use App\Models\User;
+use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
 
 final class SessionManager
 {
+    public function __construct(private readonly TemporaryAuthorization $authorizations) {}
+
     private const MAX_SESSIONS = 3;
 
     private const DURATIONS = [
         'administrativa' => ['absolute' => 8, 'inactivity' => 15],
-        'tableta'        => ['absolute' => 8, 'inactivity' => 15],
-        'distribuidora'  => ['absolute' => 24, 'inactivity' => 30],
+        'tableta' => ['absolute' => 8, 'inactivity' => 15],
+        'distribuidora' => ['absolute' => 24, 'inactivity' => 30],
     ];
 
     public function createSession(User $user, string $application, ?string $deviceId, ?string $ipAddress): array
     {
         $this->ensureUnderSessionLimit($user);
 
-        if (!isset(self::DURATIONS[$application])) {
-            throw new \InvalidArgumentException("Aplicación no soportada.");
+        if (! isset(self::DURATIONS[$application])) {
+            throw new \InvalidArgumentException('Aplicación no soportada.');
         }
 
         $durations = self::DURATIONS[$application];
@@ -43,7 +45,7 @@ final class SessionManager
             ]);
 
             $plainRefreshToken = Str::random(40);
-            
+
             $refreshToken = RefreshToken::create([
                 'auth_session_id' => $session->id,
                 'user_id' => $user->id,
@@ -53,15 +55,15 @@ final class SessionManager
             ]);
 
             $token = $user->createToken(
-                $application, 
-                ['*'], 
+                $application,
+                ['*'],
                 now()->addMinutes(10)
             );
 
             // Link token to session and context version
             $token->accessToken->forceFill([
                 'auth_session_id' => $session->id,
-                'context_version' => $user->context_version
+                'context_version' => $user->context_version,
             ])->save();
 
             return [
@@ -80,7 +82,7 @@ final class SessionManager
             ->with(['session', 'user'])
             ->first();
 
-        if (!$refreshToken) {
+        if (! $refreshToken) {
             $this->abortUnauthorized('Refresh token inválido.');
         }
 
@@ -114,7 +116,7 @@ final class SessionManager
         // Validar contexto
         // TODO: Validate context_version match if implemented
 
-        return DB::transaction(function () use ($refreshToken, $session, $application, $ipAddress) {
+        return DB::transaction(function () use ($refreshToken, $session, $application) {
             // Marcar usado
             $refreshToken->update(['used_at' => now()]);
 
@@ -133,16 +135,16 @@ final class SessionManager
 
             // Emitir nuevo access token
             $token = $session->user->createToken(
-                $application, 
-                ['*'], 
+                $application,
+                ['*'],
                 now()->addMinutes(10)
             );
             $token->accessToken->forceFill([
                 'auth_session_id' => $session->id,
-                'context_version' => $session->user->context_version
+                'context_version' => $session->user->context_version,
             ])->save();
 
-            // Rotar inactividad (renovación silenciosa NO debería actualizar actividad real según spec, 
+            // Rotar inactividad (renovación silenciosa NO debería actualizar actividad real según spec,
             // pero si la llamada es legitima puede actualizar. El spec dice: "La renovación silenciosa no actualiza actividad.")
             // Así que NO actualizamos last_activity_at aquí.
 
@@ -178,9 +180,10 @@ final class SessionManager
 
     public function revokeSession(AuthSession $session): void
     {
+        $this->authorizations->invalidateSession($session, 'SESSION_REVOKED');
         $session->update([
             'state' => 'REVOKED',
-            'revoked_at' => now()
+            'revoked_at' => now(),
         ]);
         $session->refreshTokens()->update(['revoked_at' => now()]);
         $session->accessTokens()->delete();
@@ -208,17 +211,21 @@ final class SessionManager
 
     private function maskIpAddress(?string $ip): ?string
     {
-        if (!$ip) return null;
+        if (! $ip) {
+            return null;
+        }
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)) {
             return preg_replace('/(\d+\.\d+)\.\d+\.\d+/', '$1.***.***', $ip);
         }
         if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV6)) {
             $parts = explode(':', $ip);
             if (count($parts) >= 4) {
-                return implode(':', array_slice($parts, 0, 4)) . ':***:***';
+                return implode(':', array_slice($parts, 0, 4)).':***:***';
             }
+
             return '***:***:***:***';
         }
+
         return '***.***.***.***';
     }
 
@@ -228,7 +235,7 @@ final class SessionManager
             ->where('id', $sessionIdToRevoke)
             ->first();
 
-        if (!$session) {
+        if (! $session) {
             throw new HttpResponseException(response()->json(['message' => 'Sesión no encontrada.'], 404));
         }
 
@@ -262,7 +269,7 @@ final class SessionManager
             throw new HttpResponseException(
                 response()->json([
                     'message' => 'Límite de sesiones alcanzado.',
-                    'active_sessions' => $activeSessions->pluck('id')
+                    'active_sessions' => $activeSessions->pluck('id'),
                 ], 409)
             );
         }

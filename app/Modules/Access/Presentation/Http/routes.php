@@ -2,17 +2,27 @@
 
 use App\Modules\Access\Presentation\Http\Controllers\AccountController;
 use App\Modules\Access\Presentation\Http\Controllers\AccountRequestController;
+use App\Modules\Access\Presentation\Http\Controllers\ContextController;
 use App\Modules\Access\Presentation\Http\Controllers\CredentialController;
+use App\Modules\Access\Presentation\Http\Controllers\LoginController;
+use App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController;
+use App\Modules\Access\Presentation\Http\Controllers\PasskeyController;
+use App\Modules\Access\Presentation\Http\Controllers\ReauthenticationController;
+use App\Modules\Access\Presentation\Http\Controllers\RecoveryCodeController;
+use App\Modules\Access\Presentation\Http\Controllers\SessionController;
+use App\Modules\Access\Presentation\Http\Controllers\TotpController;
+use App\Modules\Access\Presentation\Http\Middleware\VerifyContextVersionMiddleware;
 use Illuminate\Support\Facades\Route;
 
-Route::middleware(['auth:sanctum', \App\Modules\Access\Presentation\Http\Middleware\VerifyContextVersionMiddleware::class])->group(function (): void {
-    Route::get('auth/context', [\App\Modules\Access\Presentation\Http\Controllers\ContextController::class, 'getContext'])->name('auth.context.index');
-    
+Route::middleware(['auth:sanctum', VerifyContextVersionMiddleware::class])->group(function (): void {
+    Route::get('auth/context', [ContextController::class, 'getContext'])->name('auth.context.index');
+    Route::post('auth/reauthenticate', [ReauthenticationController::class, 'store'])->name('auth.reauthenticate');
+
     // B09 Session Management
-    Route::post('auth/logout', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'logout'])->name('auth.logout');
-    Route::get('auth/sessions', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'index'])->name('auth.sessions.index');
-    Route::delete('auth/sessions/others', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'destroyOthers'])->name('auth.sessions.destroyOthers');
-    Route::delete('auth/sessions/{sessionId}', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'destroy'])->name('auth.sessions.destroy');
+    Route::post('auth/logout', [SessionController::class, 'logout'])->name('auth.logout');
+    Route::get('auth/sessions', [SessionController::class, 'index'])->name('auth.sessions.index');
+    Route::delete('auth/sessions/others', [SessionController::class, 'destroyOthers'])->name('auth.sessions.destroyOthers');
+    Route::delete('auth/sessions/{sessionId}', [SessionController::class, 'destroy'])->name('auth.sessions.destroy');
 
     Route::post('auth/password/change', [CredentialController::class, 'change'])->name('auth.password.change');
     Route::post('accounts', [AccountController::class, 'store'])->name('accounts.store');
@@ -25,15 +35,15 @@ Route::middleware(['auth:sanctum', \App\Modules\Access\Presentation\Http\Middlew
     Route::post('accounts/{account}/invitation/resend', [AccountController::class, 'resend'])->name('accounts.invitation.resend');
 
     Route::prefix('auth/mfa')->group(function () {
-        Route::post('totp/setup', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'setup'])->name('auth.mfa.totp.setup');
-        Route::post('totp/confirm', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'confirm'])->name('auth.mfa.totp.confirm');
-        Route::delete('totp', [\App\Modules\Access\Presentation\Http\Controllers\TotpController::class, 'destroy'])->name('auth.mfa.totp.destroy');
-        
-        Route::post('passkeys/options', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'options'])->name('auth.mfa.passkeys.options');
-        Route::post('passkeys', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'store'])->name('auth.mfa.passkeys.store');
-        Route::delete('passkeys/{credentialId}', [\App\Modules\Access\Presentation\Http\Controllers\PasskeyController::class, 'destroy'])->name('auth.mfa.passkeys.destroy');
-        
-        Route::post('recovery-codes/regenerate', [\App\Modules\Access\Presentation\Http\Controllers\RecoveryCodeController::class, 'regenerate'])->name('auth.mfa.recovery-codes.regenerate');
+        Route::post('totp/setup', [TotpController::class, 'setup'])->name('auth.mfa.totp.setup');
+        Route::post('totp/confirm', [TotpController::class, 'confirm'])->name('auth.mfa.totp.confirm');
+        Route::delete('totp', [TotpController::class, 'destroy'])->name('auth.mfa.totp.destroy');
+
+        Route::post('passkeys/options', [PasskeyController::class, 'options'])->name('auth.mfa.passkeys.options');
+        Route::post('passkeys', [PasskeyController::class, 'store'])->name('auth.mfa.passkeys.store');
+        Route::delete('passkeys/{credentialId}', [PasskeyController::class, 'destroy'])->name('auth.mfa.passkeys.destroy');
+
+        Route::post('recovery-codes/regenerate', [RecoveryCodeController::class, 'regenerate'])->name('auth.mfa.recovery-codes.regenerate');
     });
 
     Route::get('account-requests', [AccountRequestController::class, 'index'])->name('account-requests.index');
@@ -48,12 +58,12 @@ Route::post('auth/recovery/password', [CredentialController::class, 'requestReco
 Route::post('auth/recovery/password/complete', [CredentialController::class, 'completeRecovery'])->name('auth.recovery.password.complete');
 
 // B06 Login & MFA Verification (Unprotected)
-Route::post('auth/login', [\App\Modules\Access\Presentation\Http\Controllers\LoginController::class, 'login'])->name('auth.login');
+Route::post('auth/login', [LoginController::class, 'login'])->name('auth.login');
 Route::prefix('auth/mfa')->group(function () {
-    Route::post('webauthn/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyPasskey'])->name('auth.mfa.passkeys.verify');
-    Route::post('totp/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyTotp'])->name('auth.mfa.totp.verify');
-    Route::post('recovery-code/verify', [\App\Modules\Access\Presentation\Http\Controllers\MfaVerificationController::class, 'verifyRecoveryCode'])->name('auth.mfa.recovery-codes.verify');
+    Route::post('webauthn/verify', [MfaVerificationController::class, 'verifyPasskey'])->name('auth.mfa.passkeys.verify');
+    Route::post('totp/verify', [MfaVerificationController::class, 'verifyTotp'])->name('auth.mfa.totp.verify');
+    Route::post('recovery-code/verify', [MfaVerificationController::class, 'verifyRecoveryCode'])->name('auth.mfa.recovery-codes.verify');
 });
 
 // B07 Refresh Token
-Route::post('auth/refresh', [\App\Modules\Access\Presentation\Http\Controllers\SessionController::class, 'refresh'])->name('auth.refresh');
+Route::post('auth/refresh', [SessionController::class, 'refresh'])->name('auth.refresh');

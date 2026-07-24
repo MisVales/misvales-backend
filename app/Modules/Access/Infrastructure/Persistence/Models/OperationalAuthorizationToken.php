@@ -5,11 +5,8 @@ namespace App\Modules\Access\Infrastructure\Persistence\Models;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
-/**
- * Persists short-lived reauthentication grants for sensitive actions.
- */
 #[Hidden(['token_hash'])]
-final class ReauthAuthorization extends Model
+final class OperationalAuthorizationToken extends Model
 {
     protected $guarded = [];
 

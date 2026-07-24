@@ -14,6 +14,6 @@ class ResendInvitationRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        return ['reauth_token' => ['required', 'string', 'min:32', 'max:512']];
+        return ['reauth_token' => ['nullable', 'string', 'min:32', 'max:512']];
     }
 }

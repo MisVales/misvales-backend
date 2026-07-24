@@ -17,7 +17,7 @@ class ChangePasswordRequest extends FormRequest
         return [
             'password' => ['required', 'string', 'min:12', 'max:128', 'confirmed'],
             'password_confirmation' => ['required', 'string', 'max:128'],
-            'reauth_token' => ['required', 'string', 'min:32', 'max:512'],
+            'reauth_token' => ['nullable', 'string', 'min:32', 'max:512'],
         ];
     }
 }

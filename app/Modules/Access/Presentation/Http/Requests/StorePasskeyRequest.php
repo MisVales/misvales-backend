@@ -16,6 +16,7 @@ final class StorePasskeyRequest extends FormRequest
         return [
             'clientDataJSON' => ['required', 'string'],
             'attestationObject' => ['required', 'string'],
+            'reauth_token' => ['nullable', 'string', 'min:32', 'max:512'],
         ];
     }
 }

@@ -31,4 +31,9 @@ return [
         'recovery_code_count' => (int) env('ACCESS_RECOVERY_CODE_COUNT', 10),
         'password_history_count' => (int) env('ACCESS_PASSWORD_HISTORY_COUNT', 5),
     ],
+
+    'webauthn' => [
+        'rp_id' => env('WEBAUTHN_RP_ID', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        'origin' => env('WEBAUTHN_ORIGIN', env('APP_URL', 'http://localhost')),
+    ],
 ];
