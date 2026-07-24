@@ -3,6 +3,16 @@
 return [
     'display_timezone' => env('APP_DISPLAY_TIMEZONE', 'America/Monterrey'),
 
+    'initial_general_manager' => [
+        'enabled' => (bool) env('INITIAL_GENERAL_MANAGER_ENABLED', false),
+        'email' => env('INITIAL_GENERAL_MANAGER_EMAIL'),
+        'name' => env('INITIAL_GENERAL_MANAGER_NAME'),
+    ],
+
+    'revocation_cache_store' => env('ACCESS_REVOCATION_CACHE_STORE', env('CACHE_STORE', 'database')),
+    'replay_cache_store' => env('ACCESS_REPLAY_CACHE_STORE', env('CACHE_STORE', 'redis')),
+    'transient_cache_store' => env('ACCESS_TRANSIENT_CACHE_STORE', env('CACHE_STORE', 'redis')),
+
     'tokens' => [
         'access_ttl_minutes' => (int) env('ACCESS_TOKEN_TTL_MINUTES', 10),
         'admin_refresh_ttl_minutes' => (int) env('ACCESS_ADMIN_REFRESH_TTL_MINUTES', 480),
@@ -30,5 +40,19 @@ return [
     'security' => [
         'recovery_code_count' => (int) env('ACCESS_RECOVERY_CODE_COUNT', 10),
         'password_history_count' => (int) env('ACCESS_PASSWORD_HISTORY_COUNT', 5),
+        'invitation_exchange_ttl_minutes' => (int) env('ACCESS_INVITATION_EXCHANGE_TTL_MINUTES', 10),
+        'compromised_passwords_file' => resource_path('security/compromised-passwords-v1.txt'),
+    ],
+
+    'webauthn' => [
+        'rp_id' => env('WEBAUTHN_RP_ID', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
+        'origin' => env('WEBAUTHN_ORIGIN', env('APP_URL', 'http://localhost')),
+    ],
+
+    'risk' => [
+        'high_failure_threshold' => (int) env('ACCESS_RISK_HIGH_FAILURE_THRESHOLD', 10),
+        'new_location_requires_mfa' => (bool) env('ACCESS_RISK_NEW_LOCATION_REQUIRES_MFA', true),
+        'impossible_travel_rejects' => (bool) env('ACCESS_RISK_IMPOSSIBLE_TRAVEL_REJECTS', true),
+        'suspend_on_critical_compromise' => (bool) env('ACCESS_RISK_SUSPEND_ON_CRITICAL_COMPROMISE', true),
     ],
 ];

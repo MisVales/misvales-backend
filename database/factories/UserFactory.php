@@ -16,26 +16,23 @@ use Illuminate\Support\Str;
  */
 class UserFactory extends Factory
 {
-    /**
-     * The current password being used by the factory.
-     */
     protected static ?string $password;
 
-    /**
-     * Define the model's default state.
-     *
-     * @return array<string, mixed>
-     */
+    /** @return array<string, mixed> */
     public function definition(): array
     {
         return [
+            'public_id' => (string) Str::uuid(),
             'name' => fake()->name(),
             'email' => fake()->unique()->safeEmail(),
+            'normalized_email' => fn (array $attributes): string => mb_strtolower((string) $attributes['email']),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
             'state' => AccountState::ACTIVE,
             'context_version' => 1,
-            'role_id' => fn () => $this->role(RoleCode::DISTRIBUTOR)->id,
+            'credential_version' => 1,
+            'assignment_version' => 1,
+            'role_id' => fn (): int => $this->role(RoleCode::DISTRIBUTOR)->id,
             'branch_id' => Branch::factory(),
             'remember_token' => Str::random(10),
         ];
@@ -76,6 +73,11 @@ class UserFactory extends Factory
         return $this->forRole(RoleCode::CASHIER);
     }
 
+    public function unverified(): static
+    {
+        return $this->state(fn (array $attributes): array => ['email_verified_at' => null]);
+    }
+
     private function forRole(RoleCode $code): static
     {
         return $this->state(function () use ($code): array {
@@ -92,17 +94,11 @@ class UserFactory extends Factory
     {
         return Role::query()->firstOrCreate(
             ['code' => $code->value],
-            ['name' => str($code->value)->replace('_', ' ')->title(), 'scope' => $code->isGlobal() ? 'GLOBAL' : 'BRANCH'],
+            [
+                'name' => str($code->value)->replace('_', ' ')->title(),
+                'scope' => $code->isGlobal() ? 'GLOBAL' : 'BRANCH',
+                'is_active' => true,
+            ],
         );
-    }
-
-    /**
-     * Indicate that the model's email address should be unverified.
-     */
-    public function unverified(): static
-    {
-        return $this->state(fn (array $attributes) => [
-            'email_verified_at' => null,
-        ]);
     }
 }

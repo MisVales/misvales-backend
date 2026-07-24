@@ -86,7 +86,6 @@ class AccessFoundationTest extends TestCase
             $user = User::factory()->{$state}()->create();
             $user->load('role', 'branch');
 
-            $this->assertNotNull($user->role);
             $this->assertSame($user->role->code->isGlobal(), $user->branch === null);
             if ($user->branch !== null) {
                 $this->assertTrue($user->branch->is_active);

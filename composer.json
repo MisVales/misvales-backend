@@ -20,7 +20,10 @@
         "laravel/horizon": "^5.48",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
-        "predis/predis": "^3.5"
+        "paragonie/constant_time_encoding": "^3.1",
+        "predis/predis": "^3.5",
+        "spomky-labs/otphp": "^11.5",
+        "web-auth/webauthn-lib": "^5.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
@@ -64,7 +67,7 @@
             "@php artisan optimize:clear --except=cache"
         ],
         "test": [
-            "@php artisan config:clear --ansi @no_additional_args",
+            "@php artisan config:clear --ansi",
             "@php artisan test"
         ],
         "post-autoload-dump": [

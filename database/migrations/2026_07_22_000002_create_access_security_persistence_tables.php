@@ -89,8 +89,10 @@ return new class extends Migration
             $table->string('credential_identifier', 255);
             $table->text('public_key')->nullable();
             $table->text('encrypted_secret')->nullable();
+            $table->unsignedBigInteger('signature_counter')->default(0);
             $table->jsonb('metadata')->nullable();
             $table->string('state', 20)->default('ACTIVE');
+            $table->timestampTz('registered_at')->useCurrent();
             $table->timestampTz('last_used_at')->nullable();
             $table->timestampTz('revoked_at')->nullable();
             $table->timestampsTz();
@@ -101,9 +103,11 @@ return new class extends Migration
             $table->id();
             $table->foreignId('user_id')->constrained()->restrictOnDelete();
             $table->string('code_hash', 64)->unique();
-            $table->timestampTz('issued_at');
+            $table->timestampTz('issued_at')->nullable();
+            $table->timestampTz('generated_at')->useCurrent();
             $table->timestampTz('used_at')->nullable();
             $table->timestampTz('revoked_at')->nullable();
+            $table->timestampsTz();
             $table->index(['user_id', 'used_at']);
         });
 
@@ -112,7 +116,7 @@ return new class extends Migration
             $table->uuid('public_id')->unique();
             $table->foreignId('user_id')->constrained()->restrictOnDelete();
             $table->string('application', 40);
-            $table->string('device_id', 255);
+            $table->string('device_id', 255)->nullable();
             $table->string('device_name')->nullable();
             $table->string('ip_address', 45)->nullable();
             $table->text('user_agent')->nullable();
@@ -120,7 +124,7 @@ return new class extends Migration
             $table->timestampTz('expires_at')->index();
             $table->string('state', 20)->default('ACTIVE');
             $table->unsignedBigInteger('version')->default(1);
-            $table->unsignedBigInteger('context_version');
+            $table->unsignedBigInteger('context_version')->default(1);
             $table->timestampTz('revoked_at')->nullable();
             $table->timestampsTz();
             $table->index(['user_id', 'state', 'last_activity_at']);
@@ -176,14 +180,16 @@ return new class extends Migration
             $table->foreignId('actor_user_id')->nullable()->constrained('users')->restrictOnDelete();
             $table->foreignId('target_user_id')->nullable()->constrained('users')->restrictOnDelete();
             $table->foreignId('auth_session_id')->nullable()->constrained()->restrictOnDelete();
-            $table->string('rule_code', 100);
-            $table->string('scope', 30);
+            $table->string('rule', 128);
+            $table->string('rule_code', 128)->nullable();
+            $table->string('scope', 30)->default('GLOBAL');
             $table->string('result', 30);
             $table->uuid('correlation_id');
             $table->jsonb('metadata')->nullable();
             $table->timestampTz('occurred_at')->index();
+            $table->timestampsTz();
             $table->index(['target_user_id', 'occurred_at']);
-            $table->index(['rule_code', 'occurred_at']);
+            $table->index(['rule', 'occurred_at']);
             $table->index('correlation_id');
         });
 
@@ -195,7 +201,7 @@ return new class extends Migration
             $table->string('action', 100);
             $table->string('record_type', 100)->nullable();
             $table->string('record_id', 100)->nullable();
-            $table->foreignId('branch_id')->nullable()->constrained()->restrictOnDelete();
+            $table->uuid('branch_id')->nullable();
             $table->string('token_hash', 64)->unique();
             $table->timestampTz('issued_at');
             $table->timestampTz('expires_at')->index();
@@ -207,20 +213,28 @@ return new class extends Migration
         Schema::create('operational_authorization_tokens', function (Blueprint $table) {
             $table->id();
             $table->uuid('public_id')->unique();
-            $table->foreignId('requested_by')->constrained('users')->restrictOnDelete();
-            $table->foreignId('authorized_by')->constrained('users')->restrictOnDelete();
-            $table->foreignId('executed_by')->nullable()->constrained('users')->restrictOnDelete();
-            $table->string('action', 100);
-            $table->string('record_type', 100);
-            $table->string('record_id', 100);
-            $table->jsonb('authorized_fields');
-            $table->foreignId('branch_id')->nullable()->constrained()->restrictOnDelete();
+            $table->foreignId('requester_user_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('authorizer_user_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('executor_user_id')->constrained('users')->restrictOnDelete();
+            $table->foreignId('authorizer_session_id')->constrained('auth_sessions')->restrictOnDelete();
+            $table->string('action', 128);
+            $table->string('resource_type', 128);
+            $table->string('resource_id', 128);
+            $table->uuid('branch_id')->nullable();
+            $table->string('parameters_hash', 64);
+            $table->text('reason');
             $table->string('token_hash', 64)->unique();
+            $table->unsignedInteger('context_version');
             $table->timestampTz('issued_at');
             $table->timestampTz('expires_at')->index();
             $table->timestampTz('used_at')->nullable();
             $table->timestampTz('revoked_at')->nullable();
+            $table->string('revoked_reason', 128)->nullable();
             $table->timestampsTz();
+            $table->index(
+                ['executor_user_id', 'action', 'resource_type', 'resource_id'],
+                'operational_executor_binding_idx',
+            );
         });
 
         Schema::create('outbox_events', function (Blueprint $table) {

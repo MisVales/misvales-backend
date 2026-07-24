@@ -3,22 +3,32 @@
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
-class SecurityEvent extends Model
+#[Hidden(['metadata'])]
+final class SecurityEvent extends Model
 {
     use HasPublicUuid;
 
-    public $timestamps = false;
-
-    /** @var list<string> */
-    protected $fillable = ['actor_user_id', 'target_user_id', 'auth_session_id', 'rule_code', 'scope', 'result', 'correlation_id', 'metadata', 'occurred_at'];
-
-    /** @var list<string> */
-    protected $hidden = ['metadata'];
+    protected $guarded = [];
 
     protected function casts(): array
     {
-        return ['metadata' => 'array', 'occurred_at' => 'immutable_datetime'];
+        return [
+            'metadata' => 'array',
+            'before_state' => 'array',
+            'after_state' => 'array',
+            'occurred_at' => 'immutable_datetime',
+        ];
+    }
+
+    protected static function booted(): void
+    {
+        self::creating(function (self $event): void {
+            $event->rule ??= $event->rule_code;
+            $event->rule_code ??= $event->rule;
+            $event->scope ??= $event->branch_id === null ? 'GLOBAL' : 'BRANCH';
+        });
     }
 }

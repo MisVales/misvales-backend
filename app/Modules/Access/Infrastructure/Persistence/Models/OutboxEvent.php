@@ -2,29 +2,31 @@
 
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
-use App\Modules\Access\Domain\Security\OutboxState;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
-class OutboxEvent extends Model
+/**
+ * @property array<string, mixed> $payload
+ * @property CarbonImmutable|null $last_attempt_at
+ * @property CarbonImmutable|null $processed_at
+ */
+#[Hidden(['payload', 'last_error'])]
+final class OutboxEvent extends Model
 {
     use HasPublicUuid;
 
-    /** @var list<string> */
-    protected $fillable = ['type', 'payload', 'idempotency_key', 'available_at'];
-
-    /** @var list<string> */
-    protected $hidden = ['payload', 'last_error'];
+    protected $guarded = [];
 
     protected function casts(): array
     {
         return [
             'payload' => 'array',
-            'state' => OutboxState::class,
-            'attempts' => 'integer',
-            'available_at' => 'immutable_datetime',
+            'occurred_at' => 'immutable_datetime',
+            'next_attempt_at' => 'immutable_datetime',
+            'last_attempt_at' => 'immutable_datetime',
             'processed_at' => 'immutable_datetime',
-            'failed_at' => 'immutable_datetime',
         ];
     }
 }

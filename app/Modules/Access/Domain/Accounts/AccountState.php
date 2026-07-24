@@ -2,6 +2,9 @@
 
 namespace App\Modules\Access\Domain\Accounts;
 
+/**
+ * Lists the persistent account states allowed by M01.
+ */
 enum AccountState: string
 {
     case PENDING_ACTIVATION = 'PENDING_ACTIVATION';

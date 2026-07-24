@@ -2,9 +2,294 @@ openapi: 3.1.0
 info:
   title: MisVales API
   version: 1.0.0
-paths: {}
+paths:
+  /api/v1/accounts:
+    post:
+      operationId: createAccount
+      summary: Crea una cuenta interna pendiente de activación
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateAccountInput' }
+      responses:
+        '201': { description: Cuenta e invitación creadas en una transacción }
+        '403': { description: Autoridad o autorización operativa inválida }
+        '409': { description: Correo ya registrado }
+        '422': { description: Datos inválidos }
+  /api/v1/account-requests:
+    get:
+      operationId: listAccountRequests
+      summary: Lista solicitudes según el alcance global o de sucursal
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Solicitudes visibles para el actor }
+        '403': { description: Actor sin alcance }
+    post:
+      operationId: createAccountRequest
+      summary: Solicita una cuenta de la sucursal del gerente autenticado
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 100 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/BranchAccountRequestInput' }
+      responses:
+        '202': { description: Solicitud pendiente de aprobación }
+        '403': { description: Rol, sucursal o reautorización inválidos }
+        '422': { description: Datos inválidos }
+  /api/v1/account-requests/{id}/approve:
+    post:
+      operationId: approveAccountRequest
+      summary: Aprueba de forma idempotente una solicitud
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DecisionInput' } } }
+      responses:
+        '200': { description: Solicitud aprobada y acción ejecutada una sola vez }
+        '403': { description: Gerente general o reautorización inválidos }
+        '409': { description: Solicitud ya decidida de otra forma }
+  /api/v1/account-requests/{id}/reject:
+    post:
+      operationId: rejectAccountRequest
+      summary: Rechaza una solicitud con motivo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/DecisionInput' } } }
+      responses:
+        '200': { description: Solicitud rechazada }
+        '403': { description: Gerente general o reautorización inválidos }
+  /api/v1/accounts/{id}/disable:
+    post:
+      operationId: disableAccount
+      summary: Deshabilita y revoca inmediatamente todo acceso
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses:
+        '200': { description: Cuenta deshabilitada y acceso revocado }
+        '409': { description: Es el último gerente general activo }
+  /api/v1/accounts/{id}/disable-request:
+    post:
+      operationId: requestAccountDisable
+      summary: Solicita deshabilitar una cuenta de la propia sucursal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses: { '202': { description: Solicitud pendiente } }
+  /api/v1/accounts/{id}/reactivate:
+    post:
+      operationId: reactivateAccount
+      summary: Reactiva sin restaurar tokens y emite una invitación nueva
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses: { '200': { description: Cuenta pendiente de activación } }
+  /api/v1/accounts/{id}/reactivate-request:
+    post:
+      operationId: requestAccountReactivation
+      summary: Solicita reactivar una cuenta de la propia sucursal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses: { '202': { description: Solicitud pendiente } }
+  /api/v1/accounts/{id}/recovery:
+    post:
+      operationId: initiateAdministrativeRecovery
+      summary: Inicia recuperación administrativa de alto riesgo
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses: { '200': { description: Acceso revocado e invitación de recuperación emitida } }
+  /api/v1/accounts/{id}/recovery-request:
+    post:
+      operationId: requestAdministrativeRecovery
+      summary: Solicita recuperación para una cuenta de la propia sucursal
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string } }
+      requestBody: { $ref: '#/components/requestBodies/Lifecycle' }
+      responses: { '202': { description: Solicitud pendiente } }
+  /api/v1/accounts/{id}/invitation/resend:
+    post:
+      operationId: resendAccountInvitation
+      summary: Revoca invitaciones anteriores y genera una nueva
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reauth_token]
+              properties: { reauth_token: { type: string, writeOnly: true } }
+      responses: { '200': { description: Invitación reemplazada } }
+  /api/v1/auth/invitations/inspect:
+    post:
+      operationId: inspectAccountInvitation
+      summary: Intercambia una invitación por un estado temporal restringido
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [token]
+              properties: { token: { type: string, writeOnly: true } }
+      responses:
+        '200': { description: Estado temporal de activación sin sesión operativa }
+        '409': { description: Invitación usada, vencida, revocada o de otro propósito }
+  /api/v1/auth/invitations/complete:
+    post:
+      operationId: completeAccountInvitation
+      summary: Establece contraseña propia, registra MFA y activa la cuenta
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CompleteInvitationInput' } } }
+      responses:
+        '200': { description: Primero devuelve diez códigos una sola vez; tras confirmarlos activa la cuenta y exige login }
+        '409': { description: Estado temporal o invitación consumidos }
+        '422': { description: Contraseña o inscripción MFA inválidas }
+  /api/v1/auth/recovery/password:
+    post:
+      operationId: requestPasswordRecovery
+      summary: Solicita recuperación con respuesta pública constante
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email]
+              properties: { email: { type: string, format: email } }
+      responses: { '202': { description: Respuesta genérica independiente de la existencia de la cuenta } }
+  /api/v1/auth/recovery/password/complete:
+    post:
+      operationId: completePasswordRecovery
+      summary: Cambia la contraseña tras validar un segundo factor
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/CompleteRecoveryInput' } } }
+      responses:
+        '200': { description: Credenciales cambiadas y todo acceso revocado }
+        '403': { description: Segundo factor inválido }
+        '409': { description: Token consumido, vencido o revocado }
+  /api/v1/auth/password/change:
+    post:
+      operationId: changeOwnPassword
+      summary: Cambia la contraseña propia con autorización temporal
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/ChangePasswordInput' } } }
+      responses:
+        '200': { description: Contraseña cambiada; sesiones y tokens revocados }
+        '403': { description: Autorización temporal inválida }
+        '422': { description: Contraseña fuera de política o reutilizada }
 components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    PublicId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  requestBodies:
+    Lifecycle:
+      required: true
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/LifecycleInput' }
   schemas:
+    PasswordWithConfirmation:
+      type: object
+      required: [password, password_confirmation]
+      properties:
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        password_confirmation: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+    CompleteInvitationInput:
+      type: object
+      required: [exchange_token]
+      properties:
+        exchange_token: { type: string, writeOnly: true }
+        password: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        password_confirmation: { type: string, minLength: 12, maxLength: 128, writeOnly: true }
+        recovery_codes_confirmed: { type: boolean, description: Segunda fase; confirma que los códigos mostrados fueron guardados }
+        mfa:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [PASSKEY, TOTP] }
+            secret: { type: string, writeOnly: true }
+            code: { type: string, pattern: '^\d{6}$', writeOnly: true }
+            credential_identifier: { type: string }
+            public_key: { type: string, writeOnly: true }
+            attestation_token: { type: string, writeOnly: true }
+      anyOf:
+        - { required: [password, password_confirmation, mfa] }
+        - properties: { recovery_codes_confirmed: { const: true } }
+          required: [recovery_codes_confirmed]
+    CompleteRecoveryInput:
+      allOf:
+        - { $ref: '#/components/schemas/PasswordWithConfirmation' }
+        - type: object
+          required: [token]
+          properties:
+            token: { type: string, writeOnly: true }
+            factor_type: { type: string, enum: [TOTP, RECOVERY_CODE, PASSKEY_AUTHORIZATION] }
+            factor_value: { type: string, writeOnly: true }
+            mfa: { type: object, description: Requerido para recuperación administrativa }
+    ChangePasswordInput:
+      allOf:
+        - { $ref: '#/components/schemas/PasswordWithConfirmation' }
+        - type: object
+          required: [reauth_token]
+          properties: { reauth_token: { type: string, writeOnly: true } }
+    CreateAccountInput:
+      type: object
+      required: [name, email, role, authorization_token]
+      properties:
+        name: { type: string, maxLength: 255 }
+        email: { type: string, format: email }
+        role: { $ref: '#/components/schemas/RoleCode' }
+        branch_id: { type: [string, 'null'], format: uuid }
+        authorization_token: { type: string, writeOnly: true }
+    BranchAccountRequestInput:
+      type: object
+      required: [name, email, role, reason, reauth_token]
+      properties:
+        name: { type: string }
+        email: { type: string, format: email }
+        role: { type: string, enum: [COORDINATOR, VERIFIER, CASHIER] }
+        reason: { type: string }
+        reauth_token: { type: string, writeOnly: true }
+    DecisionInput:
+      type: object
+      required: [reason, reauth_token]
+      properties:
+        reason: { type: string }
+        reauth_token: { type: string, writeOnly: true }
+    LifecycleInput:
+      type: object
+      required: [reason, reauth_token]
+      properties:
+        reason: { type: string }
+        reauth_token: { type: string, writeOnly: true }
+        compromise: { type: boolean, default: false }
     RoleCode:
       type: string
       enum:

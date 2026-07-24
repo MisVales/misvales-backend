@@ -7,7 +7,19 @@ use Illuminate\Support\Str;
 
 trait HasPublicUuid
 {
-    protected static function bootHasPublicUuid(): void
+    public function initializeHasPublicUuid(): void
+    {
+        if (blank($this->getAttribute('public_id'))) {
+            $this->setAttribute('public_id', (string) Str::uuid());
+        }
+    }
+
+    public function getRouteKeyName(): string
+    {
+        return 'public_id';
+    }
+
+    public static function bootHasPublicUuid(): void
     {
         static::creating(function (Model $model): void {
             if (blank($model->getAttribute('public_id'))) {
