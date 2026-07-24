@@ -3,6 +3,7 @@
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
 use App\Modules\Access\Domain\MFA\MfaType;
+use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
@@ -15,9 +16,11 @@ use Illuminate\Database\Eloquent\Model;
  * @property string $state
  * @property string|null $encrypted_secret
  */
-#[Hidden(['public_key', 'encrypted_secret'])]
+#[Hidden(['public_key', 'encrypted_secret', 'metadata'])]
 final class MfaCredential extends Model
 {
+    use HasPublicUuid;
+
     protected $guarded = [];
 
     protected function casts(): array

@@ -14,11 +14,9 @@ return new class extends Migration
             $table->foreignId('requester_user_id')->nullable()->constrained('users')->restrictOnDelete();
             $table->foreignId('authorizer_user_id')->nullable()->constrained('users')->restrictOnDelete();
             $table->foreignId('executor_user_id')->nullable()->constrained('users')->restrictOnDelete();
-            $table->foreignId('auth_session_id')->nullable()->constrained('auth_sessions')->nullOnDelete();
             $table->string('role_code', 64)->nullable();
-            $table->uuid('branch_id')->nullable()->index();
+            $table->foreignId('branch_id')->nullable()->constrained('branches')->restrictOnDelete();
             $table->string('application', 64)->nullable();
-            $table->timestamp('occurred_at')->nullable()->index();
             $table->string('display_timezone', 64)->default('America/Monterrey');
             $table->string('ip_address', 45)->nullable();
             $table->string('device_id', 128)->nullable();
@@ -29,7 +27,6 @@ return new class extends Migration
             $table->string('risk_level', 16)->nullable();
             $table->unsignedInteger('counter')->nullable();
             $table->text('reason')->nullable();
-            $table->uuid('correlation_id')->nullable()->index();
         });
 
         Schema::create('security_alerts', function (Blueprint $table): void {
@@ -37,7 +34,7 @@ return new class extends Migration
             $table->uuid('public_id')->unique();
             $table->foreignId('security_event_id')->constrained()->cascadeOnDelete();
             $table->foreignId('affected_user_id')->nullable()->constrained('users')->restrictOnDelete();
-            $table->uuid('branch_id')->nullable()->index();
+            $table->foreignId('branch_id')->nullable()->constrained('branches')->restrictOnDelete();
             $table->string('severity', 16)->index();
             $table->string('type', 128);
             $table->string('state', 32)->default('OPEN')->index();
@@ -53,12 +50,10 @@ return new class extends Migration
             $table->uuid('event_uuid')->nullable()->unique();
             $table->string('recipient')->nullable();
             $table->string('template', 128)->nullable();
-            $table->string('state', 32)->default('PENDING')->index();
             $table->timestamp('occurred_at')->nullable();
             $table->timestamp('next_attempt_at')->nullable()->index();
             $table->timestamp('last_attempt_at')->nullable();
             $table->string('result', 64)->nullable();
-            $table->text('last_error')->nullable();
         });
 
         Schema::create('notification_deliveries', function (Blueprint $table): void {
@@ -86,12 +81,10 @@ return new class extends Migration
                 'event_uuid',
                 'recipient',
                 'template',
-                'state',
                 'occurred_at',
                 'next_attempt_at',
                 'last_attempt_at',
                 'result',
-                'last_error',
             ]);
         });
 
@@ -101,14 +94,12 @@ return new class extends Migration
             $table->dropConstrainedForeignId('requester_user_id');
             $table->dropConstrainedForeignId('authorizer_user_id');
             $table->dropConstrainedForeignId('executor_user_id');
-            $table->dropConstrainedForeignId('auth_session_id');
+            $table->dropConstrainedForeignId('branch_id');
             $table->dropColumn([
                 'event_uuid',
                 'event_type',
                 'role_code',
-                'branch_id',
                 'application',
-                'occurred_at',
                 'display_timezone',
                 'ip_address',
                 'device_id',
@@ -119,7 +110,6 @@ return new class extends Migration
                 'risk_level',
                 'counter',
                 'reason',
-                'correlation_id',
             ]);
         });
     }

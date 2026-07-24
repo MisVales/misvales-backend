@@ -1,8 +1,18 @@
 <?php
+
 namespace App\Modules\Access\Domain\Context;
 
 final readonly class EffectiveContext implements \JsonSerializable
 {
+    /**
+     * @param  array<string, mixed>  $user
+     * @param  array<string, mixed>  $role
+     * @param  array<string, mixed>  $scope
+     * @param  list<string>  $permissions
+     * @param  array<string, mixed>  $hierarchy
+     * @param  array<string, mixed>  $experience
+     * @param  array<string, mixed>  $session
+     */
     public function __construct(
         public array $user,
         public array $role,
@@ -14,6 +24,7 @@ final readonly class EffectiveContext implements \JsonSerializable
         public int $contextVersion
     ) {}
 
+    /** @return array<string, mixed> */
     public function jsonSerialize(): array
     {
         return [

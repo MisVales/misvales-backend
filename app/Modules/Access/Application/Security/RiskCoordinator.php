@@ -5,11 +5,14 @@ namespace App\Modules\Access\Application\Security;
 use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Domain\Accounts\AccountState;
+use App\Modules\Access\Domain\Authentication\TokenState;
 use App\Modules\Access\Domain\Security\RiskAssessment;
 use App\Modules\Access\Domain\Security\RiskLevel;
 use App\Modules\Access\Domain\Security\RiskResponse;
+use App\Modules\Access\Domain\Sessions\SessionState;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
+use App\Modules\Access\Infrastructure\Persistence\Models\RefreshTokenFamily;
 use Illuminate\Support\Facades\DB;
 use Laravel\Sanctum\PersonalAccessToken;
 
@@ -69,7 +72,7 @@ final readonly class RiskCoordinator
                 $this->alerts->open(
                     $event,
                     $user,
-                    is_string($user->branch_id) ? $user->branch_id : null,
+                    $user->branch_id,
                     $assessment->level->value,
                     $eventType,
                     'Se detectó un evento de seguridad que requiere revisión.',
@@ -94,10 +97,18 @@ final readonly class RiskCoordinator
     private function revokeSession(AuthSession $session): void
     {
         $this->authorizations->invalidateSession($session, 'RISK_SESSION_REVOKED');
-        RefreshToken::query()->where('auth_session_id', $session->id)->update([
-            'revoked_at' => now(),
-            'updated_at' => now(),
-        ]);
+        RefreshToken::query()
+            ->where('auth_session_id', $session->id)
+            ->where('state', TokenState::ACTIVE->value)
+            ->update([
+                'state' => TokenState::REVOKED->value,
+                'revoked_at' => now(),
+                'updated_at' => now(),
+            ]);
+        RefreshTokenFamily::query()
+            ->where('auth_session_id', $session->id)
+            ->where('state', SessionState::ACTIVE->value)
+            ->update(['state' => SessionState::REVOKED->value, 'revoked_at' => now()]);
         PersonalAccessToken::query()->where('auth_session_id', $session->id)->delete();
         $session->forceFill(['state' => 'REVOKED', 'revoked_at' => now()])->save();
     }
@@ -106,10 +117,18 @@ final readonly class RiskCoordinator
     {
         $this->authorizations->invalidateUser($user, 'CRITICAL_RISK');
         $sessionIds = AuthSession::query()->where('user_id', $user->id)->pluck('id');
-        RefreshToken::query()->whereIn('auth_session_id', $sessionIds)->update([
-            'revoked_at' => now(),
-            'updated_at' => now(),
-        ]);
+        RefreshToken::query()
+            ->whereIn('auth_session_id', $sessionIds)
+            ->where('state', TokenState::ACTIVE->value)
+            ->update([
+                'state' => TokenState::REVOKED->value,
+                'revoked_at' => now(),
+                'updated_at' => now(),
+            ]);
+        RefreshTokenFamily::query()
+            ->whereIn('auth_session_id', $sessionIds)
+            ->where('state', SessionState::ACTIVE->value)
+            ->update(['state' => SessionState::REVOKED->value, 'revoked_at' => now()]);
         PersonalAccessToken::query()->whereIn('auth_session_id', $sessionIds)->delete();
         AuthSession::query()->whereIn('id', $sessionIds)->update([
             'state' => 'REVOKED',

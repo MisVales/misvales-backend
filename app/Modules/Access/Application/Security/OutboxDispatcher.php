@@ -20,16 +20,19 @@ final readonly class OutboxDispatcher
         ?string $recipient = null,
         ?string $template = null,
     ): OutboxEvent {
+        $eventUuid = (string) Str::uuid();
         $event = OutboxEvent::query()->firstOrCreate(
-            ['deduplication_key' => $deduplicationKey],
+            ['idempotency_key' => $deduplicationKey],
             [
-                'event_uuid' => (string) Str::uuid(),
+                'public_id' => $eventUuid,
+                'event_uuid' => $eventUuid,
                 'type' => $type,
                 'recipient' => $recipient,
                 'template' => $template,
                 'payload' => $this->sanitizer->sanitize($payload),
                 'state' => 'PENDING',
                 'attempts' => 0,
+                'available_at' => now(),
                 'occurred_at' => now('UTC'),
                 'next_attempt_at' => now(),
             ],

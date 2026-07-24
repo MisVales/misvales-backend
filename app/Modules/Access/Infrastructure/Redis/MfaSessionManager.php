@@ -4,7 +4,8 @@ namespace App\Modules\Access\Infrastructure\Redis;
 
 use App\Models\User;
 use Carbon\CarbonImmutable;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Manages transient MFA authentication sessions in Redis.
@@ -56,13 +57,13 @@ final class MfaSessionManager
             'expires_at' => $expiresAt->toIso8601String(),
         ];
 
-        Redis::setex(
-            self::SESSION_PREFIX.$tokenHash,
-            self::MFA_SESSION_TTL_MINUTES * 60,
-            json_encode($sessionData),
-        );
-        Redis::sadd(self::USER_INDEX_PREFIX.$user->id, self::SESSION_PREFIX.$tokenHash);
-        Redis::expire(self::USER_INDEX_PREFIX.$user->id, self::MFA_SESSION_TTL_MINUTES * 60);
+        $sessionKey = self::SESSION_PREFIX.$tokenHash;
+        $indexKey = self::USER_INDEX_PREFIX.$user->id;
+        $this->cache()->put($sessionKey, $sessionData, self::MFA_SESSION_TTL_MINUTES * 60);
+        $keys = $this->cache()->get($indexKey, []);
+        $keys = is_array($keys) ? $keys : [];
+        $keys[] = $sessionKey;
+        $this->cache()->put($indexKey, array_values(array_unique($keys)), self::MFA_SESSION_TTL_MINUTES * 60);
 
         return [
             'auth_token' => $plainToken,
@@ -79,13 +80,13 @@ final class MfaSessionManager
     public function getSession(string $plainToken): ?array
     {
         $tokenHash = hash('sha256', $plainToken);
-        $data = Redis::get(self::SESSION_PREFIX.$tokenHash);
+        $data = $this->cache()->get(self::SESSION_PREFIX.$tokenHash);
 
         if ($data === null) {
             return null;
         }
 
-        $session = json_decode((string) $data, true);
+        $session = is_array($data) ? $data : json_decode((string) $data, true);
 
         return is_array($session) ? $session : null;
     }
@@ -97,12 +98,25 @@ final class MfaSessionManager
     public function consumeSession(string $plainToken): bool
     {
         $tokenHash = hash('sha256', $plainToken);
+        $sessionKey = self::SESSION_PREFIX.$tokenHash;
         $session = $this->getSession($plainToken);
         if (is_array($session) && is_int($session['user_id'] ?? null)) {
-            Redis::srem(self::USER_INDEX_PREFIX.$session['user_id'], self::SESSION_PREFIX.$tokenHash);
+            $indexKey = self::USER_INDEX_PREFIX.$session['user_id'];
+            $keys = $this->cache()->get($indexKey, []);
+            if (is_array($keys)) {
+                $this->cache()->put(
+                    $indexKey,
+                    array_values(array_diff($keys, [$sessionKey])),
+                    self::MFA_SESSION_TTL_MINUTES * 60,
+                );
+            }
         }
 
-        return Redis::del(self::SESSION_PREFIX.$tokenHash) > 0;
+        if (! $this->cache()->has($sessionKey)) {
+            return false;
+        }
+
+        return $this->cache()->forget($sessionKey);
     }
 
     /**
@@ -111,17 +125,24 @@ final class MfaSessionManager
     public function invalidateUserSessions(int $userId): void
     {
         $indexKey = self::USER_INDEX_PREFIX.$userId;
-        $keys = Redis::smembers($indexKey);
+        $keys = $this->cache()->get($indexKey, []);
         if (! is_array($keys)) {
-            Redis::del($indexKey);
+            $this->cache()->forget($indexKey);
 
             return;
         }
 
         foreach ($keys as $key) {
-            Redis::del($key);
+            if (is_string($key)) {
+                $this->cache()->forget($key);
+            }
         }
 
-        Redis::del($indexKey);
+        $this->cache()->forget($indexKey);
+    }
+
+    private function cache(): Repository
+    {
+        return Cache::store((string) config('access.transient_cache_store'));
     }
 }

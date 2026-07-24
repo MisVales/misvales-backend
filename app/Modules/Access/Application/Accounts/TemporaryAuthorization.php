@@ -7,6 +7,7 @@ use App\Modules\Access\Domain\Accounts\AccessRuleViolation;
 use App\Modules\Access\Domain\Authorization\AuthorizationBinding;
 use App\Modules\Access\Domain\Authorization\CriticalAction;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
+use App\Modules\Access\Infrastructure\Persistence\Models\OperationalAuthorizationToken;
 use App\Modules\Access\Infrastructure\Persistence\Models\ReauthAuthorization;
 use SensitiveParameter;
 
@@ -24,7 +25,7 @@ final class TemporaryAuthorization
         User $user,
         #[SensitiveParameter] string $plainToken,
         string $action,
-        string $recordId,
+        ?string $recordId = null,
     ): void {
         $criticalAction = CriticalAction::tryFrom($action);
         if ($criticalAction === null) {
@@ -35,7 +36,7 @@ final class TemporaryAuthorization
             action: $criticalAction,
             resourceType: null,
             resourceId: $recordId,
-            branchId: is_string($user->branch_id) ? $user->branch_id : null,
+            branchId: $user->branch_public_id,
             parameters: [],
         ));
     }
@@ -77,11 +78,55 @@ final class TemporaryAuthorization
             ->where('user_id', $user->id)
             ->where('auth_session_id', $session->id)
             ->where('action', $binding->action->value)
-            ->where('resource_type', $binding->resourceType)
-            ->where('record_id', $binding->resourceId)
-            ->where('branch_id', $binding->branchId)
-            ->where('parameters_hash', $binding->parametersHash())
-            ->where('context_version', $user->context_version)
+            ->where('token_hash', hash('sha256', $plainToken))
+            ->whereNull('used_at')
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
+            ->lockForUpdate()
+            ->first();
+
+        if ($authorization === null
+            || ($authorization->resource_type !== null && $authorization->resource_type !== $binding->resourceType)
+            || $authorization->record_id !== $binding->resourceId
+            || $authorization->branch_id !== $binding->branchId
+            || ! hash_equals((string) $authorization->parameters_hash, $binding->parametersHash())
+            || $authorization->context_version !== $user->context_version) {
+            throw $this->required();
+        }
+
+        $authorization->forceFill(['used_at' => now()])->save();
+
+        return $authorization;
+    }
+
+    /**
+     * Compatibility entry point for the B03 direct-account operation.
+     *
+     * @param  array<string, mixed>  $capturedFields
+     */
+    public function consumeOperational(
+        User $executor,
+        #[SensitiveParameter] string $plainToken,
+        string $action,
+        array $capturedFields,
+    ): void {
+        $criticalAction = CriticalAction::tryFrom($action);
+        if ($criticalAction === null || $plainToken === '') {
+            throw $this->required();
+        }
+
+        $parametersHash = (new AuthorizationBinding(
+            action: $criticalAction,
+            resourceType: User::class,
+            resourceId: hash('sha256', json_encode($capturedFields, JSON_THROW_ON_ERROR)),
+            branchId: is_string($capturedFields['branch_id'] ?? null) ? $capturedFields['branch_id'] : null,
+            parameters: $capturedFields,
+        ))->parametersHash();
+
+        $authorization = OperationalAuthorizationToken::query()
+            ->where('executor_user_id', $executor->id)
+            ->where('action', $criticalAction->value)
+            ->where('parameters_hash', $parametersHash)
             ->where('token_hash', hash('sha256', $plainToken))
             ->whereNull('used_at')
             ->whereNull('revoked_at')
@@ -94,8 +139,6 @@ final class TemporaryAuthorization
         }
 
         $authorization->forceFill(['used_at' => now()])->save();
-
-        return $authorization;
     }
 
     public function invalidateSession(AuthSession $session, string $reason): void

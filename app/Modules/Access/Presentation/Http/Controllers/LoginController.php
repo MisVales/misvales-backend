@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Modules\Access\Application\Auth\LoginAttemptRateLimiter;
 use App\Modules\Access\Application\Security\SecurityAuditService;
+use App\Modules\Access\Domain\Accounts\AccountState;
 use App\Modules\Access\Infrastructure\Persistence\Models\MfaCredential;
 use App\Modules\Access\Infrastructure\Redis\MfaSessionManager;
 use App\Modules\Access\Presentation\Http\Requests\LoginRequest;
@@ -36,7 +37,7 @@ final class LoginController extends Controller
         $user = User::where('normalized_email', mb_strtolower($email))->first();
 
         // 3. Validar estado y contraseña
-        if (! $user || ! Hash::check($password, $user->password) || $user->state !== 'ACTIVE') {
+        if (! $user || ! Hash::check($password, $user->password) || $user->state !== AccountState::ACTIVE) {
             $this->rateLimiter->recordFailedLogin($email, $ip, $deviceId, $user);
             $this->audit->record('AUTHENTICATION_PASSWORD_FAILED', 'DENIED', null, $user, [
                 'ip_address' => $ip,

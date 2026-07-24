@@ -2,7 +2,8 @@
 
 namespace App\Modules\Access\Infrastructure\Redis;
 
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Contracts\Cache\Repository;
+use Illuminate\Support\Facades\Cache;
 
 /**
  * Tracks login attempt failures and enforces limits per spec B06.
@@ -66,7 +67,7 @@ final class LoginAttemptTracker
     public function checkBlock(int $userId, string $ipAddress): array
     {
         $blockKey = self::BLOCK_PREFIX."account:{$userId}";
-        $remaining = Redis::ttl($blockKey);
+        $remaining = $this->remainingSeconds($blockKey);
 
         if ($remaining > 0) {
             return [
@@ -78,7 +79,7 @@ final class LoginAttemptTracker
 
         // Check IP-level block
         $blockKey = self::BLOCK_PREFIX."ip:{$ipAddress}";
-        $remaining = Redis::ttl($blockKey);
+        $remaining = $this->remainingSeconds($blockKey);
 
         if ($remaining > 0) {
             return [
@@ -99,8 +100,8 @@ final class LoginAttemptTracker
     public function getAttemptCounts(int $userId, string $ipAddress, string $factor = 'password'): array
     {
         return [
-            'account_24h' => (int) Redis::get(self::ATTEMPT_PREFIX."by_account:{$userId}:{$factor}") ?: 0,
-            'ip_24h' => (int) Redis::get(self::ATTEMPT_PREFIX."by_ip:{$ipAddress}:{$factor}") ?: 0,
+            'account_24h' => (int) $this->cache()->get(self::ATTEMPT_PREFIX."by_account:{$userId}:{$factor}", 0),
+            'ip_24h' => (int) $this->cache()->get(self::ATTEMPT_PREFIX."by_ip:{$ipAddress}:{$factor}", 0),
         ];
     }
 
@@ -109,7 +110,7 @@ final class LoginAttemptTracker
      */
     public function resetCounters(int $userId, string $ipAddress): void
     {
-        Redis::del([
+        $this->cache()->deleteMultiple([
             self::ATTEMPT_PREFIX."by_account:{$userId}:password",
             self::ATTEMPT_PREFIX."by_account:{$userId}:mfa",
             self::ATTEMPT_PREFIX."by_ip:{$ipAddress}:password",
@@ -126,11 +127,25 @@ final class LoginAttemptTracker
     private function incrementCounter(string $key, int $ttlSeconds): void
     {
         $fullKey = self::ATTEMPT_PREFIX.$key;
-        $count = Redis::incr($fullKey);
+        $count = (int) $this->cache()->increment($fullKey);
 
         // Set TTL only if this is the first increment
         if ($count === 1) {
-            Redis::expire($fullKey, $ttlSeconds);
+            $this->cache()->put($fullKey, 1, $ttlSeconds);
         }
+    }
+
+    private function remainingSeconds(string $key): int
+    {
+        $expiresAt = $this->cache()->get($key);
+
+        return is_numeric($expiresAt)
+            ? max(0, (int) $expiresAt - now()->getTimestamp())
+            : 0;
+    }
+
+    private function cache(): Repository
+    {
+        return Cache::store((string) config('access.transient_cache_store'));
     }
 }

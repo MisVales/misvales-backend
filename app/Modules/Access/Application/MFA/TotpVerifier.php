@@ -2,7 +2,7 @@
 
 namespace App\Modules\Access\Application\MFA;
 
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 use OTPHP\TOTP;
 
 /**
@@ -109,8 +109,8 @@ final class TotpVerifier
     {
         $timeStep = intdiv($matchedTimestamp, self::PERIOD);
         $replayKey = "totp:used:{$credentialHash}:{$timeStep}:{$code}";
-        $stored = Redis::command('set', [$replayKey, '1', 'EX', self::REPLAY_PROTECTION_TTL, 'NX']);
 
-        return $stored === true || $stored === 'OK';
+        return Cache::store((string) config('access.replay_cache_store'))
+            ->add($replayKey, true, self::REPLAY_PROTECTION_TTL);
     }
 }

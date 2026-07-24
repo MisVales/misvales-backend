@@ -3,6 +3,7 @@
 namespace App\Modules\Access\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
+use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Application\Auth\SessionManager;
 use App\Modules\Access\Domain\Authorization\AuthorizationBinding;
@@ -48,10 +49,11 @@ final class SessionController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
+        /** @var User $user */
         $user = $request->user();
         $token = $user->currentAccessToken();
 
-        if ($token && $token->auth_session_id) {
+        if ($token->auth_session_id) {
             $session = AuthSession::find($token->auth_session_id);
             if ($session) {
                 $this->sessionManager->revokeSession($session);
@@ -60,14 +62,15 @@ final class SessionController extends Controller
 
         return response()->json([
             'message' => 'Sesión cerrada exitosamente.',
-        ])->withoutCookie('__Host-mv_refresh', '/', null, true);
+        ])->withoutCookie('__Host-mv_refresh', '/', null);
     }
 
     public function index(Request $request): JsonResponse
     {
+        /** @var User $user */
         $user = $request->user();
         $token = $user->currentAccessToken();
-        $currentSessionId = $token?->auth_session_id;
+        $currentSessionId = $token->auth_session_id === null ? null : (string) $token->auth_session_id;
 
         $sessions = $this->sessionManager->getUserSessions($user, $currentSessionId);
 
@@ -78,16 +81,17 @@ final class SessionController extends Controller
 
     public function destroy(Request $request, string $sessionId): JsonResponse
     {
+        /** @var User $user */
         $user = $request->user();
         $token = $user->currentAccessToken();
-        $currentSessionId = $token?->auth_session_id;
+        $currentSessionId = $token->auth_session_id;
 
         DB::transaction(function () use ($request, $user, $sessionId, $currentSessionId): void {
             $this->authorization->consume($user, $this->reauthToken($request), new AuthorizationBinding(
                 action: CriticalAction::SESSION_REVOKE,
                 resourceType: 'auth_sessions',
                 resourceId: $sessionId,
-                branchId: is_string($user->branch_id) ? $user->branch_id : null,
+                branchId: $user->branch_public_id,
                 parameters: [],
             ));
             $this->sessionManager->revokeOtherSession($user, $sessionId, (string) $currentSessionId);
@@ -100,9 +104,10 @@ final class SessionController extends Controller
 
     public function destroyOthers(Request $request): JsonResponse
     {
+        /** @var User $user */
         $user = $request->user();
         $token = $user->currentAccessToken();
-        $currentSessionId = $token?->auth_session_id;
+        $currentSessionId = $token->auth_session_id;
 
         if (! $currentSessionId) {
             return response()->json(['message' => 'No se puede determinar la sesión actual.'], 400);
@@ -113,7 +118,7 @@ final class SessionController extends Controller
                 action: CriticalAction::SESSION_REVOKE_OTHERS,
                 resourceType: 'auth_sessions',
                 resourceId: 'others',
-                branchId: is_string($user->branch_id) ? $user->branch_id : null,
+                branchId: $user->branch_public_id,
                 parameters: [],
             ));
             $this->sessionManager->revokeAllOtherSessions($user, (string) $currentSessionId);

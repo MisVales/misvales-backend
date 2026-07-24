@@ -213,8 +213,12 @@ final readonly class CredentialLifecycleService
 
     public function changePassword(User $user, #[SensitiveParameter] string $password, #[SensitiveParameter] string $reauthToken): void
     {
-        DB::transaction(function () use ($user, $password, $reauthToken): void {
+        $accessToken = $user->currentAccessToken();
+
+        DB::transaction(function () use ($user, $password, $reauthToken, $accessToken): void {
             $user = User::query()->lockForUpdate()->findOrFail($user->id);
+            $user->withAccessToken($accessToken);
+
             $state = AccountState::from((string) $user->getRawOriginal('state'));
             if ($state !== AccountState::ACTIVE) {
                 throw new AccessRuleViolation('La cuenta no está activa.', 403);

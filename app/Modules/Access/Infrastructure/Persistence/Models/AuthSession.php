@@ -3,6 +3,8 @@
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
 use App\Models\User;
+use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
@@ -22,8 +24,11 @@ use Laravel\Sanctum\PersonalAccessToken;
  * @property string $state
  * @property-read User $user
  */
+#[Hidden(['device_id', 'ip_address', 'user_agent'])]
 class AuthSession extends Model
 {
+    use HasPublicUuid;
+
     protected $fillable = [
         'user_id',
         'application',
@@ -37,6 +42,7 @@ class AuthSession extends Model
     ];
 
     protected $casts = [
+        'context_version' => 'integer',
         'last_activity_at' => 'datetime',
         'expires_at' => 'datetime',
         'revoked_at' => 'datetime',

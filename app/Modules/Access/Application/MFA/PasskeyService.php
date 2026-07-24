@@ -8,21 +8,18 @@ use App\Modules\Access\Infrastructure\Persistence\Models\MfaCredential;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
-use Symfony\Component\HttpFoundation\Request as SymfonyRequest;
 use Webauthn\AttestationStatement\AttestationObjectLoader;
 use Webauthn\AttestationStatement\AttestationStatementSupportManager;
 use Webauthn\AttestationStatement\NoneAttestationStatementSupport;
-use Webauthn\AuthenticationExtensions\AuthenticationExtension;
-use Webauthn\AuthenticationExtensions\AuthenticationExtensionsClientInputs;
 use Webauthn\AuthenticatorAttestationResponse;
 use Webauthn\AuthenticatorAttestationResponseValidator;
 use Webauthn\AuthenticatorSelectionCriteria;
+use Webauthn\CeremonyStep\CeremonyStepManagerFactory;
+use Webauthn\CollectedClientData;
 use Webauthn\PublicKeyCredentialCreationOptions;
-use Webauthn\PublicKeyCredentialLoader;
 use Webauthn\PublicKeyCredentialParameters;
 use Webauthn\PublicKeyCredentialRpEntity;
 use Webauthn\PublicKeyCredentialUserEntity;
-use Webauthn\PublicKeyCredentialSourceRepository;
 
 final class PasskeyService
 {
@@ -71,7 +68,7 @@ final class PasskeyService
 
         // Save options to Cache for 5 minutes
         Cache::put(
-            self::CACHE_PREFIX . $user->id,
+            self::CACHE_PREFIX.$user->id,
             $options,
             now()->addMinutes(5)
         );
@@ -85,9 +82,9 @@ final class PasskeyService
     public function register(User $user, string $clientDataJson, string $attestationObject): void
     {
         /** @var PublicKeyCredentialCreationOptions|null $options */
-        $options = Cache::pull(self::CACHE_PREFIX . $user->id);
+        $options = Cache::pull(self::CACHE_PREFIX.$user->id);
 
-        if (!$options) {
+        if (! $options) {
             throw new RuntimeException('El desafío de registro expiró o no existe. Intenta nuevamente.');
         }
 
@@ -95,30 +92,16 @@ final class PasskeyService
         $attestationStatementSupportManager = AttestationStatementSupportManager::create();
         $attestationStatementSupportManager->add(NoneAttestationStatementSupport::create());
 
-        $attestationObjectLoader = AttestationObjectLoader::create($attestationStatementSupportManager);
-        
-        $publicKeyCredentialLoader = PublicKeyCredentialLoader::create($attestationObjectLoader);
-
         try {
-            // Reconstruct the JSON as expected by the library
-            $publicKeyCredential = $publicKeyCredentialLoader->loadArray([
-                'id' => 'dummy', // Will be parsed from attestation
-                'rawId' => 'dummy', 
-                'type' => 'public-key',
-                'response' => [
-                    'clientDataJSON' => $clientDataJson,
-                    'attestationObject' => $attestationObject,
-                ]
-            ]);
+            $response = AuthenticatorAttestationResponse::create(
+                CollectedClientData::createFormJson($clientDataJson),
+                AttestationObjectLoader::create($attestationStatementSupportManager)->load($attestationObject),
+            );
+            $ceremonyFactory = new CeremonyStepManagerFactory;
+            $ceremonyFactory->setAttestationStatementSupportManager($attestationStatementSupportManager);
+            $ceremonyFactory->setAllowedOrigins([(string) config('app.url')]);
+            $validator = AuthenticatorAttestationResponseValidator::create($ceremonyFactory->creationCeremony());
 
-            $response = $publicKeyCredential->getResponse();
-            if (!$response instanceof AuthenticatorAttestationResponse) {
-                throw new \Exception('Respuesta inválida.');
-            }
-
-            // Validate
-            $validator = AuthenticatorAttestationResponseValidator::create($attestationStatementSupportManager);
-            
             $publicKeyCredentialSource = $validator->check(
                 $response,
                 $options,
@@ -126,21 +109,22 @@ final class PasskeyService
             );
 
         } catch (\Throwable $e) {
-            throw new RuntimeException('La validación de la passkey falló: ' . $e->getMessage());
+            throw new RuntimeException('La validación de la passkey falló: '.$e->getMessage());
         }
 
         DB::transaction(function () use ($user, $publicKeyCredentialSource) {
             MfaCredential::query()->create([
                 'user_id' => $user->id,
                 'type' => MfaType::PASSKEY->value,
-                'public_key_or_secret' => base64_encode($publicKeyCredentialSource->getCredentialPublicKey()),
+                'credential_identifier' => base64_encode($publicKeyCredentialSource->publicKeyCredentialId),
+                'public_key' => base64_encode($publicKeyCredentialSource->credentialPublicKey),
+                'signature_counter' => $publicKeyCredentialSource->counter,
                 'metadata' => [
-                    'credential_id' => base64_encode($publicKeyCredentialSource->getPublicKeyCredentialId()),
-                    'aaguid' => $publicKeyCredentialSource->getAaguid()->toString(),
-                    'counter' => $publicKeyCredentialSource->getCounter(),
-                    'transports' => $publicKeyCredentialSource->getTransports(),
+                    'aaguid' => (string) $publicKeyCredentialSource->aaguid,
+                    'transports' => $publicKeyCredentialSource->transports,
                 ],
-                'status' => 'ACTIVE',
+                'state' => 'ACTIVE',
+                'registered_at' => now(),
             ]);
         });
     }
@@ -153,12 +137,12 @@ final class PasskeyService
         DB::transaction(function () use ($user, $credentialId) {
             $activeFactors = MfaCredential::query()
                 ->where('user_id', $user->id)
-                ->where('status', 'ACTIVE')
+                ->where('state', 'ACTIVE')
                 ->get();
 
             $passkey = $activeFactors->firstWhere('id', $credentialId);
-            
-            if (!$passkey || $passkey->type !== MfaType::PASSKEY->value) {
+
+            if ($passkey === null || $passkey->type !== MfaType::PASSKEY) {
                 throw new RuntimeException('Credencial no encontrada.');
             }
 

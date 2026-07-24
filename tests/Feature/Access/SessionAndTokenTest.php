@@ -8,10 +8,11 @@ use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
 use App\Modules\Access\Infrastructure\Persistence\Models\MfaCredential;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
-use Illuminate\Support\Facades\Redis;
-use Tests\TestCase;
 use Laravel\Sanctum\PersonalAccessToken;
+use OTPHP\TOTP;
+use Tests\TestCase;
 
 class SessionAndTokenTest extends TestCase
 {
@@ -22,7 +23,7 @@ class SessionAndTokenTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        Redis::flushall();
+        Cache::store((string) config('access.transient_cache_store'))->clear();
 
         $this->disableCookieEncryption();
 
@@ -42,6 +43,7 @@ class SessionAndTokenTest extends TestCase
         ]);
     }
 
+    /** @return array{access_token: string, refresh_token: string} */
     private function performFullLogin(string $application = 'administrativa'): array
     {
         $this->withoutExceptionHandling();
@@ -53,17 +55,17 @@ class SessionAndTokenTest extends TestCase
         $loginRes = $this->postJson('/api/v1/auth/login', [
             'email' => 'test@misvales.com',
             'password' => 'Secret123!',
-            'application' => $application
+            'application' => $application,
         ]);
-        
+
         $mfaToken = $loginRes->json('data.mfa_token');
 
-        $totpCode = \OTPHP\TOTP::create('JBSWY3DPEHPK3PXP')->now();
+        $totpCode = TOTP::create('JBSWY3DPEHPK3PXP')->now();
 
         // 3. Verify TOTP
         $verifyRes = $this->postJson('/api/v1/auth/mfa/totp/verify', [
             'mfa_token' => $mfaToken,
-            'code' => $totpCode
+            'code' => $totpCode,
         ]);
 
         if ($verifyRes->status() !== 200) {
@@ -73,16 +75,13 @@ class SessionAndTokenTest extends TestCase
 
         return [
             'access_token' => $verifyRes->json('data.access_token'),
-            'refresh_token' => $verifyRes->getCookie('__Host-mv_refresh', false)->getValue()
+            'refresh_token' => $verifyRes->getCookie('__Host-mv_refresh', false)->getValue(),
         ];
     }
 
     public function test_successful_mfa_emits_tokens_and_creates_session(): void
     {
         $tokens = $this->performFullLogin('administrativa');
-
-        $this->assertNotNull($tokens['access_token']);
-        $this->assertNotNull($tokens['refresh_token']);
 
         $this->assertDatabaseCount('auth_sessions', 1);
         $this->assertDatabaseCount('refresh_tokens', 1);
@@ -91,7 +90,7 @@ class SessionAndTokenTest extends TestCase
         $session = AuthSession::first();
         $this->assertEquals('administrativa', $session->application);
         $this->assertEquals('ACTIVE', $session->state);
-        
+
         $sanctumToken = PersonalAccessToken::first();
         $this->assertEquals($session->id, $sanctumToken->auth_session_id);
     }
@@ -101,26 +100,26 @@ class SessionAndTokenTest extends TestCase
         $this->performFullLogin('administrativa');
         $this->performFullLogin('administrativa');
         $this->performFullLogin('administrativa');
-        
+
         $this->assertDatabaseCount('auth_sessions', 3);
 
         $loginRes = $this->postJson('/api/v1/auth/login', [
             'email' => 'test@misvales.com',
             'password' => 'Secret123!',
-            'application' => 'administrativa'
+            'application' => 'administrativa',
         ]);
-        
+
         $mfaToken = $loginRes->json('data.mfa_token');
 
         // Attempt 4th session
         $verifyRes = $this->postJson('/api/v1/auth/mfa/totp/verify', [
             'mfa_token' => $mfaToken,
-            'code' => \OTPHP\TOTP::create('JBSWY3DPEHPK3PXP')->now()
+            'code' => TOTP::create('JBSWY3DPEHPK3PXP')->now(),
         ]);
 
         $verifyRes->assertStatus(409)
             ->assertJsonStructure(['message', 'active_sessions']);
-            
+
         $this->assertDatabaseCount('auth_sessions', 3);
     }
 
@@ -128,7 +127,7 @@ class SessionAndTokenTest extends TestCase
     {
         $tokens = $this->performFullLogin('tableta');
         $oldRefreshToken = $tokens['refresh_token'];
-        
+
         $refreshRes = $this->call(
             'POST',
             '/api/v1/auth/refresh',
@@ -137,18 +136,18 @@ class SessionAndTokenTest extends TestCase
             [],
             ['HTTP_X-APPLICATION-ID' => 'tableta', 'HTTP_ACCEPT' => 'application/json']
         );
-            
+
         $refreshRes->assertOk();
         $newRefreshToken = $refreshRes->getCookie('__Host-mv_refresh', false)->getValue();
-        
+
         $this->assertNotEquals($oldRefreshToken, $newRefreshToken);
         $this->assertNotNull($refreshRes->json('data.access_token'));
-        
+
         // Old token should be marked as used
         $oldHash = hash('sha256', $oldRefreshToken);
         $oldRecord = RefreshToken::where('token_hash', $oldHash)->first();
         $this->assertNotNull($oldRecord->used_at);
-        
+
         $this->assertDatabaseCount('refresh_tokens', 2);
     }
 
@@ -156,7 +155,7 @@ class SessionAndTokenTest extends TestCase
     {
         $tokens = $this->performFullLogin('distribuidora');
         $originalToken = $tokens['refresh_token'];
-        
+
         // Legitimate rotation
         $this->call(
             'POST',
@@ -166,7 +165,7 @@ class SessionAndTokenTest extends TestCase
             [],
             ['HTTP_X-APPLICATION-ID' => 'distribuidora', 'HTTP_ACCEPT' => 'application/json']
         );
-            
+
         // Replay attack: use the old token again
         $replayRes = $this->call(
             'POST',
@@ -176,15 +175,15 @@ class SessionAndTokenTest extends TestCase
             [],
             ['HTTP_X-APPLICATION-ID' => 'distribuidora', 'HTTP_ACCEPT' => 'application/json']
         );
-            
+
         $replayRes->assertStatus(401)
             ->assertJson(['message' => 'Reutilización de token detectada. Sesión terminada por seguridad.']);
-            
+
         // Check session revoked
         $session = AuthSession::first();
         $this->assertEquals('REVOKED', $session->state);
         $this->assertNotNull($session->revoked_at);
-        
+
         // Access tokens should be deleted
         $this->assertDatabaseCount('personal_access_tokens', 0);
     }

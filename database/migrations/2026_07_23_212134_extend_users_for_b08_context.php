@@ -12,9 +12,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->string('role_code')->nullable()->after('state');
-            $table->uuid('branch_id')->nullable()->after('role_code');
-            $table->unsignedBigInteger('coordinator_id')->nullable()->after('branch_id');
+            $table->foreignId('coordinator_id')
+                ->nullable()
+                ->after('branch_id')
+                ->constrained('users')
+                ->restrictOnDelete();
             $table->unsignedInteger('assignment_version')->default(1)->after('coordinator_id');
         });
     }
@@ -25,7 +27,8 @@ return new class extends Migration
     public function down(): void
     {
         Schema::table('users', function (Blueprint $table) {
-            $table->dropColumn(['role_code', 'branch_id', 'coordinator_id', 'assignment_version']);
+            $table->dropConstrainedForeignId('coordinator_id');
+            $table->dropColumn('assignment_version');
         });
     }
 };

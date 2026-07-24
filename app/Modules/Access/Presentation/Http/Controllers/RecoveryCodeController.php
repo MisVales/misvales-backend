@@ -34,7 +34,7 @@ final class RecoveryCodeController extends Controller
                     action: CriticalAction::MFA_RECOVERY_CODES_REGENERATE,
                     resourceType: 'users',
                     resourceId: $user->public_id,
-                    branchId: is_string($user->branch_id) ? $user->branch_id : null,
+                    branchId: $user->branch_public_id,
                     parameters: [],
                 ),
             );

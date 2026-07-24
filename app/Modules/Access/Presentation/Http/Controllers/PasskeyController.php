@@ -103,7 +103,7 @@ final class PasskeyController extends Controller
             action: $action,
             resourceType: 'mfa_credentials',
             resourceId: $resourceId,
-            branchId: is_string($user->branch_id) ? $user->branch_id : null,
+            branchId: $user->branch_public_id,
             parameters: [],
         );
     }

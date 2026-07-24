@@ -4,8 +4,9 @@ namespace App\Modules\Access\Application\Auth;
 
 use App\Models\User;
 use App\Modules\Access\Application\Security\RiskCoordinator;
+use Illuminate\Contracts\Cache\Repository;
 use Illuminate\Http\Exceptions\HttpResponseException;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 
 final class LoginAttemptRateLimiter
 {
@@ -24,12 +25,12 @@ final class LoginAttemptRateLimiter
     {
         $this->checkThresholds($email, $ip, $device);
 
-        if (Redis::exists("throttle:penalty:15m:{$email}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:15m:{$email}"), 'El acceso MFA está temporalmente restringido.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:15m:{$email}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso MFA está temporalmente restringido.');
         }
 
-        if (Redis::exists("throttle:penalty:60m:{$email}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:60m:{$email}"), 'El acceso está temporalmente restringido.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:60m:{$email}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido.');
         }
     }
 
@@ -39,22 +40,15 @@ final class LoginAttemptRateLimiter
         $accountKey15m = "throttle:account:15m:{$email}";
         $accountKey24h = "throttle:account:24h:{$email}";
 
-        $fails15m = (int) Redis::incr($accountKey15m);
-        if ($fails15m === 1) {
-            Redis::expire($accountKey15m, self::WINDOW_MINUTES * 60);
-        }
-
-        $fails24h = (int) Redis::incr($accountKey24h);
-        if ($fails24h === 1) {
-            Redis::expire($accountKey24h, self::WINDOW_HOURS * 3600);
-        }
+        $fails15m = $this->increment($accountKey15m, self::WINDOW_MINUTES * 60);
+        $fails24h = $this->increment($accountKey24h, self::WINDOW_HOURS * 3600);
 
         // 2. Incrementar contadores compartidos (IP, Device, Network)
         $this->incrementSharedThresholds($email, $ip, $device);
 
         // 4. Suspensión de cuenta por intentos excesivos (15 en 24h)
         if ($fails24h >= 15 && $user) {
-            $user->update(['state' => 'SECURITY_SUSPENDED']);
+            $user->forceFill(['state' => 'SECURITY_SUSPENDED'])->save();
             $this->risk->assessAndRespond(
                 'AUTHENTICATION_FAILURE_THRESHOLD_REACHED',
                 $user,
@@ -62,13 +56,13 @@ final class LoginAttemptRateLimiter
                 ['recent_failures' => $fails24h, 'compromise_account' => true],
             );
         } elseif ($fails24h === 10) {
-            Redis::setex("throttle:penalty:60m:{$email}", 60 * 60, '1');
+            $this->penalize("throttle:penalty:60m:{$email}", 60 * 60);
             $this->abortWithDelay(60 * 60, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
         // 5. Determinar la acción (429) basada en los fallos recientes
         if ($fails15m === 5) {
-            Redis::setex("throttle:penalty:15m:{$email}", 15 * 60, '1');
+            $this->penalize("throttle:penalty:15m:{$email}", 15 * 60);
             $this->abortWithDelay(15 * 60, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
@@ -87,21 +81,14 @@ final class LoginAttemptRateLimiter
         $mfaKey15m = "throttle:mfa:15m:{$email}";
         $mfaKey24h = "throttle:mfa:24h:{$email}";
 
-        $fails15m = (int) Redis::incr($mfaKey15m);
-        if ($fails15m === 1) {
-            Redis::expire($mfaKey15m, self::WINDOW_MINUTES * 60);
-        }
-
-        $fails24h = (int) Redis::incr($mfaKey24h);
-        if ($fails24h === 1) {
-            Redis::expire($mfaKey24h, self::WINDOW_HOURS * 3600);
-        }
+        $fails15m = $this->increment($mfaKey15m, self::WINDOW_MINUTES * 60);
+        $fails24h = $this->increment($mfaKey24h, self::WINDOW_HOURS * 3600);
 
         // 2. Incrementar contadores compartidos (IP, Device)
         $this->incrementSharedThresholds($email, $ip, $device);
 
         // 3. Suspensión de cuenta (15 en 24h) compartida
-        $accountFails24h = (int) Redis::get("throttle:account:24h:{$email}");
+        $accountFails24h = (int) $this->cache()->get("throttle:account:24h:{$email}", 0);
         if ($fails24h + $accountFails24h >= 15) {
             $user->update(['state' => 'SECURITY_SUSPENDED']);
             $this->risk->assessAndRespond(
@@ -111,12 +98,12 @@ final class LoginAttemptRateLimiter
                 ['recent_failures' => $fails24h + $accountFails24h, 'compromise_account' => true],
             );
         } elseif ($fails24h + $accountFails24h === 10) {
-            Redis::setex("throttle:penalty:60m:{$email}", 60 * 60, '1');
+            $this->penalize("throttle:penalty:60m:{$email}", 60 * 60);
             $this->abortWithDelay(60 * 60, 'El acceso está temporalmente restringido.');
         }
 
         if ($fails15m === 5) {
-            Redis::setex("throttle:penalty:15m:{$email}", 15 * 60, '1');
+            $this->penalize("throttle:penalty:15m:{$email}", 15 * 60);
             $this->abortWithDelay(15 * 60, 'El acceso MFA está temporalmente restringido.');
         }
 
@@ -129,68 +116,88 @@ final class LoginAttemptRateLimiter
 
     public function clearLoginAttempts(string $email): void
     {
-        Redis::del("throttle:account:15m:{$email}");
+        $this->cache()->forget("throttle:account:15m:{$email}");
     }
 
     public function clearMfaAttempts(string $email): void
     {
-        Redis::del("throttle:mfa:15m:{$email}");
+        $this->cache()->forget("throttle:mfa:15m:{$email}");
     }
 
     private function incrementSharedThresholds(string $email, string $ip, string $device): void
     {
         $ipKey = "throttle:ip:15m:{$ip}";
-        $ipFails = (int) Redis::incr($ipKey);
-        if ($ipFails === 1) {
-            Redis::expire($ipKey, self::WINDOW_MINUTES * 60);
-        }
+        $ipFails = $this->increment($ipKey, self::WINDOW_MINUTES * 60);
         if ($ipFails === 30) {
-            Redis::setex("throttle:penalty:ip:{$ip}", 15 * 60, '1');
+            $this->penalize("throttle:penalty:ip:{$ip}", 15 * 60);
         }
 
         $deviceKey = "throttle:device:15m:{$device}";
-        $deviceFails = (int) Redis::incr($deviceKey);
-        if ($deviceFails === 1) {
-            Redis::expire($deviceKey, self::WINDOW_MINUTES * 60);
-        }
+        $deviceFails = $this->increment($deviceKey, self::WINDOW_MINUTES * 60);
         if ($deviceFails === 15) {
-            Redis::setex("throttle:penalty:device:{$device}", 15 * 60, '1');
+            $this->penalize("throttle:penalty:device:{$device}", 15 * 60);
         }
 
         $subnet = $this->getSubnet($ip);
         if ($subnet) {
             $subnetKey = "throttle:network:15m:{$subnet}";
-            $subnetFails = (int) Redis::incr($subnetKey);
-            if ($subnetFails === 1) {
-                Redis::expire($subnetKey, self::WINDOW_MINUTES * 60);
-            }
+            $subnetFails = $this->increment($subnetKey, self::WINDOW_MINUTES * 60);
             if ($subnetFails === 100) {
-                Redis::setex("throttle:penalty:network:{$subnet}", 15 * 60, '1');
+                $this->penalize("throttle:penalty:network:{$subnet}", 15 * 60);
             }
         }
     }
 
     private function checkThresholds(string $email, string $ip, string $device): void
     {
-        if (Redis::exists("throttle:penalty:ip:{$ip}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:ip:{$ip}"), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:ip:{$ip}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
-        if (Redis::exists("throttle:penalty:device:{$device}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:device:{$device}"), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:device:{$device}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
-        if (Redis::exists("throttle:penalty:15m:{$email}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:15m:{$email}"), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:15m:{$email}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
-        if (Redis::exists("throttle:penalty:60m:{$email}")) {
-            $this->abortWithDelay((int) Redis::ttl("throttle:penalty:60m:{$email}"), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (($remaining = $this->penaltyRemaining("throttle:penalty:60m:{$email}")) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
 
-        if (Redis::exists('throttle:penalty:network:'.$this->getSubnet($ip))) {
-            $this->abortWithDelay((int) Redis::ttl('throttle:penalty:network:'.$this->getSubnet($ip)), 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
+        if (($remaining = $this->penaltyRemaining('throttle:penalty:network:'.$this->getSubnet($ip))) > 0) {
+            $this->abortWithDelay($remaining, 'El acceso está temporalmente restringido. Inténtalo más tarde o utiliza el proceso de recuperación.');
         }
+    }
+
+    private function cache(): Repository
+    {
+        return Cache::store((string) config('access.transient_cache_store'));
+    }
+
+    private function increment(string $key, int $ttlSeconds): int
+    {
+        $count = (int) $this->cache()->increment($key);
+        if ($count === 1) {
+            $this->cache()->put($key, 1, $ttlSeconds);
+        }
+
+        return $count;
+    }
+
+    private function penalize(string $key, int $seconds): void
+    {
+        $this->cache()->put($key, now()->getTimestamp() + $seconds, $seconds);
+    }
+
+    private function penaltyRemaining(string $key): int
+    {
+        $expiresAt = $this->cache()->get($key);
+
+        return is_numeric($expiresAt)
+            ? max(0, (int) $expiresAt - now()->getTimestamp())
+            : 0;
     }
 
     private function getSubnet(string $ip): ?string

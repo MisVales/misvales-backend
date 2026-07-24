@@ -6,8 +6,11 @@ use App\Models\User;
 use App\Modules\Access\Application\Accounts\TemporaryAuthorization;
 use App\Modules\Access\Application\Security\RiskCoordinator;
 use App\Modules\Access\Application\Security\SecurityAuditService;
+use App\Modules\Access\Domain\Authentication\TokenState;
+use App\Modules\Access\Domain\Sessions\SessionState;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
+use App\Modules\Access\Infrastructure\Persistence\Models\RefreshTokenFamily;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -52,12 +55,18 @@ final class SessionManager
             ]);
 
             $plainRefreshToken = Str::random(40);
-
-            $refreshToken = RefreshToken::create([
+            $family = RefreshTokenFamily::query()->create([
                 'auth_session_id' => $session->id,
-                'user_id' => $user->id,
+                'application' => $application,
+                'state' => SessionState::ACTIVE,
+                'absolute_expires_at' => $session->expires_at,
+            ]);
+            RefreshToken::query()->create([
+                'refresh_token_family_id' => $family->id,
+                'auth_session_id' => $session->id,
                 'token_hash' => hash('sha256', $plainRefreshToken),
-                'family_id' => Str::uuid(),
+                'state' => TokenState::ACTIVE,
+                'issued_at' => now(),
                 'expires_at' => $session->expires_at,
             ]);
 
@@ -95,7 +104,7 @@ final class SessionManager
         $tokenHash = hash('sha256', $plainRefreshToken);
 
         $refreshToken = RefreshToken::where('token_hash', $tokenHash)
-            ->with(['session', 'user'])
+            ->with(['session.user', 'family'])
             ->first();
 
         if (! $refreshToken) {
@@ -105,7 +114,11 @@ final class SessionManager
         $session = $refreshToken->session;
 
         // Validar reutilización
-        if ($refreshToken->used_at !== null || $refreshToken->revoked_at !== null || $session->state !== 'ACTIVE') {
+        if ($refreshToken->state !== TokenState::ACTIVE
+            || $refreshToken->used_at !== null
+            || $refreshToken->revoked_at !== null
+            || $refreshToken->family->state !== SessionState::ACTIVE
+            || $session->state !== SessionState::ACTIVE->value) {
             $this->revokeCompromisedFamily($refreshToken);
             $this->abortUnauthorized('Reutilización de token detectada. Sesión terminada por seguridad.');
         }
@@ -133,17 +146,26 @@ final class SessionManager
         // TODO: Validate context_version match if implemented
 
         return DB::transaction(function () use ($refreshToken, $session, $application, $ipAddress) {
-            // Marcar usado
-            $refreshToken->update(['used_at' => now()]);
+            $lockedToken = RefreshToken::query()->lockForUpdate()->findOrFail($refreshToken->id);
+            $family = RefreshTokenFamily::query()->lockForUpdate()->findOrFail($refreshToken->refresh_token_family_id);
+            if ($lockedToken->state !== TokenState::ACTIVE || $family->state !== SessionState::ACTIVE) {
+                $this->revokeCompromisedFamily($lockedToken->load(['session.user', 'family']));
+                $this->abortUnauthorized('Reutilización de token detectada. Sesión terminada por seguridad.');
+            }
 
-            // Crear nuevo refresh
             $newPlainRefreshToken = Str::random(40);
-            RefreshToken::create([
+            $lockedToken->forceFill([
+                'state' => TokenState::REPLACED,
+                'used_at' => now(),
+                'replaced_at' => now(),
+            ])->save();
+            RefreshToken::query()->create([
+                'refresh_token_family_id' => $family->id,
                 'auth_session_id' => $session->id,
-                'user_id' => $session->user_id,
                 'token_hash' => hash('sha256', $newPlainRefreshToken),
-                'family_id' => $refreshToken->family_id,
-                'expires_at' => $session->expires_at, // Vigencia absoluta original
+                'state' => TokenState::ACTIVE,
+                'issued_at' => now(),
+                'expires_at' => $family->absolute_expires_at,
             ]);
 
             // Invalidar access tokens anteriores de esta sesión
@@ -183,7 +205,7 @@ final class SessionManager
     {
         $this->risk->assessAndRespond(
             'REFRESH_TOKEN_REUSE_DETECTED',
-            $token->user,
+            $token->session->user,
             $token->session,
             [
                 'refresh_reuse' => true,
@@ -199,7 +221,13 @@ final class SessionManager
             'state' => 'REVOKED',
             'revoked_at' => now(),
         ]);
-        $session->refreshTokens()->update(['revoked_at' => now()]);
+        $session->refreshTokens()
+            ->where('state', TokenState::ACTIVE->value)
+            ->update(['state' => TokenState::REVOKED->value, 'revoked_at' => now()]);
+        RefreshTokenFamily::query()
+            ->where('auth_session_id', $session->id)
+            ->where('state', SessionState::ACTIVE->value)
+            ->update(['state' => SessionState::REVOKED->value, 'revoked_at' => now()]);
         $session->accessTokens()->delete();
         $this->audit->record('SESSION_REVOKED', 'SUCCESS', $session->user, $session->user, [
             'session_id' => $session->id,

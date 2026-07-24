@@ -5,7 +5,7 @@ namespace Tests\Unit;
 use App\Modules\Access\Application\MFA\PasskeyAttestationVerifier;
 use App\Modules\Access\Application\MFA\RecoveryCodeGenerator;
 use App\Modules\Access\Application\MFA\TotpVerifier;
-use Illuminate\Support\Facades\Redis;
+use Illuminate\Support\Facades\Cache;
 use OTPHP\TOTP;
 use Tests\TestCase;
 
@@ -30,14 +30,7 @@ final class MfaServicesTest extends TestCase
         $totp = TOTP::create(secret: $secret, period: 30, digest: 'sha1', digits: 6);
         $code = $totp->at($timestamp);
 
-        Redis::shouldReceive('command')
-            ->once()
-            ->with('set', ['totp:used:credential-hash:60000000:'.$code, '1', 'EX', 90, 'NX'])
-            ->andReturn('OK');
-        Redis::shouldReceive('command')
-            ->once()
-            ->with('set', ['totp:used:credential-hash:60000000:'.$code, '1', 'EX', 90, 'NX'])
-            ->andReturn(null);
+        Cache::store((string) config('access.replay_cache_store'))->clear();
 
         self::assertTrue($verifier->verifyAt($secret, $code, $timestamp, 'credential-hash'));
         self::assertFalse($verifier->verifyAt($secret, $code, $timestamp, 'credential-hash'));

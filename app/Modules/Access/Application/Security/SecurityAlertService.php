@@ -16,7 +16,7 @@ final readonly class SecurityAlertService
     public function open(
         SecurityEvent $event,
         ?User $affectedUser,
-        ?string $branchId,
+        ?int $branchId,
         string $severity,
         string $type,
         string $summary,
@@ -38,16 +38,16 @@ final readonly class SecurityAlertService
     {
         $query = SecurityAlert::query()->latest();
 
-        return match ((string) $actor->role_code) {
-            'GENERAL_MANAGER', 'ADMIN' => $query,
-            'BRANCH_MANAGER', 'SUCURSAL_MANAGER' => $query->where('branch_id', $actor->branch_id),
+        return match ($actor->role_code) {
+            'GENERAL_MANAGER', 'ADMINISTRATOR' => $query,
+            'SUCURSAL_MANAGER' => $query->where('branch_id', $actor->branch_id),
             default => $query->where('affected_user_id', $actor->id),
         };
     }
 
     public function acknowledge(User $actor, SecurityAlert $alert): SecurityAlert
     {
-        if ((string) $actor->role_code !== 'GENERAL_MANAGER') {
+        if ($actor->role_code !== 'GENERAL_MANAGER') {
             throw new AccessRuleViolation(
                 'El rol no puede ejecutar acciones sobre alertas.',
                 403,
@@ -70,7 +70,7 @@ final readonly class SecurityAlertService
 
     public function requestAction(User $actor, SecurityAlert $alert, string $reason): SecurityAlert
     {
-        if (! in_array((string) $actor->role_code, ['BRANCH_MANAGER', 'SUCURSAL_MANAGER'], true)
+        if ($actor->role_code !== 'SUCURSAL_MANAGER'
             || $actor->branch_id === null
             || $actor->branch_id !== $alert->branch_id) {
             throw new AccessRuleViolation(

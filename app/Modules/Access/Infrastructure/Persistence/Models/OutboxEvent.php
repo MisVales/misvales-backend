@@ -2,7 +2,9 @@
 
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
+use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 
 /**
@@ -10,8 +12,11 @@ use Illuminate\Database\Eloquent\Model;
  * @property CarbonImmutable|null $last_attempt_at
  * @property CarbonImmutable|null $processed_at
  */
+#[Hidden(['payload', 'last_error'])]
 final class OutboxEvent extends Model
 {
+    use HasPublicUuid;
+
     protected $guarded = [];
 
     protected function casts(): array

@@ -2,39 +2,33 @@
 
 namespace App\Modules\Access\Infrastructure\Persistence\Models;
 
-use App\Models\User;
+use App\Modules\Access\Domain\Authentication\TokenState;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Attributes\Hidden;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 
 /**
- * @property int $id
- * @property int $auth_session_id
- * @property int $user_id
- * @property string $token_hash
- * @property string $family_id
- * @property Carbon $expires_at
- * @property Carbon|null $used_at
- * @property Carbon|null $revoked_at
- * @property-read AuthSession $session
- * @property-read User $user
+ * @property TokenState $state
+ * @property CarbonImmutable $expires_at
+ * @property CarbonImmutable|null $used_at
+ * @property CarbonImmutable|null $revoked_at
  */
-class RefreshToken extends Model
+#[Hidden(['token_hash'])]
+final class RefreshToken extends Model
 {
+    /** @var list<string> */
     protected $fillable = [
+        'refresh_token_family_id',
         'auth_session_id',
-        'user_id',
         'token_hash',
-        'family_id',
+        'state',
+        'issued_at',
         'expires_at',
         'used_at',
+        'replaced_at',
         'revoked_at',
-    ];
-
-    protected $casts = [
-        'expires_at' => 'datetime',
-        'used_at' => 'datetime',
-        'revoked_at' => 'datetime',
+        'replaced_by_id',
     ];
 
     /** @return BelongsTo<AuthSession, $this> */
@@ -43,9 +37,21 @@ class RefreshToken extends Model
         return $this->belongsTo(AuthSession::class, 'auth_session_id');
     }
 
-    /** @return BelongsTo<User, $this> */
-    public function user(): BelongsTo
+    /** @return BelongsTo<RefreshTokenFamily, $this> */
+    public function family(): BelongsTo
     {
-        return $this->belongsTo(User::class);
+        return $this->belongsTo(RefreshTokenFamily::class, 'refresh_token_family_id');
+    }
+
+    protected function casts(): array
+    {
+        return [
+            'state' => TokenState::class,
+            'issued_at' => 'immutable_datetime',
+            'expires_at' => 'immutable_datetime',
+            'used_at' => 'immutable_datetime',
+            'replaced_at' => 'immutable_datetime',
+            'revoked_at' => 'immutable_datetime',
+        ];
     }
 }

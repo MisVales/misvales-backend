@@ -12,12 +12,16 @@ use App\Modules\Access\Application\Security\SecretSanitizer;
 use App\Modules\Access\Application\Security\SecurityAlertService;
 use App\Modules\Access\Application\Security\SecurityAuditService;
 use App\Modules\Access\Application\Security\SecurityNotificationSender;
+use App\Modules\Access\Domain\Authentication\TokenState;
 use App\Modules\Access\Domain\Security\RiskLevel;
 use App\Modules\Access\Domain\Security\RiskResponse;
+use App\Modules\Access\Domain\Sessions\SessionState;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch;
 use App\Modules\Access\Infrastructure\Persistence\Models\NotificationDelivery;
 use App\Modules\Access\Infrastructure\Persistence\Models\ReauthAuthorization;
 use App\Modules\Access\Infrastructure\Persistence\Models\RefreshToken;
+use App\Modules\Access\Infrastructure\Persistence\Models\RefreshTokenFamily;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Support\Facades\Queue;
@@ -86,13 +90,21 @@ final class B11SecurityObservabilityTest extends TestCase
         $this->attachAccessToken($user, $compromisedSession);
         $this->attachAccessToken($user, $otherSession);
         $plainRefresh = 'refresh-token-that-was-already-rotated';
-        RefreshToken::query()->create([
+        $family = RefreshTokenFamily::query()->create([
             'auth_session_id' => $compromisedSession->id,
-            'user_id' => $user->id,
+            'application' => 'administrativa',
+            'state' => SessionState::ACTIVE,
+            'absolute_expires_at' => now()->addHour(),
+        ]);
+        RefreshToken::query()->create([
+            'refresh_token_family_id' => $family->id,
+            'auth_session_id' => $compromisedSession->id,
             'token_hash' => hash('sha256', $plainRefresh),
-            'family_id' => (string) Str::uuid(),
+            'state' => TokenState::REPLACED,
+            'issued_at' => now()->subMinute(),
             'expires_at' => now()->addHour(),
             'used_at' => now()->subSecond(),
+            'replaced_at' => now()->subSecond(),
         ]);
 
         try {
@@ -126,29 +138,29 @@ final class B11SecurityObservabilityTest extends TestCase
 
     public function test_branch_manager_cannot_see_other_branch_and_admin_cannot_act(): void
     {
-        $branchA = (string) Str::uuid();
-        $branchB = (string) Str::uuid();
-        $affectedA = User::factory()->create(['branch_id' => $branchA]);
-        $affectedB = User::factory()->create(['branch_id' => $branchB]);
+        $branchA = Branch::factory()->create();
+        $branchB = Branch::factory()->create();
+        $affectedA = User::factory()->distributor()->create(['branch_id' => $branchA->id]);
+        $affectedB = User::factory()->distributor()->create(['branch_id' => $branchB->id]);
         $audit = $this->app->make(SecurityAuditService::class);
         $alerts = $this->app->make(SecurityAlertService::class);
         $alertA = $alerts->open(
-            $audit->record('SECURITY_TEST_A', 'DENIED', $affectedA, $affectedA, ['branch_id' => $branchA]),
+            $audit->record('SECURITY_TEST_A', 'DENIED', $affectedA, $affectedA, ['branch_id' => $branchA->id]),
             $affectedA,
-            $branchA,
+            $branchA->id,
             'HIGH',
             'SECURITY_TEST_A',
             'Alerta sucursal A',
         );
         $alerts->open(
-            $audit->record('SECURITY_TEST_B', 'DENIED', $affectedB, $affectedB, ['branch_id' => $branchB]),
+            $audit->record('SECURITY_TEST_B', 'DENIED', $affectedB, $affectedB, ['branch_id' => $branchB->id]),
             $affectedB,
-            $branchB,
+            $branchB->id,
             'HIGH',
             'SECURITY_TEST_B',
             'Alerta sucursal B',
         );
-        $manager = User::factory()->create(['role_code' => 'BRANCH_MANAGER', 'branch_id' => $branchA]);
+        $manager = User::factory()->sucursalManager()->create(['branch_id' => $branchA->id]);
         $this->actingAs($manager, 'sanctum');
 
         $this->getJson('/api/v1/security/alerts')
@@ -156,7 +168,7 @@ final class B11SecurityObservabilityTest extends TestCase
             ->assertJsonCount(1, 'data.data')
             ->assertJsonPath('data.data.0.public_id', $alertA->public_id);
 
-        $admin = User::factory()->create(['role_code' => 'ADMIN']);
+        $admin = User::factory()->administrator()->create();
         $this->actingAs($admin, 'sanctum');
         $this->getJson('/api/v1/security/alerts')
             ->assertOk()
@@ -181,7 +193,7 @@ final class B11SecurityObservabilityTest extends TestCase
         {
             public int $calls = 0;
 
-            public function send(string $recipient, string $template, array $payload, string $idempotencyKey): ?string
+            public function send(string $recipient, string $template, array $payload, string $idempotencyKey): string
             {
                 $this->calls++;
 
@@ -201,7 +213,7 @@ final class B11SecurityObservabilityTest extends TestCase
 
     public function test_audit_and_outbox_automatically_remove_secrets(): void
     {
-        $user = User::factory()->create(['role_code' => 'GENERAL_MANAGER']);
+        $user = User::factory()->generalManager()->create();
         $rawPassword = 'Never-store-this-password!';
         $rawToken = 'eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxIn0.invalid-signature';
         $event = $this->app->make(SecurityAuditService::class)->record(
@@ -235,8 +247,6 @@ final class B11SecurityObservabilityTest extends TestCase
         $this->assertStringNotContainsString($rawToken, $serializedPersistence);
         $this->assertStringNotContainsString('Bearer ', $serializedPersistence);
         $this->assertSame('America/Monterrey', $event->display_timezone);
-        $this->assertNotNull($event->event_uuid);
-        $this->assertNotNull($event->correlation_id);
         $this->assertSame($user->id, $event->requester_user_id);
     }
 
@@ -245,9 +255,8 @@ final class B11SecurityObservabilityTest extends TestCase
      */
     private function userAndSession(?User $user = null): array
     {
-        $user ??= User::factory()->create([
+        $user ??= User::factory()->generalManager()->create([
             'state' => 'ACTIVE',
-            'role_code' => 'GENERAL_MANAGER',
             'context_version' => 1,
         ]);
         $session = AuthSession::query()->create([

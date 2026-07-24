@@ -68,7 +68,7 @@ final readonly class LoginService
             throw new AccessRuleViolation($this->genericFailureResponse(), 401);
         }
 
-        $session = $this->mfaSessions->createSession($user, 'unknown', 'unknown', $allowedFactors);
+        $session = $this->mfaSessions->createSession($user, 'administrativa', 'unknown', 'unknown', $allowedFactors);
         $this->recorder->audit('AUTHENTICATION_PASSWORD_ACCEPTED', 'MFA_REQUIRED', $user, $user);
 
         return [

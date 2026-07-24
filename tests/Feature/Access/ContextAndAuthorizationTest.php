@@ -4,20 +4,24 @@ namespace Tests\Feature\Access;
 
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\AuthSession;
+use Database\Seeders\AccessFoundationSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 class ContextAndAuthorizationTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_distributor_gets_mobile_experience_and_branch_scope()
+    protected function setUp(): void
     {
-        $user = User::factory()->create([
-            'role_code' => 'DISTRIBUTOR',
-            'branch_id' => (string) \Illuminate\Support\Str::uuid(),
-            'context_version' => 1
+        parent::setUp();
+        $this->seed(AccessFoundationSeeder::class);
+    }
+
+    public function test_distributor_gets_mobile_experience_and_branch_scope(): void
+    {
+        $user = User::factory()->distributor()->create([
+            'context_version' => 1,
         ]);
 
         // Since Sanctum::actingAs doesn't simulate the token in DB, we'll just mock it or assume it passes.
@@ -37,10 +41,10 @@ class ContextAndAuthorizationTest extends TestCase
         $token = $user->createToken('distribuidora');
         $token->accessToken->forceFill([
             'auth_session_id' => $session->id,
-            'context_version' => 1
+            'context_version' => 1,
         ])->save();
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token->plainTextToken)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
             ->getJson('/api/v1/auth/context');
 
         $response->assertStatus(200);
@@ -48,50 +52,48 @@ class ContextAndAuthorizationTest extends TestCase
         $response->assertJsonPath('data.experience.code', 'DISTRIBUTOR_MOBILE');
         $response->assertJsonPath('data.experience.layout', 'mobile');
         $response->assertJsonPath('data.scope.type', 'BRANCH');
-        $response->assertJsonPath('data.scope.branchId', $user->branch_id);
+        $response->assertJsonPath('data.scope.branchId', $user->branch_public_id);
     }
 
-    public function test_admin_gets_admin_experience_and_global_scope()
+    public function test_admin_gets_admin_experience_and_global_scope(): void
     {
-        $user = User::factory()->create([
-            'role_code' => 'ADMIN',
-            'branch_id' => null,
-            'context_version' => 1
+        $user = User::factory()->administrator()->create([
+            'context_version' => 1,
         ]);
 
         $token = $user->createToken('administrativa');
         $token->accessToken->forceFill([
-            'context_version' => 1
+            'context_version' => 1,
         ])->save();
 
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token->plainTextToken)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
             ->getJson('/api/v1/auth/context');
 
         $response->assertStatus(200);
-        $response->assertJsonPath('data.role.code', 'ADMIN');
+        $response->assertJsonPath('data.role.code', 'ADMINISTRATOR');
         $response->assertJsonPath('data.experience.code', 'ADMIN');
         $response->assertJsonPath('data.scope.type', 'GLOBAL');
-        $response->assertJsonPath('data.permissions', ['global.view', 'audit.view']);
+        $this->assertContains('security.alerts.global.read', $response->json('data.permissions'));
+        $this->assertContains('security.audit.global.read', $response->json('data.permissions'));
     }
 
-    public function test_context_version_mismatch_revokes_session_and_returns_401()
+    public function test_context_version_mismatch_revokes_session_and_returns_401(): void
     {
         // 1. Crear usuario con version 1
-        $user = User::factory()->create([
-            'role_code' => 'BRANCH_MANAGER',
-            'context_version' => 1
+        $user = User::factory()->sucursalManager()->create([
+            'context_version' => 1,
         ]);
 
         $token = $user->createToken('administrativa');
         $token->accessToken->forceFill([
-            'context_version' => 1 // The token was emitted when context was 1
+            'context_version' => 1, // The token was emitted when context was 1
         ])->save();
 
         // 2. Change the user's context_version in the DB (simulating a role/permission change)
-        $user->update(['context_version' => 2]);
+        $user->forceFill(['context_version' => 2])->save();
 
         // 3. Request should be rejected by VerifyContextVersionMiddleware
-        $response = $this->withHeader('Authorization', 'Bearer ' . $token->plainTextToken)
+        $response = $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken)
             ->getJson('/api/v1/auth/context');
 
         // Note: I have not yet registered the middleware in the global or route-specific stack.

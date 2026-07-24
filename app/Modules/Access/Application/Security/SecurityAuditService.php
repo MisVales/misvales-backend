@@ -28,8 +28,11 @@ final readonly class SecurityAuditService
         $accessToken = $actor?->currentAccessToken();
         $sessionId = $accessToken instanceof PersonalAccessToken ? $accessToken->auth_session_id : null;
 
+        $eventUuid = (string) Str::uuid();
+
         return SecurityEvent::query()->create([
-            'event_uuid' => (string) Str::uuid(),
+            'public_id' => $eventUuid,
+            'event_uuid' => $eventUuid,
             'event_type' => $eventType,
             'actor_user_id' => $actor?->id,
             'target_user_id' => $target?->id,
@@ -41,6 +44,8 @@ final readonly class SecurityAuditService
             'branch_id' => $context['branch_id'] ?? $actor?->branch_id,
             'application' => $context['application'] ?? $request?->header('X-Application-Id'),
             'rule' => $context['rule'] ?? $eventType,
+            'rule_code' => $context['rule_code'] ?? $eventType,
+            'scope' => ($context['branch_id'] ?? $actor?->branch_id) === null ? 'GLOBAL' : 'BRANCH',
             'result' => $result,
             'occurred_at' => $occurredAt,
             'display_timezone' => (string) config('access.display_timezone', 'America/Monterrey'),
