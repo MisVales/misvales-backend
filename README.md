@@ -51,14 +51,14 @@ Los Workers ejecutan código de este mismo repositorio. Redis y los Workers no s
 
 ## Autenticación y sesiones
 
-La autenticación definida para MisVales utiliza Laravel Sanctum en modo stateful:
+La autenticación definida para MisVales utiliza tokens opacos vinculados a sesiones persistidas:
 
-- Guard `web`.
-- Cookie de sesión `HttpOnly`.
-- Protección CSRF.
-- Middleware `auth:sanctum`.
-- Sesiones administradas con Redis.
-- Sin JWT almacenados en `localStorage` o `sessionStorage`.
+- Access token opaco de corta duración, almacenado solamente mediante hash.
+- Refresh token opaco con rotación, familia y expiración absoluta, entregado exclusivamente en cookie segura `HttpOnly`.
+- PostgreSQL como fuente de verdad para cuentas, sesiones y tokens.
+- Redis para desafíos, bloqueos, límites y revocación inmediata distribuida.
+- Protección CSRF para las operaciones que dependan de cookie.
+- Sin JWT ni tokens persistidos en `localStorage` o `sessionStorage`.
 
 La autorización siempre debe verificarse en el backend. Las validaciones del frontend no sustituyen las Policies, middleware ni controles por rol y sucursal.
 
@@ -123,7 +123,7 @@ Azael administra la infraestructura y los despliegues directamente en DigitalOce
 
 Requisitos:
 
-- PHP.
+- PHP 8.4.1 o posterior; el objetivo de producción es PHP 8.5.
 - Composer.
 - PostgreSQL.
 - Redis.
@@ -136,6 +136,15 @@ cp .env.example .env
 php artisan key:generate
 php artisan migrate
 php artisan serve
+```
+
+Comandos de calidad:
+
+```bash
+composer lint
+composer analyse
+composer test
+composer check
 ```
 
 Para procesar las colas durante el desarrollo:
