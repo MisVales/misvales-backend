@@ -115,6 +115,11 @@ class AccessFoundationTest extends TestCase
             'onboarding.applications.evaluate', 'onboarding.applications.authorize_branch',
             'onboarding.applications.authorize_global', 'onboarding.evidence.view',
             'onboarding.history.view',
+            'clients.view.global', 'clients.view.branch', 'clients.view.assigned',
+            'clients.create.own', 'clients.view_sensitive.authorized',
+            'clients.view_documents.authorized', 'clients.apply_authorized_change',
+            'clients.portfolio.view.own', 'clients.portfolio.write.own',
+            'clients.assignment.apply_internal',
         ];
 
         $this->assertEqualsCanonicalizing(
