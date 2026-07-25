@@ -107,6 +107,14 @@ class AccessFoundationTest extends TestCase
             'accounts.branch.request', 'accounts.global.approve', 'accounts.global.disable',
             'accounts.branch.disable_request', 'security.alerts.global.read',
             'security.alerts.branch.read', 'security.audit.global.read',
+            'onboarding.applications.create', 'onboarding.applications.update_capture',
+            'onboarding.applications.submit', 'onboarding.applications.view_assigned',
+            'onboarding.applications.view_branch', 'onboarding.applications.view_global',
+            'onboarding.applications.review', 'onboarding.verifications.assign',
+            'onboarding.verifications.perform', 'onboarding.applications.correct',
+            'onboarding.applications.evaluate', 'onboarding.applications.authorize_branch',
+            'onboarding.applications.authorize_global', 'onboarding.evidence.view',
+            'onboarding.history.view',
         ];
 
         $this->assertEqualsCanonicalizing(
