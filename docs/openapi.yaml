@@ -753,6 +753,174 @@ paths:
           $ref: '#/components/responses/OnboardingError'
         default:
           $ref: '#/components/responses/OnboardingError'
+  /api/v1/clients:
+    get:
+      operationId: listClients
+      summary: Lista clientes dentro del alcance efectivo
+      x-permission: clients.view.global, clients.view.branch or clients.view.assigned
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - { name: name, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: curp, in: query, description: Búsqueda exacta protegida, schema: { type: string, maxLength: 30 } }
+        - { name: distributor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: registered_from, in: query, schema: { type: string, format: date } }
+        - { name: registered_to, in: query, schema: { type: string, format: date } }
+        - { name: portfolio_tracking_enabled, in: query, schema: { type: boolean } }
+        - { name: sort, in: query, schema: { type: string, enum: [name, registered_at] } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc] } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200':
+          description: Página de clientes con PII enmascarada.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientListResponse' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+    post:
+      operationId: registerClient
+      summary: Registra un cliente para la distribuidora autenticada
+      x-permission: clients.create.own
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/RegisterClientRequest' }
+      responses:
+        '201':
+          description: Cliente creado atómicamente.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRegistrationResponse' }
+        '200':
+          description: Repetición idempotente exacta.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientRegistrationResponse' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+  /api/v1/clients/{client}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/XRequestId'
+    get:
+      operationId: getClient
+      summary: Consulta un cliente visible para la cuenta
+      responses:
+        '200':
+          description: Recurso separado según la audiencia.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientDetailResponse' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+  /api/v1/clients/{client}/bank-accounts:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/XRequestId'
+    get:
+      operationId: listClientBankAccounts
+      summary: Lista versiones bancarias siempre enmascaradas
+      responses:
+        '200':
+          description: Historial bancario enmascarado.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ClientBankAccountMasked' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+    post:
+      operationId: replaceClientBankAccountWithAuthorization
+      summary: Crea una versión bancaria mediante autorización M09
+      x-permission: clients.apply_authorized_change
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/AuthorizedBankAccountRequest' }
+      responses:
+        '200':
+          description: Nueva versión bancaria enmascarada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ClientBankAccountMasked' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+  /api/v1/clients/{client}/portfolio-entries:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - $ref: '#/components/parameters/XRequestId'
+    get:
+      operationId: listClientPortfolioEntries
+      summary: Lista cartera informativa propia
+      x-permission: clients.portfolio.view.own
+      responses:
+        '200':
+          description: Página de movimientos informativos.
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ClientPortfolioListResponse' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+    post:
+      operationId: recordClientPortfolioEntry
+      summary: Registra pago, abono, estado o nota informativa
+      x-permission: clients.portfolio.write.own
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientPortfolioEntryRequest' }
+      responses:
+        '201':
+          description: Entrada informativa registrada.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ClientPortfolioEntry' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
+  /api/v1/clients/{client}/portfolio-entries/{entry}:
+    parameters:
+      - $ref: '#/components/parameters/ClientId'
+      - { name: entry, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/XRequestId'
+    patch:
+      operationId: correctClientPortfolioEntry
+      summary: Corrige únicamente estado y nota con versión esperada
+      x-permission: clients.portfolio.write.own
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ClientPortfolioEntryPatch' }
+      responses:
+        '200':
+          description: Entrada corregida con historial.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ClientPortfolioEntry' }
+        '4XX': { $ref: '#/components/responses/ClientError' }
+        default: { $ref: '#/components/responses/ClientError' }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -779,6 +947,11 @@ components:
       schema: { type: string, minLength: 8, maxLength: 160 }
     ApplicationId:
       name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    ClientId:
+      name: client
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -811,6 +984,12 @@ components:
           schema: { $ref: '#/components/schemas/DomainError' }
     OnboardingError:
       description: Error de validación, alcance, estado, versión o integración.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    ClientError:
+      description: Error uniforme de autenticación, alcance, validación, duplicidad, versión o dependencia.
       content:
         application/json:
           schema:
@@ -1075,6 +1254,16 @@ components:
         - onboarding.applications.authorize_global
         - onboarding.evidence.view
         - onboarding.history.view
+        - clients.view.global
+        - clients.view.branch
+        - clients.view.assigned
+        - clients.create.own
+        - clients.view_sensitive.authorized
+        - clients.view_documents.authorized
+        - clients.apply_authorized_change
+        - clients.portfolio.view.own
+        - clients.portfolio.write.own
+        - clients.assignment.apply_internal
     AccountState:
       type: string
       enum:
@@ -1398,3 +1587,164 @@ components:
             fields: { type: object }
             details: { type: object }
             request_id: { type: string, format: uuid }
+    ClientAddressInput:
+      type: object
+      additionalProperties: false
+      required: [street, exterior_number, neighborhood, postal_code, municipality, city, state]
+      properties:
+        street: { type: string, maxLength: 200 }
+        exterior_number: { type: string, maxLength: 40 }
+        interior_number: { type: [string, 'null'], maxLength: 40 }
+        neighborhood: { type: string, maxLength: 160 }
+        postal_code: { type: string, maxLength: 20 }
+        municipality: { type: string, maxLength: 160 }
+        city: { type: string, maxLength: 160 }
+        state: { type: string, maxLength: 120 }
+    RegisterClientRequest:
+      type: object
+      additionalProperties: false
+      required:
+        - given_names
+        - surnames
+        - curp
+        - address
+        - official_identification_media_id
+        - address_proof_media_id
+        - bank_account
+      properties:
+        given_names: { type: string, maxLength: 160 }
+        surnames: { type: string, maxLength: 200 }
+        curp: { type: string, maxLength: 30, writeOnly: true }
+        rfc: { type: [string, 'null'], maxLength: 30, writeOnly: true }
+        birth_date: { type: [string, 'null'], format: date }
+        birth_place: { type: [string, 'null'], maxLength: 200 }
+        birth_state: { type: [string, 'null'], maxLength: 120 }
+        birth_city: { type: [string, 'null'], maxLength: 160 }
+        address: { $ref: '#/components/schemas/ClientAddressInput' }
+        official_identification_media_id: { type: string, format: uuid }
+        address_proof_media_id: { type: string, format: uuid }
+        bank_account: { type: string, maxLength: 160, writeOnly: true }
+    ClientListItem:
+      type: object
+      required: [id, display_name, curp_masked, portfolio_tracking_enabled, registered_at]
+      properties:
+        id: { type: string, format: uuid }
+        display_name: { type: string }
+        curp_masked: { type: string }
+        distributor_id: { type: [string, 'null'], format: uuid }
+        branch:
+          type: [object, 'null']
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        portfolio_tracking_enabled: { type: boolean }
+        registered_at: { type: string, format: date-time }
+    ClientListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ClientListItem' }
+        links: { type: object }
+        meta: { type: object }
+    ClientRegistrationResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [id, display_name, curp_masked, distributor, branch, registered_at]
+          properties:
+            id: { type: string, format: uuid }
+            display_name: { type: string }
+            curp_masked: { type: string }
+            distributor:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+                number: { type: string }
+            branch:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+                name: { type: string }
+            registered_at: { type: string, format: date-time }
+            existing_for_future_vouchers: { type: boolean, const: true }
+            replayed: { type: boolean }
+    ClientDetailResponse:
+      type: object
+      description: La forma exacta depende de la audiencia; nunca contiene cifrado, HMAC ni cuenta completa.
+      properties:
+        data:
+          allOf:
+            - $ref: '#/components/schemas/ClientListItem'
+            - type: object
+              properties:
+                address: { type: [object, 'null'] }
+                bank_account: { type: [string, 'null'] }
+                documents:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      id: { type: string, format: uuid }
+                      type: { type: string, enum: [OFFICIAL_IDENTIFICATION, ADDRESS_PROOF] }
+                      private_reference: { type: string, format: uuid }
+                lock_version: { type: integer, minimum: 1 }
+    ClientBankAccountMasked:
+      type: object
+      required: [id, account_masked, effective_from, is_current]
+      properties:
+        id: { type: string, format: uuid }
+        account_masked: { type: string }
+        effective_from: { type: string, format: date-time }
+        effective_to: { type: [string, 'null'], format: date-time }
+        is_current: { type: boolean }
+    AuthorizedBankAccountRequest:
+      type: object
+      additionalProperties: false
+      required: [authorization_id, operation_id, bank_account, reason, lock_version]
+      properties:
+        authorization_id: { type: string, format: uuid }
+        operation_id: { type: string, format: uuid }
+        bank_account: { type: string, maxLength: 160, writeOnly: true }
+        reason: { type: string, maxLength: 1000 }
+        lock_version: { type: integer, minimum: 1 }
+    ClientPortfolioEntry:
+      type: object
+      required: [id, entry_type, informational_status, occurred_on, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        entry_type: { type: string, enum: [VOUCHER, PAYMENT, INSTALLMENT, STATUS_UPDATE, NOTE] }
+        amount: { type: [string, 'null'], pattern: '^\d+\.\d{2}$' }
+        informational_status: { type: string, enum: [PENDING, PARTIAL, PAID] }
+        occurred_on: { type: string, format: date }
+        note: { type: [string, 'null'], maxLength: 1000 }
+        lock_version: { type: integer, minimum: 1 }
+        created_at: { type: string, format: date-time }
+    ClientPortfolioListResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ClientPortfolioEntry' }
+        links: { type: object }
+        meta: { type: object }
+    ClientPortfolioEntryRequest:
+      type: object
+      additionalProperties: false
+      required: [entry_type, informational_status, occurred_on]
+      properties:
+        entry_type: { type: string, enum: [PAYMENT, INSTALLMENT, STATUS_UPDATE, NOTE] }
+        amount: { type: [string, 'null'], pattern: '^\d{1,15}(\.\d{1,4})?$' }
+        informational_status: { type: string, enum: [PENDING, PARTIAL, PAID] }
+        occurred_on: { type: string, format: date }
+        note: { type: [string, 'null'], maxLength: 1000 }
+    ClientPortfolioEntryPatch:
+      type: object
+      additionalProperties: false
+      required: [lock_version]
+      minProperties: 2
+      properties:
+        informational_status: { type: string, enum: [PENDING, PARTIAL, PAID] }
+        note: { type: [string, 'null'], maxLength: 1000 }
+        lock_version: { type: integer, minimum: 1 }
