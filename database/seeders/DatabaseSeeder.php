@@ -16,5 +16,6 @@ class DatabaseSeeder extends Seeder
     {
         $this->call(AccessFoundationSeeder::class);
         $this->call(InitialGeneralManagerSeeder::class);
+        $this->call(ConfigurationFoundationSeeder::class);
     }
 }

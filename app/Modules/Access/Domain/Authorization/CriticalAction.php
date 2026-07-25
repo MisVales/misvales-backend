@@ -31,4 +31,24 @@ enum CriticalAction: string
     case DELIVERY_CONFIRM = 'financial.delivery.confirm';
     case CREDIT_INCREASE_DECISION = 'credit.increase.decision';
     case OPERATIONAL_AUTHORIZE = 'operational.authorize';
+
+    // M03 — Configuraciones y catálogos
+    case CONFIGURATION_VERSION_CREATE = 'configuration.version.create';
+    case CONFIGURATION_VERSION_EDIT = 'configuration.version.edit';
+    case CONFIGURATION_VERSION_PUBLISH = 'configuration.version.publish';
+    case CONFIGURATION_VERSION_DEACTIVATE = 'configuration.version.deactivate';
+    case CATEGORY_CREATE = 'configuration.category.create';
+    case CATEGORY_VERSION_CREATE = 'configuration.category.version.create';
+    case CATEGORY_VERSION_EDIT = 'configuration.category.version.edit';
+    case CATEGORY_VERSION_PUBLISH = 'configuration.category.version.publish';
+    case CATEGORY_DEACTIVATE = 'configuration.category.deactivate';
+    case PRODUCT_CREATE = 'configuration.product.create';
+    case PRODUCT_VERSION_CREATE = 'configuration.product.version.create';
+    case PRODUCT_VERSION_EDIT = 'configuration.product.version.edit';
+    case PRODUCT_VERSION_PUBLISH = 'configuration.product.version.publish';
+    case PRODUCT_DEACTIVATE = 'configuration.product.deactivate';
+    case REDEMPTION_PERIOD_CREATE = 'configuration.redemption_period.create';
+    case REDEMPTION_PERIOD_EDIT = 'configuration.redemption_period.edit';
+    case REDEMPTION_PERIOD_PUBLISH = 'configuration.redemption_period.publish';
+    case REDEMPTION_PERIOD_DEACTIVATE = 'configuration.redemption_period.deactivate';
 }
