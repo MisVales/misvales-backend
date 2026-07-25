@@ -7,6 +7,17 @@ use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
+/**
+ * @property int $id
+ * @property string $public_id
+ * @property int $user_id
+ * @property string $external_request_id
+ * @property string $external_distributor_id
+ * @property int $branch_id
+ * @property int $coordinator_user_id
+ * @property int $authorized_by
+ * @property string $initial_credit_line
+ */
 class DistributorAccessLink extends Model
 {
     use HasPublicUuid;

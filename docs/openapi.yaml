@@ -199,6 +199,169 @@ paths:
         '200': { description: Contraseña cambiada; sesiones y tokens revocados }
         '403': { description: Autorización temporal inválida }
         '422': { description: Contraseña fuera de política o reutilizada }
+  /api/v1/distributors/{distributor}/credit-line:
+    get:
+      operationId: getDistributorCreditLine
+      summary: Consulta saldos y restricción vigente de la línea
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DistributorId' }
+      responses:
+        '200':
+          description: Línea visible dentro del alcance del actor
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties: { data: { $ref: '#/components/schemas/CreditLine' } }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+        '404': { $ref: '#/components/responses/CreditLineNotFound' }
+  /api/v1/distributors/{distributor}/credit-line/movements:
+    get:
+      operationId: listDistributorCreditMovements
+      summary: Consulta el libro inmutable de movimientos
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DistributorId' }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/CreditMovementType' } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: source_type, in: query, schema: { type: string, maxLength: 80 } }
+        - { name: source_id, in: query, schema: { type: string, maxLength: 128 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Página de movimientos visibles
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/CreditMovement' } }
+                  meta: { type: object }
+                  links: { type: object }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+        '404': { $ref: '#/components/responses/CreditLineNotFound' }
+  /api/v1/distributors/{distributor}/credit-increase-requests:
+    post:
+      operationId: createCreditIncreaseRequest
+      summary: Registra de forma idempotente una solicitud propia
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/DistributorId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateCreditIncreaseInput' }
+            examples:
+              normal:
+                value:
+                  requested_amount: '10000.00'
+                  reason: Incremento solicitado para continuar operaciones
+              insufficientCredit:
+                value:
+                  requested_amount: '5000.00'
+                  reason: El producto seleccionado supera el saldo disponible
+                  origin: { type: INSUFFICIENT_CREDIT, product_amount: '15000.00' }
+      responses:
+        '201':
+          description: Solicitud registrada o resultado idempotente existente
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/CreditIncreaseRequest' } } }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+        '404': { $ref: '#/components/responses/CreditLineNotFound' }
+        '422': { description: Importe, motivo u origen inválido }
+  /api/v1/credit-increase-requests:
+    get:
+      operationId: listCreditIncreaseRequests
+      summary: Lista solicitudes limitadas siempre por el alcance del actor
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/CreditIncreaseStatus' } }
+        - { name: branch_id, in: query, schema: { type: integer } }
+        - { name: coordinator_id, in: query, schema: { type: integer } }
+        - { name: distributor_id, in: query, schema: { type: integer } }
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Página de solicitudes dentro del alcance
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/CreditIncreaseRequest' } }
+                  meta: { type: object }
+                  links: { type: object }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+  /api/v1/credit-increase-requests/{creditIncreaseRequest}:
+    get:
+      operationId: getCreditIncreaseRequest
+      summary: Consulta el detalle de una solicitud visible
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CreditIncreaseRequestId' }
+      responses:
+        '200':
+          description: Detalle de la solicitud
+          content:
+            application/json:
+              schema: { type: object, properties: { data: { $ref: '#/components/schemas/CreditIncreaseRequest' } } }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+        '404': { description: Solicitud inexistente }
+  /api/v1/credit-increase-requests/{creditIncreaseRequest}/preauthorize:
+    post:
+      operationId: reviewCreditIncreaseRequest
+      summary: Preautoriza o rechaza como coordinador responsable
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CreditIncreaseRequestId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CoordinatorCreditDecisionInput' }
+            examples:
+              preauthorize:
+                value: { decision: PREAUTHORIZE, recommended_amount: '8000.00', reason: Historial y comportamiento revisados, lock_version: 1 }
+              reject:
+                value: { decision: REJECT, reason: La solicitud no fue preautorizada, lock_version: 1 }
+      responses:
+        '200': { description: Solicitud revisada }
+        '403': { $ref: '#/components/responses/AuthScopeDenied' }
+        '409': { description: Estado o versión incompatible }
+        '422': { description: Decisión o importe inválido }
+  /api/v1/credit-increase-requests/{creditIncreaseRequest}/manager-decision:
+    post:
+      operationId: decideCreditIncreaseRequest
+      summary: Autoriza total/parcialmente o rechaza con reautenticación M01
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { $ref: '#/components/parameters/CreditIncreaseRequestId' }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ManagerCreditDecisionInput' }
+            examples:
+              full:
+                value: { decision: AUTHORIZE, authorized_amount: '10000.00', reason: Incremento autorizado, reauthentication_id: token-de-reautenticacion, lock_version: 2 }
+              partial:
+                value: { decision: AUTHORIZE, authorized_amount: '7000.00', reason: Se autoriza un importe menor, reauthentication_id: token-de-reautenticacion, lock_version: 2 }
+              reject:
+                value: { decision: REJECT, reason: Incremento no autorizado, reauthentication_id: token-de-reautenticacion, lock_version: 2 }
+      responses:
+        '200': { description: Decisión aplicada idempotentemente }
+        '403':
+          description: Alcance denegado o reautenticación inválida
+        '409': { description: Estado, solicitud o versión de línea incompatible }
+        '422': { description: Importe mayor al solicitado o decisión inválida }
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -208,6 +371,32 @@ components:
       in: path
       required: true
       schema: { type: string, format: uuid }
+    DistributorId:
+      name: distributor
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    CreditIncreaseRequestId:
+      name: creditIncreaseRequest
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      schema: { type: string, minLength: 8, maxLength: 160 }
+  responses:
+    AuthScopeDenied:
+      description: Actor sin rol, sucursal, asignación o propiedad
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
+    CreditLineNotFound:
+      description: No existe una línea para la distribuidora
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/DomainError' }
   requestBodies:
     Lifecycle:
       required: true
@@ -215,6 +404,131 @@ components:
         application/json:
           schema: { $ref: '#/components/schemas/LifecycleInput' }
   schemas:
+    Money:
+      type: string
+      pattern: '^\d+\.\d{2}$'
+      example: '20000.00'
+      description: Importe decimal serializado como cadena
+    CreditMovementType:
+      type: string
+      enum: [INITIAL_AUTHORIZATION, INCREASE, VOUCHER_FULFILLED, CAPITAL_RECOVERED, AUTHORIZED_CORRECTION]
+    CreditIncreaseStatus:
+      type: string
+      enum: [SOLICITADO, PREAUTORIZADO, RECHAZADO_COORDINADOR, RECHAZADO_GERENTE, AUTORIZADO_TOTAL, AUTORIZADO_PARCIAL, RESTRICCION_50_ACTIVA, COMPLETADO]
+    CreditRestriction:
+      type: object
+      required: [id, status, trigger_type, reference_amount, tolerance_amount, lower_limit, upper_limit, has_admissible_amount]
+      properties:
+        id: { type: string, format: uuid }
+        status: { type: string, enum: [ACTIVE, BOUND, CONSUMED] }
+        trigger_type: { type: string, enum: [INITIAL_AUTHORIZATION, INCREASE] }
+        reference_amount: { $ref: '#/components/schemas/Money' }
+        tolerance_amount: { $ref: '#/components/schemas/Money' }
+        lower_limit: { $ref: '#/components/schemas/Money' }
+        upper_limit: { $ref: '#/components/schemas/Money' }
+        has_admissible_amount: { type: boolean }
+        bound_voucher_id: { type: [string, 'null'] }
+    CreditLine:
+      type: object
+      required: [id, distributor_id, total_authorized, used_balance, available_balance, recovered_capital_total, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        distributor_id: { type: string, format: uuid }
+        total_authorized: { $ref: '#/components/schemas/Money' }
+        used_balance: { $ref: '#/components/schemas/Money' }
+        available_balance: { $ref: '#/components/schemas/Money' }
+        recovered_capital_total: { $ref: '#/components/schemas/Money' }
+        lock_version: { type: integer }
+        last_movement_at: { type: [string, 'null'], format: date-time }
+        restriction:
+          oneOf:
+            - { $ref: '#/components/schemas/CreditRestriction' }
+            - { type: 'null' }
+    CreditMovement:
+      type: object
+      required: [id, type, total_delta, used_delta, total_before, total_after, used_before, used_after, available_before, available_after, source, reason, occurred_at]
+      properties:
+        id: { type: string, format: uuid }
+        type: { $ref: '#/components/schemas/CreditMovementType' }
+        total_delta: { type: string }
+        used_delta: { type: string }
+        total_before: { $ref: '#/components/schemas/Money' }
+        total_after: { $ref: '#/components/schemas/Money' }
+        used_before: { $ref: '#/components/schemas/Money' }
+        used_after: { $ref: '#/components/schemas/Money' }
+        available_before: { $ref: '#/components/schemas/Money' }
+        available_after: { $ref: '#/components/schemas/Money' }
+        source:
+          type: object
+          required: [type, id]
+          properties: { type: { type: string }, id: { type: string } }
+        reason: { type: string }
+        configuration_snapshot: { type: [object, 'null'] }
+        occurred_at: { type: string, format: date-time }
+    CreateCreditIncreaseInput:
+      type: object
+      required: [requested_amount, reason]
+      properties:
+        requested_amount: { $ref: '#/components/schemas/Money' }
+        reason: { type: string, minLength: 5, maxLength: 2000 }
+        origin:
+          type: object
+          required: [type]
+          properties:
+            type: { type: string, enum: [NORMAL, INSUFFICIENT_CREDIT] }
+            product_amount: { $ref: '#/components/schemas/Money' }
+    CoordinatorCreditDecisionInput:
+      type: object
+      required: [decision, reason]
+      properties:
+        decision: { type: string, enum: [PREAUTHORIZE, REJECT] }
+        recommended_amount: { $ref: '#/components/schemas/Money' }
+        reason: { type: string, minLength: 5, maxLength: 2000 }
+        lock_version: { type: integer, minimum: 1 }
+    ManagerCreditDecisionInput:
+      type: object
+      required: [decision, reason, reauthentication_id]
+      properties:
+        decision: { type: string, enum: [AUTHORIZE, REJECT] }
+        authorized_amount: { $ref: '#/components/schemas/Money' }
+        reason: { type: string, minLength: 5, maxLength: 2000 }
+        reauthentication_id: { type: string, writeOnly: true }
+        lock_version: { type: integer, minimum: 1 }
+    CreditIncreaseRequest:
+      type: object
+      required: [id, folio, distributor_id, requested_amount, status, origin, line_snapshot, reasons, actors, requested_at, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        folio: { type: string }
+        distributor_id: { oneOf: [{ type: string, format: uuid }, { type: integer }] }
+        branch_id: { type: integer }
+        coordinator_id: { type: integer }
+        requested_amount: { $ref: '#/components/schemas/Money' }
+        recommended_amount: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        authorized_amount: { oneOf: [{ $ref: '#/components/schemas/Money' }, { type: 'null' }] }
+        origin: { type: object }
+        line_snapshot: { type: object }
+        status: { $ref: '#/components/schemas/CreditIncreaseStatus' }
+        reasons: { type: object }
+        actors: { type: object }
+        requested_at: { type: string, format: date-time }
+        reviewed_at: { type: [string, 'null'], format: date-time }
+        decided_at: { type: [string, 'null'], format: date-time }
+        restriction_id: { type: [string, integer, 'null'] }
+        lock_version: { type: integer }
+    DomainError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, correlationId]
+          properties:
+            code:
+              type: string
+              enum: [AUTH_SCOPE_DENIED, REAUTHENTICATION_REQUIRED, RESOURCE_VERSION_CONFLICT, CREDIT_LINE_ALREADY_EXISTS, CREDIT_LINE_NOT_FOUND, CREDIT_INVALID_BALANCE, CREDIT_INSUFFICIENT, CREDIT_50_PERCENT_RULE_NOT_SATISFIED, CREDIT_50_PERCENT_NO_ADMISSIBLE_AMOUNT, CREDIT_RESTRICTION_ALREADY_BOUND, CREDIT_RESTRICTION_NOT_ACTIVE, CREDIT_RESTRICTION_VOUCHER_MISMATCH, CREDIT_INCREASE_INVALID_STATE, CREDIT_INCREASE_AMOUNT_INVALID, CREDIT_INCREASE_NOT_PREAUTHORIZED, CREDIT_INCREASE_EXCEEDS_REQUESTED, CREDIT_MOVEMENT_DUPLICATE, CAPITAL_RECOVERY_EXCEEDS_USED_BALANCE]
+            message: { type: string }
+            correlationId: { type: string, format: uuid }
     PasswordWithConfirmation:
       type: object
       required: [password, password_confirmation]

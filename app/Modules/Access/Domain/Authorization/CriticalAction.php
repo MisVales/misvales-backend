@@ -29,5 +29,6 @@ enum CriticalAction: string
     case FOLIO_REOPEN = 'financial.folio.reopen';
     case CASH_CLOSE = 'financial.cash.close';
     case DELIVERY_CONFIRM = 'financial.delivery.confirm';
+    case CREDIT_INCREASE_DECISION = 'credit.increase.decision';
     case OPERATIONAL_AUTHORIZE = 'operational.authorize';
 }
