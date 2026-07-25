@@ -13,3 +13,7 @@ Route::prefix('v1')
 Route::prefix('v1')
     ->name('api.v1.')
     ->group(base_path('app/Modules/DistributorOnboarding/Presentation/Http/routes.php'));
+
+Route::prefix('v1')
+    ->name('api.v1.')
+    ->group(base_path('app/Modules/Client/Presentation/Http/routes.php'));

@@ -32,4 +32,14 @@ enum PermissionCode: string
     case ONBOARDING_APPLICATIONS_AUTHORIZE_GLOBAL = 'onboarding.applications.authorize_global';
     case ONBOARDING_EVIDENCE_VIEW = 'onboarding.evidence.view';
     case ONBOARDING_HISTORY_VIEW = 'onboarding.history.view';
+    case CLIENTS_VIEW_GLOBAL = 'clients.view.global';
+    case CLIENTS_VIEW_BRANCH = 'clients.view.branch';
+    case CLIENTS_VIEW_ASSIGNED = 'clients.view.assigned';
+    case CLIENTS_CREATE_OWN = 'clients.create.own';
+    case CLIENTS_VIEW_SENSITIVE_AUTHORIZED = 'clients.view_sensitive.authorized';
+    case CLIENTS_VIEW_DOCUMENTS_AUTHORIZED = 'clients.view_documents.authorized';
+    case CLIENTS_APPLY_AUTHORIZED_CHANGE = 'clients.apply_authorized_change';
+    case CLIENTS_PORTFOLIO_VIEW_OWN = 'clients.portfolio.view.own';
+    case CLIENTS_PORTFOLIO_WRITE_OWN = 'clients.portfolio.write.own';
+    case CLIENTS_ASSIGNMENT_APPLY_INTERNAL = 'clients.assignment.apply_internal';
 }

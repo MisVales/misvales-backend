@@ -3,6 +3,8 @@
 use App\Models\User;
 use App\Modules\Access\Domain\Accounts\AccessRuleViolation;
 use App\Modules\Access\Presentation\Http\Middleware\CaptureSecurityContextMiddleware;
+use App\Modules\Client\Domain\Exceptions\ClientDomainException;
+use App\Modules\Client\Presentation\Http\Middleware\EnsureClientRequestId;
 use App\Modules\Credit\Application\Services\CreditRecorder;
 use App\Modules\Credit\Domain\Exceptions\CreditRuleViolation;
 use App\Modules\Credit\Infrastructure\Persistence\Eloquent\Models\CreditIncreaseRequestModel;
@@ -31,6 +33,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'onboarding.failures' => AuditOnboardingFailure::class,
             'request.id' => EnsureRequestId::class,
+            'client.request-id' => EnsureClientRequestId::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -106,8 +109,21 @@ return Application::configure(basePath: dirname(__DIR__))
                 'X-Request-Id' => (string) $request->attributes->get('request_id'),
             ]);
         });
+        $exceptions->render(function (ClientDomainException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
         $exceptions->render(function (ValidationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
                 return null;
             }
 
@@ -124,7 +140,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         });
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
                 return null;
             }
 
@@ -141,7 +157,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         });
         $exceptions->render(function (AuthorizationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
                 return null;
             }
 

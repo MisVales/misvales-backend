@@ -49,19 +49,20 @@ class AccessFoundationSeeder extends Seeder
                 PermissionCode::ACCOUNTS_GLOBAL_DISABLE, PermissionCode::SECURITY_ALERTS_GLOBAL_READ,
                 PermissionCode::SECURITY_AUDIT_GLOBAL_READ, PermissionCode::ONBOARDING_APPLICATIONS_VIEW_GLOBAL,
                 PermissionCode::ONBOARDING_APPLICATIONS_AUTHORIZE_GLOBAL, PermissionCode::ONBOARDING_EVIDENCE_VIEW,
-                PermissionCode::ONBOARDING_HISTORY_VIEW,
+                PermissionCode::ONBOARDING_HISTORY_VIEW, PermissionCode::CLIENTS_VIEW_GLOBAL,
             ],
             RoleCode::SUCURSAL_MANAGER->value => [
                 ...$own, PermissionCode::ACCOUNTS_BRANCH_REQUEST, PermissionCode::ACCOUNTS_BRANCH_DISABLE_REQUEST,
                 PermissionCode::SECURITY_ALERTS_BRANCH_READ, PermissionCode::ONBOARDING_APPLICATIONS_VIEW_BRANCH,
                 PermissionCode::ONBOARDING_APPLICATIONS_AUTHORIZE_BRANCH, PermissionCode::ONBOARDING_EVIDENCE_VIEW,
-                PermissionCode::ONBOARDING_HISTORY_VIEW,
+                PermissionCode::ONBOARDING_HISTORY_VIEW, PermissionCode::CLIENTS_VIEW_BRANCH,
             ],
             RoleCode::COORDINATOR->value => [
                 ...$own, PermissionCode::SECURITY_ALERTS_BRANCH_READ,
                 PermissionCode::ONBOARDING_APPLICATIONS_VIEW_ASSIGNED, PermissionCode::ONBOARDING_APPLICATIONS_REVIEW,
                 PermissionCode::ONBOARDING_APPLICATIONS_CORRECT, PermissionCode::ONBOARDING_APPLICATIONS_EVALUATE,
                 PermissionCode::ONBOARDING_EVIDENCE_VIEW, PermissionCode::ONBOARDING_HISTORY_VIEW,
+                PermissionCode::CLIENTS_VIEW_ASSIGNED,
             ],
             RoleCode::VERIFIER->value => [
                 ...$own, PermissionCode::ONBOARDING_APPLICATIONS_VIEW_ASSIGNED,
@@ -70,10 +71,19 @@ class AccessFoundationSeeder extends Seeder
             RoleCode::ADMINISTRATOR->value => [
                 ...$own, PermissionCode::SECURITY_ALERTS_GLOBAL_READ, PermissionCode::SECURITY_AUDIT_GLOBAL_READ,
                 PermissionCode::ONBOARDING_APPLICATIONS_VIEW_GLOBAL, PermissionCode::ONBOARDING_EVIDENCE_VIEW,
-                PermissionCode::ONBOARDING_HISTORY_VIEW,
+                PermissionCode::ONBOARDING_HISTORY_VIEW, PermissionCode::CLIENTS_VIEW_GLOBAL,
             ],
-            RoleCode::DISTRIBUTOR->value => $own,
-            RoleCode::CASHIER->value => $own,
+            RoleCode::DISTRIBUTOR->value => [
+                ...$own, PermissionCode::CLIENTS_VIEW_ASSIGNED, PermissionCode::CLIENTS_CREATE_OWN,
+                PermissionCode::CLIENTS_VIEW_SENSITIVE_AUTHORIZED,
+                PermissionCode::CLIENTS_VIEW_DOCUMENTS_AUTHORIZED,
+                PermissionCode::CLIENTS_PORTFOLIO_VIEW_OWN, PermissionCode::CLIENTS_PORTFOLIO_WRITE_OWN,
+            ],
+            RoleCode::CASHIER->value => [
+                ...$own, PermissionCode::CLIENTS_VIEW_SENSITIVE_AUTHORIZED,
+                PermissionCode::CLIENTS_VIEW_DOCUMENTS_AUTHORIZED,
+                PermissionCode::CLIENTS_APPLY_AUTHORIZED_CHANGE,
+            ],
         ];
 
         foreach ($matrix as $roleCode => $permissionCodes) {
