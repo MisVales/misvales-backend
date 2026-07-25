@@ -2,6 +2,14 @@ openapi: 3.1.0
 info:
   title: MisVales API
   version: 1.0.0
+  license:
+    name: MIT
+    identifier: MIT
+servers:
+  - url: /
+    description: Servidor actual
+security:
+  - bearerAuth: []
 paths:
   /api/v1/accounts:
     post:
@@ -39,7 +47,7 @@ paths:
             schema: { $ref: '#/components/schemas/BranchAccountRequestInput' }
       responses:
         '202': { description: Solicitud pendiente de aprobación }
-        '403': { description: Rol, sucursal o reautorización inválidos }
+        '403': { description: 'Rol, sucursal o reautorización inválidos' }
         '422': { description: Datos inválidos }
   /api/v1/account-requests/{id}/approve:
     post:
@@ -151,7 +159,7 @@ paths:
               properties: { token: { type: string, writeOnly: true } }
       responses:
         '200': { description: Estado temporal de activación sin sesión operativa }
-        '409': { description: Invitación usada, vencida, revocada o de otro propósito }
+        '409': { description: 'Invitación usada, vencida, revocada o de otro propósito' }
   /api/v1/auth/invitations/complete:
     post:
       operationId: completeAccountInvitation
@@ -186,7 +194,7 @@ paths:
       responses:
         '200': { description: Credenciales cambiadas y todo acceso revocado }
         '403': { description: Segundo factor inválido }
-        '409': { description: Token consumido, vencido o revocado }
+        '409': { description: 'Token consumido, vencido o revocado' }
   /api/v1/auth/password/change:
     post:
       operationId: changeOwnPassword
@@ -274,7 +282,7 @@ paths:
               schema: { type: object, properties: { data: { $ref: '#/components/schemas/CreditIncreaseRequest' } } }
         '403': { $ref: '#/components/responses/AuthScopeDenied' }
         '404': { $ref: '#/components/responses/CreditLineNotFound' }
-        '422': { description: Importe, motivo u origen inválido }
+        '422': { description: 'Importe, motivo u origen inválido' }
   /api/v1/credit-increase-requests:
     get:
       operationId: listCreditIncreaseRequests
@@ -360,8 +368,391 @@ paths:
         '200': { description: Decisión aplicada idempotentemente }
         '403':
           description: Alcance denegado o reautenticación inválida
-        '409': { description: Estado, solicitud o versión de línea incompatible }
+        '409': { description: 'Estado, solicitud o versión de línea incompatible' }
         '422': { description: Importe mayor al solicitado o decisión inválida }
+  /api/v1/distributor-applications:
+    get:
+      operationId: listDistributorApplications
+      summary: Lista solicitudes dentro del alcance efectivo
+      x-permission: onboarding applications view assigned, branch or global
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+        - name: folio
+          in: query
+          schema: { type: string, maxLength: 40 }
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/DistributorApplicationStatus' }
+        - name: result
+          in: query
+          schema:
+            type: string
+            enum: [TERMINATED_UNFAVORABLE, REJECTED, ACTIVE]
+        - name: branch_id
+          in: query
+          description: Solo reduce el conjunto previamente autorizado.
+          schema: { type: string, format: uuid }
+        - name: coordinator_id
+          in: query
+          description: Solo reduce el conjunto previamente autorizado.
+          schema: { type: string, format: uuid }
+        - name: verifier_id
+          in: query
+          description: Solo reduce el conjunto previamente autorizado.
+          schema: { type: string, format: uuid }
+        - name: per_page
+          in: query
+          schema: { type: integer, minimum: 1, maximum: 100, default: 20 }
+      responses:
+        '200':
+          description: Página de solicitudes con datos sensibles omitidos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationListResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+    post:
+      operationId: createDistributorApplication
+      summary: Crea una solicitud en CAPTURE
+      x-permission: onboarding.applications.create
+      description: La sucursal, el coordinador, el folio y el estado se resuelven en backend. El permiso no se asigna a ningún rol hasta que se apruebe la autoridad de captura.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateApplicationRequest'
+      responses:
+        '201':
+          description: Solicitud creada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}:
+    parameters:
+      - $ref: '#/components/parameters/ApplicationId'
+    get:
+      operationId: showDistributorApplication
+      summary: Consulta el detalle permitido
+      x-scope: global, branch, responsible coordinator or assigned verifier
+      parameters:
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Detalle autorizado; el administrador recibe enmascaramiento adicional.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+    patch:
+      operationId: updateDistributorApplicationCapture
+      summary: Edita contacto y datos personales en CAPTURE
+      x-permission: onboarding.applications.update_capture
+      x-required-status: CAPTURE
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateCaptureRequest'
+      responses:
+        '200':
+          description: Versión actualizada.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/submit:
+    post:
+      operationId: submitDistributorApplication
+      summary: Envía una versión completa a revisión
+      x-permission: onboarding.applications.submit
+      x-required-status: CAPTURE
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        $ref: '#/components/requestBodies/VersionedAction'
+      responses:
+        '200':
+          description: Solicitud en COORDINATOR_REVIEW.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/history:
+    get:
+      operationId: showDistributorApplicationHistory
+      summary: Consulta historial permitido
+      x-permission: onboarding.history.view
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200':
+          description: Auditoría funcional ordenada que reconstruye el expediente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApplicationHistoryResponse'
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/request-document-correction:
+    post:
+      operationId: requestDistributorDocumentCorrection
+      summary: Devuelve la solicitud a CAPTURE con motivo
+      x-permission: onboarding.applications.review
+      x-required-status: COORDINATOR_REVIEW
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        $ref: '#/components/requestBodies/ReasonAction'
+      responses:
+        '200': { description: Solicitud devuelta sin borrar entregas anteriores. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/assign-verifier:
+    post:
+      operationId: assignDistributorApplicationVerifier
+      summary: Asigna un verificador vigente
+      x-permission: onboarding.verifications.assign
+      x-required-status: COORDINATOR_REVIEW
+      description: El permiso no se asigna a ningún rol hasta que se apruebe la autoridad responsable.
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignVerifierRequest'
+      responses:
+        '200': { description: Solicitud en VISIT_ASSIGNED. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/visits:
+    post:
+      operationId: startDistributorVerificationVisit
+      summary: Inicia la única visita de la asignación vigente
+      x-permission: onboarding.verifications.perform
+      x-required-status: VISIT_ASSIGNED
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        $ref: '#/components/requestBodies/VersionedAction'
+      responses:
+        '201': { description: Visita iniciada. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/visits/{visitId}:
+    get:
+      operationId: showDistributorVerificationVisit
+      summary: Consulta una visita autorizada
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/VisitId'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200': { description: Visita dentro del alcance. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/visits/{visitId}/differences:
+    post:
+      operationId: recordDistributorVerificationDifference
+      summary: Registra una diferencia sin corregir el expediente
+      x-permission: onboarding.verifications.perform
+      x-required-status: PHYSICAL_VERIFICATION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/VisitId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordDifferenceRequest'
+      responses:
+        '201': { description: Diferencia inmutable registrada. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/visits/{visitId}/complete:
+    post:
+      operationId: completeDistributorVerificationVisit
+      summary: Finaliza la visita una sola vez
+      x-permission: onboarding.verifications.perform
+      x-required-status: PHYSICAL_VERIFICATION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/VisitId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CompleteVisitRequest'
+      responses:
+        '200': { description: Resultado final aplicado. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/corrections:
+    post:
+      operationId: recordDistributorApplicationCorrection
+      summary: Registra una corrección inmutable del coordinador
+      x-permission: onboarding.applications.correct
+      x-required-status: COORDINATOR_CORRECTION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RecordCorrectionRequest'
+      responses:
+        '200': { description: Corrección aplicada conservando el valor original. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/corrections/complete:
+    post:
+      operationId: completeDistributorApplicationCorrections
+      summary: Pasa a evaluación sin crear otra visita
+      x-permission: onboarding.applications.correct
+      x-required-status: COORDINATOR_CORRECTION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        $ref: '#/components/requestBodies/VersionedAction'
+      responses:
+        '200': { description: Solicitud en COORDINATOR_EVALUATION. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/coordinator-decision:
+    post:
+      operationId: decideDistributorApplicationAsCoordinator
+      summary: Registra una única evaluación del coordinador
+      x-permission: onboarding.applications.evaluate
+      x-required-status: COORDINATOR_EVALUATION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CoordinatorDecisionRequest'
+      responses:
+        '200': { description: Evaluación registrada. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/manager-decision:
+    post:
+      operationId: decideDistributorApplicationAsManager
+      summary: Rechaza o autoriza y aprovisiona
+      x-permission: onboarding applications authorize branch or global
+      x-required-status: MANAGER_AUTHORIZATION
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/IfMatch'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ManagerDecisionRequest'
+      responses:
+        '200': { description: Rechazo definitivo o activación completa. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
+  /api/v1/distributor-applications/{id}/activation:
+    get:
+      operationId: showDistributorApplicationActivation
+      summary: Consulta el resultado permitido de activación
+      parameters:
+        - $ref: '#/components/parameters/ApplicationId'
+        - $ref: '#/components/parameters/XRequestId'
+      responses:
+        '200': { description: Resultado de activación o null. }
+        '4XX':
+          $ref: '#/components/responses/OnboardingError'
+        default:
+          $ref: '#/components/responses/OnboardingError'
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
@@ -386,6 +777,27 @@ components:
       in: header
       required: true
       schema: { type: string, minLength: 8, maxLength: 160 }
+    ApplicationId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    VisitId:
+      name: visitId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    IfMatch:
+      name: If-Match
+      in: header
+      required: true
+      description: Versión entera leída por el cliente; lock_version puede enviarse en el cuerpo.
+      schema: { type: string }
+    XRequestId:
+      name: X-Request-Id
+      in: header
+      required: false
+      schema: { type: string, format: uuid }
   responses:
     AuthScopeDenied:
       description: Actor sin rol, sucursal, asignación o propiedad
@@ -397,12 +809,30 @@ components:
       content:
         application/json:
           schema: { $ref: '#/components/schemas/DomainError' }
+    OnboardingError:
+      description: Error de validación, alcance, estado, versión o integración.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
   requestBodies:
     Lifecycle:
       required: true
       content:
         application/json:
           schema: { $ref: '#/components/schemas/LifecycleInput' }
+    VersionedAction:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/VersionedActionRequest'
+    ReasonAction:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ReasonActionRequest'
   schemas:
     Money:
       type: string
@@ -630,6 +1060,21 @@ components:
         - security.alerts.global.read
         - security.alerts.branch.read
         - security.audit.global.read
+        - onboarding.applications.create
+        - onboarding.applications.update_capture
+        - onboarding.applications.submit
+        - onboarding.applications.view_assigned
+        - onboarding.applications.view_branch
+        - onboarding.applications.view_global
+        - onboarding.applications.review
+        - onboarding.verifications.assign
+        - onboarding.verifications.perform
+        - onboarding.applications.correct
+        - onboarding.applications.evaluate
+        - onboarding.applications.authorize_branch
+        - onboarding.applications.authorize_global
+        - onboarding.evidence.view
+        - onboarding.history.view
     AccountState:
       type: string
       enum:
@@ -652,3 +1097,304 @@ components:
         - REPLACED
         - EXPIRED
         - REVOKED
+
+    DistributorApplicationStatus:
+      type: string
+      enum:
+        - CAPTURE
+        - COORDINATOR_REVIEW
+        - VISIT_ASSIGNED
+        - PHYSICAL_VERIFICATION
+        - COORDINATOR_CORRECTION
+        - COORDINATOR_EVALUATION
+        - TERMINATED_UNFAVORABLE
+        - MANAGER_AUTHORIZATION
+        - REJECTED
+        - ACTIVE
+    ApplicationSummary:
+      type: object
+      required: [id, folio, status, branch, coordinator, allowed_actions, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        folio: { type: string }
+        status: { $ref: '#/components/schemas/DistributorApplicationStatus' }
+        result:
+          type: [string, 'null']
+          enum: [TERMINATED_UNFAVORABLE, REJECTED, ACTIVE, null]
+        branch:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        coordinator:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+        verifier:
+          type: [object, 'null']
+        allowed_actions:
+          type: array
+          items: { type: string }
+        lock_version: { type: integer, minimum: 1 }
+    ApplicationResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { $ref: '#/components/schemas/ApplicationDetail' }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string, format: uuid }
+    ApplicationDetail:
+      allOf:
+        - $ref: '#/components/schemas/ApplicationSummary'
+        - type: object
+          required: [contact_email, account_name, visit, differences, corrections, evaluation, authorization, activation]
+          properties:
+            contact_email: { type: string, format: email }
+            account_name: { type: string }
+            personal_data:
+              type: object
+              additionalProperties: false
+              properties:
+                first_name: { type: [string, 'null'] }
+                paternal_surname: { type: [string, 'null'] }
+                maternal_surname: { type: [string, 'null'] }
+                curp: { type: [string, 'null'] }
+                rfc: { type: [string, 'null'] }
+                birth_date: { type: [string, 'null'], format: date }
+                birth_place: { type: [string, 'null'] }
+                birth_state: { type: [string, 'null'] }
+                birth_city: { type: [string, 'null'] }
+                declared_address: { type: [string, 'null'] }
+                official_identification_media_id: { type: [string, 'null'], format: uuid }
+            family_members: { type: array, items: { type: object } }
+            family_references: { type: array, items: { type: object } }
+            residences: { type: array, items: { type: object } }
+            vehicles: { type: array, items: { type: object } }
+            assets_liabilities: { type: array, items: { type: object } }
+            employments: { type: array, items: { type: object } }
+            labor_references: { type: array, items: { type: object } }
+            commercial_credits: { type: array, items: { type: object } }
+            expedient_counts: { type: object, description: Vista enmascarada para administración. }
+            visit:
+              type: [object, 'null']
+              properties:
+                id: { type: string, format: uuid }
+                started_at: { type: string, format: date-time }
+                completed_at: { type: [string, 'null'], format: date-time }
+                result: { type: [string, 'null'], enum: [FAVORABLE, UNFAVORABLE, CORRECTABLE_DIFFERENCES, null] }
+                observations: { type: [string, 'null'] }
+                lock_version: { type: integer, minimum: 1 }
+            differences:
+              type: array
+              items: { $ref: '#/components/schemas/VerificationDifference' }
+            corrections:
+              type: array
+              items: { $ref: '#/components/schemas/ApplicationCorrection' }
+            evaluation: { type: [object, 'null'] }
+            authorization: { type: [object, 'null'] }
+            activation: { type: [object, 'null'] }
+    VerificationDifference:
+      type: object
+      required: [id, section, field_path, declared_value, observed_value, description, classification_code, recorded_at]
+      properties:
+        id: { type: string, format: uuid }
+        section: { type: string }
+        field_path: { type: string }
+        declared_value: { type: string }
+        observed_value: { type: string }
+        description: { type: string }
+        classification_code: { type: string }
+        evidence_media_id: { type: [string, 'null'], format: uuid }
+        recorded_at: { type: string, format: date-time }
+        resolved_at: { type: [string, 'null'], format: date-time }
+    ApplicationCorrection:
+      type: object
+      required: [id, section, field_path, original_value, corrected_value, reason, corrected_at]
+      properties:
+        id: { type: string, format: uuid }
+        difference_id: { type: [string, 'null'], format: uuid }
+        section: { type: string }
+        field_path: { type: string }
+        original_value: { type: [string, 'null'], description: Enmascarado según el perfil. }
+        corrected_value: { type: [string, 'null'], description: Enmascarado según el perfil. }
+        reason: { type: string }
+        corrected_by: { type: [object, 'null'] }
+        corrected_at: { type: string, format: date-time }
+    ApplicationHistoryResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            required: [id, action, actor, entity, application_version, occurred_at]
+            properties:
+              id: { type: string, format: uuid }
+              action: { type: string }
+              previous_status: { type: [string, 'null'] }
+              new_status: { type: [string, 'null'] }
+              actor: { type: [object, 'null'] }
+              entity:
+                type: object
+                required: [type]
+                properties:
+                  type: { type: string }
+                  id: { type: [string, 'null'], format: uuid }
+              reason: { type: [string, 'null'] }
+              result: { type: [string, 'null'] }
+              application_version: { type: integer, minimum: 1 }
+              occurred_at: { type: string, format: date-time }
+        meta:
+          type: object
+          properties:
+            request_id: { type: string, format: uuid }
+    ApplicationListResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/ApplicationSummary' }
+        meta:
+          type: object
+          properties:
+            current_page: { type: integer }
+            per_page: { type: integer }
+            total: { type: integer }
+            last_page: { type: integer }
+            request_id: { type: string, format: uuid }
+    CreateApplicationRequest:
+      type: object
+      required: [contact_email, account_name]
+      additionalProperties: false
+      properties:
+        contact_email: { type: string, format: email, maxLength: 254 }
+        account_name: { type: string, maxLength: 255 }
+    UpdateCaptureRequest:
+      type: object
+      required: [lock_version]
+      additionalProperties: false
+      anyOf:
+        - required: [contact_email]
+        - required: [account_name]
+        - required: [personal_data]
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        contact_email: { type: string, format: email, maxLength: 254 }
+        account_name: { type: string, maxLength: 255 }
+        personal_data:
+          type: object
+          additionalProperties: false
+          properties:
+            first_name: { type: string, maxLength: 150 }
+            paternal_surname: { type: string, maxLength: 150 }
+            maternal_surname: { type: [string, 'null'], maxLength: 150 }
+            curp: { type: [string, 'null'], maxLength: 18 }
+            rfc: { type: [string, 'null'], maxLength: 13 }
+            birth_date: { type: [string, 'null'], format: date }
+            birth_place: { type: [string, 'null'] }
+            birth_state: { type: [string, 'null'] }
+            birth_city: { type: [string, 'null'] }
+            declared_address: { type: [string, 'null'] }
+            official_identification_media_id: { type: [string, 'null'], format: uuid }
+    VersionedActionRequest:
+      type: object
+      required: [lock_version]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+    ReasonActionRequest:
+      allOf:
+        - $ref: '#/components/schemas/VersionedActionRequest'
+        - type: object
+          required: [reason]
+          properties:
+            reason: { type: string, maxLength: 4000 }
+    AssignVerifierRequest:
+      allOf:
+        - $ref: '#/components/schemas/VersionedActionRequest'
+        - type: object
+          required: [verifier_id]
+          properties:
+            verifier_id: { type: string, format: uuid }
+    RecordDifferenceRequest:
+      allOf:
+        - $ref: '#/components/schemas/VersionedActionRequest'
+        - type: object
+          required: [section, field_path, declared_value, observed_value, description, classification_code]
+          properties:
+            section:
+              type: string
+              enum: [CONTACT, PERSONAL, FAMILY_MEMBER, FAMILY_REFERENCE, RESIDENCE, VEHICLE, ASSET_LIABILITY, EMPLOYMENT, LABOR_REFERENCE, COMMERCIAL_CREDIT]
+            field_path: { type: string, maxLength: 255 }
+            declared_value: { type: string, maxLength: 8000 }
+            observed_value: { type: string, maxLength: 8000 }
+            description: { type: string, maxLength: 4000 }
+            classification_code: { type: string, maxLength: 80 }
+            evidence_media_id: { type: [string, 'null'], format: uuid }
+    CompleteVisitRequest:
+      allOf:
+        - $ref: '#/components/schemas/VersionedActionRequest'
+        - type: object
+          required: [result, observations]
+          properties:
+            result:
+              type: string
+              enum: [FAVORABLE, UNFAVORABLE, CORRECTABLE_DIFFERENCES]
+            observations: { type: string, maxLength: 4000 }
+    RecordCorrectionRequest:
+      allOf:
+        - $ref: '#/components/schemas/VersionedActionRequest'
+        - type: object
+          required: [section, field_path, expected_original_value, corrected_value, reason]
+          properties:
+            section: { type: string }
+            field_path: { type: string, maxLength: 255 }
+            expected_original_value: { type: string, maxLength: 8000 }
+            corrected_value: { type: string, maxLength: 8000 }
+            reason: { type: string, maxLength: 4000 }
+            difference_id: { type: [string, 'null'], format: uuid }
+    CoordinatorDecisionRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReasonActionRequest'
+        - type: object
+          required: [decision]
+          properties:
+            decision:
+              type: string
+              enum: [MEETS_REQUIREMENTS, DOES_NOT_MEET_REQUIREMENTS]
+    ManagerDecisionRequest:
+      allOf:
+        - $ref: '#/components/schemas/ReasonActionRequest'
+        - type: object
+          required: [decision]
+          properties:
+            decision:
+              type: string
+              enum: [APPROVE, REJECT]
+            initial_credit_line:
+              type: [string, 'null']
+              pattern: '^(0|[1-9]\d{0,14})(\.\d{1,4})?$'
+              example: '15000.0000'
+            reauthentication_token:
+              type: [string, 'null']
+              writeOnly: true
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, fields, details, request_id]
+          properties:
+            code:
+              type: string
+              example: APPLICATION_STATE_INVALID
+            message: { type: string }
+            fields: { type: object }
+            details: { type: object }
+            request_id: { type: string, format: uuid }
