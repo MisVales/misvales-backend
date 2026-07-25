@@ -6,11 +6,17 @@ use App\Modules\Access\Presentation\Http\Middleware\CaptureSecurityContextMiddle
 use App\Modules\Credit\Application\Services\CreditRecorder;
 use App\Modules\Credit\Domain\Exceptions\CreditRuleViolation;
 use App\Modules\Credit\Infrastructure\Persistence\Eloquent\Models\CreditIncreaseRequestModel;
+use App\Modules\DistributorOnboarding\Domain\Exceptions\OnboardingDomainException;
+use App\Modules\DistributorOnboarding\Presentation\Http\Middleware\AuditOnboardingFailure;
+use App\Modules\DistributorOnboarding\Presentation\Http\Middleware\EnsureRequestId;
+use Illuminate\Auth\Access\AuthorizationException;
+use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -22,6 +28,10 @@ return Application::configure(basePath: dirname(__DIR__))
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
         $middleware->append(CaptureSecurityContextMiddleware::class);
+        $middleware->alias([
+            'onboarding.failures' => AuditOnboardingFailure::class,
+            'request.id' => EnsureRequestId::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         $exceptions->shouldRenderJsonWhen(
@@ -82,5 +92,69 @@ return Application::configure(basePath: dirname(__DIR__))
                     'correlationId' => $request->attributes->get('correlation_id', (string) Str::uuid()),
                 ],
             ], $exception->statusCode());
+        });
+        $exceptions->render(function (OnboardingDomainException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (ValidationException $exception, Request $request) {
+            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => 'VALIDATION_FAILED',
+                    'message' => 'La petición contiene campos inválidos.',
+                    'fields' => $exception->errors(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], 422, [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (AuthenticationException $exception, Request $request) {
+            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => 'AUTHENTICATION_REQUIRED',
+                    'message' => 'La operación requiere una sesión activa.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], 401, [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (AuthorizationException $exception, Request $request) {
+            if (! $request->routeIs('api.v1.distributor-applications.*')) {
+                return null;
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => 'AUTH_SCOPE_DENIED',
+                    'message' => 'La cuenta no tiene autoridad para ejecutar la acción.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], 403, [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
         });
     })->create();

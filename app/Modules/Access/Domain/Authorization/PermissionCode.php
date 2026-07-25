@@ -17,4 +17,19 @@ enum PermissionCode: string
     case SECURITY_ALERTS_GLOBAL_READ = 'security.alerts.global.read';
     case SECURITY_ALERTS_BRANCH_READ = 'security.alerts.branch.read';
     case SECURITY_AUDIT_GLOBAL_READ = 'security.audit.global.read';
+    case ONBOARDING_APPLICATIONS_CREATE = 'onboarding.applications.create';
+    case ONBOARDING_APPLICATIONS_UPDATE_CAPTURE = 'onboarding.applications.update_capture';
+    case ONBOARDING_APPLICATIONS_SUBMIT = 'onboarding.applications.submit';
+    case ONBOARDING_APPLICATIONS_VIEW_ASSIGNED = 'onboarding.applications.view_assigned';
+    case ONBOARDING_APPLICATIONS_VIEW_BRANCH = 'onboarding.applications.view_branch';
+    case ONBOARDING_APPLICATIONS_VIEW_GLOBAL = 'onboarding.applications.view_global';
+    case ONBOARDING_APPLICATIONS_REVIEW = 'onboarding.applications.review';
+    case ONBOARDING_VERIFICATIONS_ASSIGN = 'onboarding.verifications.assign';
+    case ONBOARDING_VERIFICATIONS_PERFORM = 'onboarding.verifications.perform';
+    case ONBOARDING_APPLICATIONS_CORRECT = 'onboarding.applications.correct';
+    case ONBOARDING_APPLICATIONS_EVALUATE = 'onboarding.applications.evaluate';
+    case ONBOARDING_APPLICATIONS_AUTHORIZE_BRANCH = 'onboarding.applications.authorize_branch';
+    case ONBOARDING_APPLICATIONS_AUTHORIZE_GLOBAL = 'onboarding.applications.authorize_global';
+    case ONBOARDING_EVIDENCE_VIEW = 'onboarding.evidence.view';
+    case ONBOARDING_HISTORY_VIEW = 'onboarding.history.view';
 }
