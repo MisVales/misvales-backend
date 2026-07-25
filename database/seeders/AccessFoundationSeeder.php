@@ -44,12 +44,12 @@ class AccessFoundationSeeder extends Seeder
             PermissionCode::MFA_MANAGE_OWN,
         ];
         $matrix = [
-            RoleCode::GENERAL_MANAGER->value => [...$own, PermissionCode::ACCOUNTS_GLOBAL_CREATE, PermissionCode::ACCOUNTS_GLOBAL_APPROVE, PermissionCode::ACCOUNTS_GLOBAL_DISABLE, PermissionCode::SECURITY_ALERTS_GLOBAL_READ, PermissionCode::SECURITY_AUDIT_GLOBAL_READ],
-            RoleCode::SUCURSAL_MANAGER->value => [...$own, PermissionCode::ACCOUNTS_BRANCH_REQUEST, PermissionCode::ACCOUNTS_BRANCH_DISABLE_REQUEST, PermissionCode::SECURITY_ALERTS_BRANCH_READ],
-            RoleCode::COORDINATOR->value => [...$own, PermissionCode::SECURITY_ALERTS_BRANCH_READ],
+            RoleCode::GENERAL_MANAGER->value => [...$own, PermissionCode::ACCOUNTS_GLOBAL_CREATE, PermissionCode::ACCOUNTS_GLOBAL_APPROVE, PermissionCode::ACCOUNTS_GLOBAL_DISABLE, PermissionCode::SECURITY_ALERTS_GLOBAL_READ, PermissionCode::SECURITY_AUDIT_GLOBAL_READ, PermissionCode::CONFIGURATION_VIEW_CURRENT, PermissionCode::CONFIGURATION_VIEW_HISTORY, PermissionCode::CONFIGURATION_MANAGE, PermissionCode::CONFIGURATION_PUBLISH, PermissionCode::CATEGORY_VIEW, PermissionCode::CATEGORY_MANAGE, PermissionCode::CATEGORY_PUBLISH, PermissionCode::PRODUCT_VIEW, PermissionCode::PRODUCT_MANAGE, PermissionCode::PRODUCT_PUBLISH, PermissionCode::REDEMPTION_PERIOD_VIEW, PermissionCode::REDEMPTION_PERIOD_MANAGE],
+            RoleCode::SUCURSAL_MANAGER->value => [...$own, PermissionCode::ACCOUNTS_BRANCH_REQUEST, PermissionCode::ACCOUNTS_BRANCH_DISABLE_REQUEST, PermissionCode::SECURITY_ALERTS_BRANCH_READ, PermissionCode::CONFIGURATION_VIEW_CURRENT, PermissionCode::CATEGORY_VIEW, PermissionCode::PRODUCT_VIEW, PermissionCode::REDEMPTION_PERIOD_VIEW],
+            RoleCode::COORDINATOR->value => [...$own, PermissionCode::SECURITY_ALERTS_BRANCH_READ, PermissionCode::PRODUCT_VIEW, PermissionCode::CATEGORY_VIEW],
             RoleCode::VERIFIER->value => $own,
-            RoleCode::ADMINISTRATOR->value => [...$own, PermissionCode::SECURITY_ALERTS_GLOBAL_READ, PermissionCode::SECURITY_AUDIT_GLOBAL_READ],
-            RoleCode::DISTRIBUTOR->value => $own,
+            RoleCode::ADMINISTRATOR->value => [...$own, PermissionCode::SECURITY_ALERTS_GLOBAL_READ, PermissionCode::SECURITY_AUDIT_GLOBAL_READ, PermissionCode::CONFIGURATION_VIEW_CURRENT, PermissionCode::CONFIGURATION_VIEW_HISTORY, PermissionCode::CATEGORY_VIEW, PermissionCode::PRODUCT_VIEW, PermissionCode::REDEMPTION_PERIOD_VIEW],
+            RoleCode::DISTRIBUTOR->value => [...$own, PermissionCode::PRODUCT_VIEW, PermissionCode::REDEMPTION_PERIOD_VIEW],
             RoleCode::CASHIER->value => $own,
         ];
 
