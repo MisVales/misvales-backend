@@ -17,4 +17,18 @@ enum PermissionCode: string
     case SECURITY_ALERTS_GLOBAL_READ = 'security.alerts.global.read';
     case SECURITY_ALERTS_BRANCH_READ = 'security.alerts.branch.read';
     case SECURITY_AUDIT_GLOBAL_READ = 'security.audit.global.read';
+
+    // M03 — Configuraciones y catálogos
+    case CONFIGURATION_VIEW_CURRENT = 'configuration.view.current';
+    case CONFIGURATION_VIEW_HISTORY = 'configuration.view.history';
+    case CONFIGURATION_MANAGE = 'configuration.manage';
+    case CONFIGURATION_PUBLISH = 'configuration.publish';
+    case CATEGORY_VIEW = 'configuration.category.view';
+    case CATEGORY_MANAGE = 'configuration.category.manage';
+    case CATEGORY_PUBLISH = 'configuration.category.publish';
+    case PRODUCT_VIEW = 'configuration.product.view';
+    case PRODUCT_MANAGE = 'configuration.product.manage';
+    case PRODUCT_PUBLISH = 'configuration.product.publish';
+    case REDEMPTION_PERIOD_VIEW = 'configuration.redemption_period.view';
+    case REDEMPTION_PERIOD_MANAGE = 'configuration.redemption_period.manage';
 }
