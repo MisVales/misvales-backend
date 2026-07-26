@@ -921,12 +921,960 @@ paths:
                   data: { $ref: '#/components/schemas/ClientPortfolioEntry' }
         '4XX': { $ref: '#/components/responses/ClientError' }
         default: { $ref: '#/components/responses/ClientError' }
+  /api/v1/vouchers:
+    get:
+      operationId: searchCounterVouchers
+      summary: Busca vales dentro del alcance autorizado
+      x-permission: vouchers.view
+      parameters:
+        - { name: folio, in: query, schema: { type: string, maxLength: 100 } }
+        - { name: client_name, in: query, schema: { type: string, maxLength: 200 } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/VoucherStatus' } }
+        - { name: generated_from, in: query, schema: { type: string, format: date } }
+        - { name: generated_to, in: query, schema: { type: string, format: date } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+      responses:
+        '200': { description: 'Página de vales sin CURP, cuenta, documentos ni domicilio completo' }
+        '403': { description: Actor sin alcance de consulta }
+  /api/v1/vouchers/{voucher}:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getCounterVoucher
+      summary: Consulta el detalle autorizado del vale
+      x-permission: vouchers.view
+      responses:
+        '200':
+          description: Detalle de caja; las referencias documentales son privadas
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoucherResponse' }
+        '404': { description: Vale inexistente o fuera de alcance }
+  /api/v1/vouchers/{voucher}/open-at-counter:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: openVoucherAtCounter
+      summary: Pasa un vale generado a validación de caja
+      x-permission: vouchers.open_at_counter
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionedVoucherAction' }
+      responses:
+        '200': { description: Vale abierto exactamente una vez }
+        '409': { description: Estado o versión incompatibles }
+  /api/v1/vouchers/{voucher}/modification-requests:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: requestVoucherModification
+      summary: Registra una discrepancia y solicita campos exactos de M06
+      x-permission: voucher_modifications.request
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherModificationRequestInput' }
+      responses:
+        '201': { description: Solicitud pendiente y vale en corrección pendiente }
+        '409': { description: Ya existe una solicitud activa o cambió la versión }
+        '422': { description: Campo no publicado por M06 }
+  /api/v1/vouchers/{voucher}/release:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: releaseVoucher
+      summary: Libera un vale con todas las comprobaciones físicas declaradas
+      x-permission: vouchers.release
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherReleaseInput' }
+      responses:
+        '200': { description: Vale liberado sin movimiento de línea }
+        '409': { description: 'Corrección pendiente, versión o elegibilidad inválida' }
+  /api/v1/vouchers/{voucher}/reject:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: rejectVoucher
+      summary: Rechaza un vale desde validación y libera la ocupación de restricción
+      x-permission: vouchers.reject
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherRejectInput' }
+      responses:
+        '200': { description: Vale rechazado sin consumir línea ni restricción }
+        '409': { description: Estado o versión incompatibles }
+  /api/v1/vouchers/{voucher}/fulfill:
+    parameters:
+      - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: fulfillVoucher
+      summary: Registra el depósito externo y consume exactamente el capital
+      x-permission: vouchers.fulfill
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherFulfillInput' }
+      responses:
+        '200': { description: 'Un feriado, un movimiento y una respuesta idempotente' }
+        '409': { description: 'Transacción duplicada, saldo insuficiente o versión incompatible' }
+  /api/v1/modification-requests:
+    get:
+      operationId: listVoucherModificationRequests
+      summary: Lista solicitudes según alcance de autoridad
+      x-permission: voucher_modifications.view
+      parameters:
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/DataChangeRequestStatus' } }
+        - { name: voucher_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Página de solicitudes autorizadas por alcance }
+  /api/v1/modification-requests/{request}:
+    parameters:
+      - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      operationId: getVoucherModificationRequest
+      summary: Consulta una solicitud sin volver a exponer el token
+      x-permission: voucher_modifications.view
+      responses:
+        '200': { description: Solicitud visible dentro del alcance }
+        '404': { description: Solicitud inexistente o fuera de alcance }
+  /api/v1/modification-requests/{request}/authorize:
+    parameters:
+      - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: authorizeVoucherModification
+      summary: Autoriza con reautenticación y muestra el token una sola vez
+      x-permission: voucher_modifications.decide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherModificationDecisionInput' }
+      responses:
+        '200': { description: Token de cinco minutos mostrado solo en la primera respuesta }
+        '403': { description: 'Autoridad, alcance o reautenticación inválidos' }
+  /api/v1/modification-requests/{request}/reject:
+    parameters:
+      - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: rejectVoucherModification
+      summary: Rechaza una solicitud conservando el vale en corrección pendiente
+      x-permission: voucher_modifications.decide
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherModificationDecisionInput' }
+      responses:
+        '200': { description: Solicitud rechazada sin token }
+        '409': { description: La solicitud ya fue decidida }
+  /api/v1/modification-requests/{request}/apply:
+    parameters:
+      - { name: request, in: path, required: true, schema: { type: string, format: uuid } }
+      - $ref: '#/components/parameters/IdempotencyKey'
+      - $ref: '#/components/parameters/XRequestId'
+    post:
+      operationId: applyVoucherModification
+      summary: Aplica exclusivamente los campos autorizados mediante M06
+      x-permission: voucher_modifications.apply
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherModificationApplyInput' }
+      responses:
+        '200': { description: Token consumido y vale nuevamente en validación }
+        '409': { description: 'Token inválido, vencido, usado o fuera de alcance' }
+  /api/v1/bank-imports:
+    get:
+      operationId: listBankImports
+      summary: Lista importaciones bancarias dentro del alcance efectivo
+      responses:
+        '200': { description: Importaciones paginadas }
+        '403': { description: Rol o alcance insuficiente }
+    post:
+      operationId: receiveBankImport
+      summary: Recibe un archivo bancario para validación asíncrona
+      description: Se mantiene bloqueado con BANK_FILE_CONTRACT_UNDEFINED hasta publicar el formato bancario exacto.
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [file, business_date]
+              properties:
+                file: { type: string, format: binary }
+                business_date: { type: string, format: date }
+      responses:
+        '202': { description: Archivo privado recibido y validación encolada }
+        '403': { description: Solo la cajera de la sucursal puede cargar }
+        '422': { description: Archivo o fecha inválidos }
+        '503': { description: Formato bancario productivo todavía no definido }
+  /api/v1/bank-imports/{id}:
+    get:
+      operationId: getBankImport
+      summary: Consulta estado y contadores de una importación
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Importación visible }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/bank-imports/{id}/movements:
+    get:
+      operationId: listBankImportMovements
+      summary: Lista las filas y resultados de una importación
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Movimientos paginados }
+        '404': { description: Importación fuera de alcance }
+  /api/v1/bank-imports/{id}/retry:
+    post:
+      operationId: retryBankImport
+      summary: Reintenta una importación fallida sin reemplazar el archivo
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentReasonedMutation' }
+      responses:
+        '202': { description: Reintento encolado }
+        '409': { description: Estado no reintentable o conflicto de versión }
+        '503': { description: Contrato de relaciones o archivo no disponible }
+  /api/v1/bank-movements:
+    get:
+      operationId: listBankMovements
+      summary: Lista movimientos bancarios por sucursal y filtros permitidos
+      responses:
+        '200': { description: Movimientos paginados }
+        '403': { description: Rol sin acceso operativo }
+  /api/v1/bank-movements/{id}:
+    get:
+      operationId: getBankMovement
+      summary: Consulta trazabilidad segura de un movimiento
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Movimiento y aplicación visible }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/relations/{id}/payments:
+    get:
+      operationId: listRelationPayments
+      summary: Lista aplicaciones inmutables de una relación
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Aplicaciones paginadas }
+        '404': { description: Relación fuera de alcance }
+        '503': { description: M10 todavía no publica autorización de lectura de relación }
+  /api/v1/payment-allocations/{id}:
+    get:
+      operationId: getPaymentAllocation
+      summary: Consulta el desglose financiero aplicado
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Aplicación y partidas visibles }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/clarifications:
+    get:
+      operationId: listPaymentClarifications
+      summary: Lista aclaraciones por propiedad, asignación, sucursal o alcance global
+      responses:
+        '200': { description: Aclaraciones paginadas }
+        '403': { description: Permiso o alcance insuficiente }
+    post:
+      operationId: registerPaymentClarification
+      summary: Registra una aclaración propia con comprobante privado
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema: { $ref: '#/components/schemas/ClarificationInput' }
+      responses:
+        '201': { description: Aclaración registrada sin modificar saldos }
+        '403': { description: Solo la distribuidora propietaria }
+        '503': { description: M10 o M18 todavía no disponible }
+  /api/v1/clarifications/{id}:
+    get:
+      operationId: getPaymentClarification
+      summary: Consulta una aclaración visible
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Aclaración sin ruta interna de evidencia }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/clarifications/{id}/link-movement:
+    post:
+      operationId: linkUnreconciledMovement
+      summary: Vincula un movimiento disponible sin aplicarlo
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentLinkMovement' }
+      responses:
+        '200': { description: Movimiento vinculado para revisión }
+        '409': { description: Movimiento o aclaración en estado incompatible }
+        '503': { description: Contratos autoritativos todavía no disponibles }
+  /api/v1/clarifications/{id}/reject:
+    post:
+      operationId: rejectPaymentClarification
+      summary: Rechaza una aclaración con motivo sin modificar saldos
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentReasonedMutation' }
+      responses:
+        '200': { description: Aclaración rechazada }
+        '409': { description: Aclaración en estado incompatible }
+        '503': { description: Flujo bloqueado hasta completar contratos propietarios }
+  /api/v1/manual-reconciliations:
+    get:
+      operationId: listManualReconciliations
+      summary: Lista solicitudes manuales por alcance
+      responses:
+        '200': { description: Solicitudes paginadas }
+        '403': { description: Permiso o alcance insuficiente }
+    post:
+      operationId: requestManualReconciliation
+      summary: Prepara y solicita conciliación manual
+      parameters:
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentManualReconciliation' }
+      responses:
+        '201': { description: Solicitud pendiente de autorización }
+        '422': { description: Solicitud o evidencia inválida }
+        '503': { description: 'M10, M18 o autorización crítica no disponibles' }
+  /api/v1/manual-reconciliations/{id}:
+    get:
+      operationId: getManualReconciliation
+      summary: Consulta una solicitud manual visible
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Solicitud visible }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/manual-reconciliations/{id}/authorize:
+    post:
+      operationId: authorizeManualReconciliation
+      summary: Autoriza una solicitud con reautenticación y separación de funciones
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentReasonedMutation' }
+      responses:
+        '200': { description: Autorización vinculada una sola vez }
+        '403': { description: Autoridad o alcance insuficiente }
+        '503': { description: Contrato crítico todavía no integrado }
+  /api/v1/manual-reconciliations/{id}/reject:
+    post:
+      operationId: rejectManualReconciliation
+      summary: Rechaza una solicitud manual con motivo
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentReasonedMutation' }
+      responses:
+        '200': { description: Solicitud rechazada }
+        '409': { description: Solicitud en estado incompatible }
+        '503': { description: Contrato crítico todavía no integrado }
+  /api/v1/manual-reconciliations/{id}/apply:
+    post:
+      operationId: applyManualReconciliation
+      summary: Ejecuta como cajera una autorización válida de un solo uso
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/PaymentReasonedMutation' }
+      responses:
+        '200': { description: Pago aplicado atómicamente }
+        '409': { description: 'Autorización vencida, consumida o datos distintos' }
+        '503': { description: Contrato de relación no disponible }
+  /api/v1/excess-balances:
+    get:
+      operationId: listExcessBalances
+      summary: Lista excedentes dentro del alcance administrativo
+      responses:
+        '200': { description: Excedentes paginados }
+        '403': { description: Permiso o alcance insuficiente }
+  /api/v1/excess-balances/{id}:
+    get:
+      operationId: getExcessBalance
+      summary: Consulta un excedente dentro del alcance administrativo
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Detalle del excedente }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/excess-balances/{id}/applications:
+    get:
+      operationId: listExcessApplications
+      summary: Lista aplicaciones inmutables del excedente
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Aplicaciones paginadas }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/me/excess-balances:
+    get:
+      operationId: listOwnExcessBalances
+      summary: Lista los excedentes de la distribuidora autenticada
+      responses:
+        '200': { description: Excedentes propios paginados }
+        '403': { description: La cuenta no es una distribuidora autorizada }
+  /api/v1/me/excess-balances/{id}:
+    get:
+      operationId: getOwnExcessBalance
+      summary: Consulta un excedente propio
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Detalle propio }
+        '404': { description: No pertenece a la distribuidora autenticada o no existe }
+  /api/v1/me/excess-balances/{id}/credit-balance:
+    post:
+      operationId: chooseOwnExcessAsCreditBalance
+      summary: Conserva el excedente completo como saldo a favor
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/ExcessVersionedMutation' }
+      responses:
+        '200':
+          description: Excedente disponible como saldo a favor
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ExcessBalanceResponse' }
+        '404': { description: No pertenece a la distribuidora autenticada }
+        '409': { description: 'Versión, idempotencia o decisión incompatible' }
+  /api/v1/me/excess-balances/{id}/refund-requests:
+    post:
+      operationId: requestOwnExcessRefund
+      summary: Reserva todo el excedente y solicita devolución
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/ExcessRefundRequest' }
+      responses:
+        '201': { description: Importe completo reservado para devolución }
+        '409': { description: Excedente o importe no disponible }
+  /api/v1/me/refund-requests:
+    get:
+      operationId: listOwnRefundRequests
+      summary: Lista solicitudes de la distribuidora autenticada
+      responses:
+        '200': { description: Solicitudes propias paginadas }
+        '403': { description: La cuenta no es una distribuidora autorizada }
+  /api/v1/me/refund-requests/{id}:
+    get:
+      operationId: getOwnRefundRequest
+      summary: Consulta una solicitud propia
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Detalle de la solicitud propia }
+        '404': { description: Fuera de propiedad o inexistente }
+  /api/v1/refund-requests:
+    get:
+      operationId: listScopedRefundRequests
+      summary: Lista solicitudes dentro del alcance operativo
+      responses:
+        '200': { description: Solicitudes paginadas }
+        '403': { description: Permiso o alcance insuficiente }
+  /api/v1/refund-requests/{id}:
+    get:
+      operationId: getScopedRefundRequest
+      summary: Consulta una solicitud dentro del alcance operativo
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: Detalle de la solicitud }
+        '404': { description: Fuera de alcance o inexistente }
+  /api/v1/refund-requests/{id}/authorize:
+    post:
+      operationId: authorizeExcessRefund
+      summary: Autoriza gerencialmente una devolución sin ejecutarla
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/ExcessRefundDecision' }
+      responses:
+        '200': { description: Devolución autorizada y todavía reservada }
+        '403': { description: 'Reautenticación, rol o alcance insuficiente' }
+        '409': { description: Solicitud en estado incompatible }
+  /api/v1/refund-requests/{id}/reject:
+    post:
+      operationId: rejectExcessRefund
+      summary: Rechaza una devolución sin liberar ni reclasificar la reserva
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/ExcessRefundDecision' }
+      responses:
+        '200': { description: Solicitud rechazada; reserva conservada }
+        '403': { description: 'Reautenticación, rol o alcance insuficiente' }
+        '409': { description: Solicitud en estado incompatible }
+  /api/v1/refund-requests/{id}/complete:
+    post:
+      operationId: completeExcessRefund
+      summary: Registra como cajera la ejecución externa ya autorizada
+      parameters:
+        - { $ref: '#/components/parameters/PublicId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody: { $ref: '#/components/requestBodies/ExcessRefundCompletion' }
+      responses:
+        '200': { description: Devolución completada una sola vez }
+        '403': { description: La cajera está fuera de la sucursal }
+        '409': { description: Solicitud o reserva en estado incompatible }
+        '503': { description: 'Métodos, campos o evidencia todavía no definidos' }
+  /api/v1/refund-requests/{id}/evidence:
+    get:
+      operationId: accessExcessRefundEvidence
+      summary: Obtiene acceso temporal autorizado al comprobante privado
+      parameters: [{ $ref: '#/components/parameters/PublicId' }]
+      responses:
+        '200': { description: URL temporal no permanente }
+        '403': { description: Sin permiso de evidencia }
+        '404': { description: Evidencia inexistente dentro del alcance }
+        '503': { description: Contrato privado de archivos todavía no disponible }
+  /api/v1/me/points:
+    get:
+      operationId: getOwnPointBalance
+      summary: Consulta la cuenta de puntos de la distribuidora autenticada
+      responses:
+        '200':
+          description: Saldo entero, equivalencia informativa y periodo vigente
+          content:
+            application/json:
+              example:
+                data:
+                  distributor_id: 7db1dc52-1b2c-4b23-8f74-9c6fa7766f22
+                  total_points: 120
+                  reserved_points: 30
+                  available_points: 90
+                  current_point_value: '2.00'
+                  available_cash_equivalent: '180.00'
+                  redemption_open: false
+                  redemption_period: null
+        '403': { description: Ruta exclusiva de distribuidora }
+  /api/v1/me/points/movements:
+    get:
+      operationId: listOwnPointMovements
+      summary: Lista paginada del libro propio
+      parameters:
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: type, in: query, schema: { type: string, enum: [EARNED, LATE_PAYMENT_PENALTY, REDEEMED] } }
+        - { name: relation_id, in: query, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Movimientos ordenados por fecha e identificador }
+        '401': { description: Sesión requerida }
+  /api/v1/distributors/{distributor}/points:
+    get:
+      operationId: getDistributorPointBalance
+      summary: Consulta autorizada de una cuenta
+      parameters:
+        - { name: distributor, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Cuenta dentro del alcance }
+        '404': { description: Cuenta inexistente dentro del alcance }
+  /api/v1/distributors/{distributor}/points/movements:
+    get:
+      operationId: listDistributorPointMovements
+      summary: Libro paginado autorizado
+      parameters:
+        - { name: distributor, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Movimientos dentro del alcance }
+        '404': { description: Distribuidora fuera del alcance }
+  /api/v1/relations/{relation}/points:
+    get:
+      operationId: getRelationPointEvaluation
+      summary: Consulta la evaluación final y sus movimientos
+      parameters:
+        - { name: relation, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: 'Snapshot, resultado y libro asociado' }
+        '404': { description: Relación sin evaluación visible }
+  /api/v1/point-redemption-periods/current:
+    get:
+      operationId: getCurrentPointRedemptionPeriod
+      summary: Consulta el periodo publicado y vigente
+      responses:
+        '200': { description: Periodo vigente o data null cuando el canje está cerrado }
+        '401': { description: Sesión requerida }
+  /api/v1/point-redemption-periods:
+    get:
+      operationId: listPointRedemptionPeriods
+      summary: Lista periodos conforme al alcance
+      responses:
+        '200': { description: Lista paginada }
+        '403': { description: Alcance insuficiente }
+    post:
+      operationId: createPointRedemptionPeriod
+      summary: Crea un borrador como gerente general
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, starts_at, ends_at]
+              properties:
+                name: { type: string, maxLength: 160 }
+                description: { type: [string, 'null'], maxLength: 2000 }
+                starts_at: { type: string, format: date-time }
+                ends_at: { type: string, format: date-time }
+                reason: { type: [string, 'null'], maxLength: 1000 }
+      responses:
+        '201': { description: Borrador creado }
+        '403': { description: Solo gerente general }
+        '422': { description: Vigencia inválida }
+  /api/v1/point-redemption-periods/{period}/publish:
+    post:
+      operationId: publishPointRedemptionPeriod
+      summary: Publica un periodo con reautenticación
+      parameters:
+        - { name: period, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 150 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [reauthentication_token]
+              properties:
+                reauthentication_token: { type: string, writeOnly: true, minLength: 64, maxLength: 64 }
+                reason: { type: [string, 'null'], maxLength: 1000 }
+      responses:
+        '200': { description: Periodo publicado }
+        '403': { description: Autoridad o reautenticación insuficiente }
+        '409': { description: Estado o idempotencia en conflicto }
+  /api/v1/me/point-redemptions:
+    get:
+      operationId: listOwnPointRedemptions
+      summary: Lista solicitudes propias
+      description: La creación no se publica hasta definir si el canje es total o parcial.
+      responses:
+        '200': { description: Lista paginada }
+        '401': { description: Sesión requerida }
+  /api/v1/point-redemptions:
+    get:
+      operationId: listPointRedemptions
+      summary: Bandeja autorizada de solicitudes
+      responses:
+        '200': { description: Lista paginada y limitada por alcance }
+        '403': { description: Rol sin bandeja }
+  /api/v1/point-redemptions/{redemption}/authorize:
+    post:
+      operationId: authorizePointRedemption
+      summary: Autoriza y congela puntos, versión, valor e importe
+      parameters:
+        - { name: redemption, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 150 } }
+      responses:
+        '200': { description: Solicitud autorizada; la reserva continúa activa }
+        '403': { description: Alcance o reautenticación insuficiente }
+        '409': { description: 'Estado, reserva o idempotencia en conflicto' }
+  /api/v1/point-redemptions/{redemption}/reject:
+    post:
+      operationId: rejectPointRedemption
+      summary: Rechaza y libera la reserva atómicamente
+      parameters:
+        - { name: redemption, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 150 } }
+      responses:
+        '200': { description: Solicitud rechazada sin movimiento REDEEMED }
+        '403': { description: Alcance o reautenticación insuficiente }
+        '409': { description: 'Estado, reserva o idempotencia en conflicto' }
+  /api/v1/points-runs:
+    get:
+      operationId: listPointsRuns
+      summary: Lista ejecuciones técnicas para consulta global
+      responses:
+        '200': { description: Ejecuciones paginadas }
+        '404': { description: Fuera del alcance global }
+  /api/v1/risk/distributors:
+    get:
+      operationId: listDistributorRiskProfiles
+      summary: Lista perfiles de riesgo dentro del alcance
+      parameters:
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: coordinator_id, in: query, schema: { type: string, format: uuid } }
+        - { name: delinquency_status, in: query, schema: { $ref: '#/components/schemas/DelinquencyStatus' } }
+        - { name: consecutive_breaches, in: query, schema: { type: integer, minimum: 0 } }
+      responses:
+        '200': { description: Perfiles paginados y filtrados en base de datos }
+        '403': { description: Rol o permiso insuficiente }
+  /api/v1/risk/distributors/{distributor}:
+    get:
+      operationId: getDistributorRiskProfile
+      summary: Consulta el perfil de riesgo de una distribuidora
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Perfil visible }
+        '404': { description: Inexistente o fuera de alcance }
+  /api/v1/risk/distributors/{distributor}/evaluations:
+    get:
+      operationId: listDistributorRiskEvaluations
+      summary: Lista evaluaciones financieras versionadas
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Evaluaciones paginadas }
+        '404': { description: Distribuidora fuera de alcance }
+  /api/v1/risk/distributors/{distributor}/sequence:
+    get:
+      operationId: getDistributorRiskSequence
+      summary: Consulta la secuencia vigente o histórica más reciente
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Secuencia con relaciones trazables }
+        '404': { description: Distribuidora inexistente o fuera de alcance }
+  /api/v1/risk/distributors/{distributor}/alerts:
+    get:
+      operationId: listDistributorRiskAlerts
+      summary: Lista alertas de la distribuidora
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Alertas paginadas con evidencia }
+        '404': { description: Distribuidora inexistente o fuera de alcance }
+  /api/v1/risk/alerts/{alert}:
+    get:
+      operationId: getRiskAlert
+      summary: Consulta una alerta visible
+      parameters: [{ $ref: '#/components/parameters/RiskAlertId' }]
+      responses:
+        '200': { description: Alerta y relaciones de evidencia }
+        '404': { description: Inexistente o fuera de alcance }
+  /api/v1/risk/alerts/{alert}/review:
+    get:
+      operationId: getRiskAlertReview
+      summary: Consulta partidas, pagos y conciliaciones mediante M10 y M11
+      parameters: [{ $ref: '#/components/parameters/RiskAlertId' }]
+      responses:
+        '200': { description: Revisión financiera autoritativa }
+        '409': { description: Contrato financiero definitivo todavía no disponible }
+  /api/v1/risk/alerts/{alert}/apply-delinquency:
+    post:
+      operationId: applyDistributorDelinquency
+      summary: Confirma manualmente la morosidad y activa el bloqueo
+      parameters:
+        - { $ref: '#/components/parameters/RiskAlertId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskDecisionInput' } } }
+      responses:
+        '201': { description: Decisión inmutable y bloqueo creados atómicamente }
+        '403': { description: 'Rol, permiso, alcance o reautenticación inválidos' }
+        '409': { description: 'Estado, concurrencia o idempotencia incompatible' }
+  /api/v1/delinquency/removal-requests:
+    get:
+      operationId: listDelinquencyRemovalRequests
+      summary: Lista solicitudes de retiro dentro del alcance
+      responses:
+        '200': { description: Solicitudes paginadas }
+        '403': { description: Rol o permiso insuficiente }
+  /api/v1/delinquency/removal-requests/{removalRequest}:
+    get:
+      operationId: getDelinquencyRemovalRequest
+      summary: Consulta una solicitud de retiro
+      parameters: [{ $ref: '#/components/parameters/RemovalRequestId' }]
+      responses:
+        '200': { description: Solicitud visible }
+        '404': { description: Inexistente o fuera de alcance }
+  /api/v1/delinquency/distributors/{distributor}/removal-requests:
+    post:
+      operationId: prepareDelinquencyRemoval
+      summary: El coordinador responsable prepara el retiro sin desbloquear
+      parameters:
+        - { $ref: '#/components/parameters/DistributorId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        content: { application/json: { schema: { $ref: '#/components/schemas/RemovalPreparationInput' } } }
+      responses:
+        '201': { description: Solicitud preparada con saldo vencido cero }
+        '403': { description: Coordinador no asignado }
+        '409': { description: Estado financiero o solicitud activa incompatible }
+  /api/v1/delinquency/removal-requests/{removalRequest}/approve:
+    post:
+      operationId: approveDelinquencyRemoval
+      summary: Confirma el retiro y elimina el bloqueo
+      parameters:
+        - { $ref: '#/components/parameters/RemovalRequestId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskDecisionInput' } } }
+      responses:
+        '201': { description: Morosidad retirada y bloqueo eliminado }
+        '409': { description: 'Saldo no cero, estado o concurrencia incompatible' }
+  /api/v1/delinquency/removal-requests/{removalRequest}/reject:
+    post:
+      operationId: rejectDelinquencyRemoval
+      summary: Rechaza el retiro y conserva el bloqueo
+      parameters:
+        - { $ref: '#/components/parameters/RemovalRequestId' }
+        - { $ref: '#/components/parameters/IdempotencyKey' }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/RiskDecisionInput' } } }
+      responses:
+        '201': { description: Solicitud rechazada; morosidad vigente }
+        '409': { description: Estado o concurrencia incompatible }
+
+  /api/v1/reports:
+    get:
+      operationId: listAvailableReports
+      summary: Lista únicamente los reportes autorizados para el actor
+      responses:
+        '200':
+          description: Catálogo cerrado autorizado
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReportDefinition' }
+        '403': { description: El rol no tiene acceso al catálogo general }
+        '429': { description: Límite técnico excedido }
+  /api/v1/reports/{code}/definition:
+    get:
+      operationId: getReportDefinition
+      summary: Obtiene el contrato público autorizado de un reporte
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ReportCode' }
+      responses:
+        '200':
+          description: Definición autorizada
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReportDefinitionEnvelope' } } }
+        '403': { description: Reporte fuera del permiso del actor }
+        '404': { description: Código inexistente o no publicado }
+  /api/v1/reports/{code}:
+    get:
+      operationId: executeSynchronousReport
+      summary: Ejecuta una consulta JSON acotada con alcance de sesión
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ReportCode' }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+        - { name: sort, in: query, schema: { type: string } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc] } }
+      responses:
+        '200':
+          description: Filas, paginación y resumen con el mismo alcance
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReportResponse' } } }
+        '403': { description: Permiso o alcance denegado }
+        '422': { description: 'Filtro, intervalo u ordenamiento inválido' }
+        '503': { description: El módulo propietario aún no publicó el adaptador autoritativo }
+  /api/v1/reports/{code}/runs:
+    post:
+      operationId: createReportRun
+      summary: Solicita idempotentemente una corrida asíncrona
+      parameters:
+        - name: code
+          in: path
+          required: true
+          schema: { $ref: '#/components/schemas/ReportCode' }
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, minLength: 1, maxLength: 128 }
+      requestBody:
+        content:
+          application/json:
+            schema: { type: object, additionalProperties: true }
+      responses:
+        '202':
+          description: Corrida encolada
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReportRunEnvelope' } } }
+        '200': { description: Repetición idempotente de la misma corrida }
+        '409': { description: Clave reutilizada con parámetros diferentes }
+        '422': { description: Parámetros inválidos }
+  /api/v1/report-runs:
+    get:
+      operationId: listMyReportRuns
+      summary: Lista corridas pertenecientes al actor autenticado
+      responses:
+        '200':
+          description: Corridas paginadas
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/ReportRun' }
+        '403': { description: El rol no tiene acceso a corridas de reportes }
+  /api/v1/report-runs/{run}:
+    get:
+      operationId: getReportRun
+      summary: Consulta metadatos de una corrida propia
+      parameters:
+        - { name: run, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Estado y metadatos
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReportRunEnvelope' } } }
+        '404': { description: Corrida inexistente o ajena }
+  /api/v1/report-runs/{run}/results:
+    get:
+      operationId: getReportRunResults
+      summary: Consulta el resultado temporal paginado de una corrida propia
+      parameters:
+        - { name: run, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 25 } }
+      responses:
+        '200':
+          description: Resultado protegido paginado
+          content: { application/json: { schema: { $ref: '#/components/schemas/ReportResponse' } } }
+        '404': { description: Corrida inexistente o ajena }
+        '409': { description: Corrida pendiente o fallida }
+        '410': { description: Resultado expirado }
+
 components:
   securitySchemes:
     bearerAuth: { type: http, scheme: bearer }
   parameters:
     PublicId:
       name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RiskAlertId:
+      name: alert
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RemovalRequestId:
+      name: removalRequest
       in: path
       required: true
       schema: { type: string, format: uuid }
@@ -1012,7 +1960,176 @@ components:
         application/json:
           schema:
             $ref: '#/components/schemas/ReasonActionRequest'
+    PaymentReasonedMutation:
+      required: true
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/PaymentReasonedMutationInput'
+    PaymentLinkMovement:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [bank_movement_id, lock_version]
+            properties:
+              bank_movement_id: { type: string, format: uuid }
+              lock_version: { type: integer, minimum: 1 }
+              authorization_id: { type: [string, 'null'], maxLength: 160 }
+    PaymentManualReconciliation:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [bank_movement_id, relation_id, reason, evidence]
+            properties:
+              bank_movement_id: { type: string, format: uuid }
+              relation_id: { type: string, maxLength: 128 }
+              clarification_id: { type: [string, 'null'], format: uuid }
+              reason: { type: string, minLength: 10, maxLength: 2000 }
+              evidence: { type: string, format: binary }
+              authorization_id: { type: [string, 'null'], maxLength: 160 }
+    ExcessVersionedMutation:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [lock_version]
+            properties:
+              lock_version: { type: integer, minimum: 1 }
+    ExcessRefundRequest:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [lock_version]
+            properties:
+              lock_version: { type: integer, minimum: 1 }
+              reason: { type: [string, 'null'], minLength: 3, maxLength: 1000 }
+    ExcessRefundDecision:
+      required: true
+      content:
+        application/json:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [lock_version, reauthentication_token]
+            properties:
+              lock_version: { type: integer, minimum: 1 }
+              reauthentication_token: { type: string, minLength: 32, maxLength: 512 }
+              reason: { type: [string, 'null'], minLength: 3, maxLength: 1000 }
+    ExcessRefundCompletion:
+      required: true
+      content:
+        multipart/form-data:
+          schema:
+            type: object
+            additionalProperties: false
+            required: [refund_date, method, reference, lock_version]
+            properties:
+              refund_date: { type: string, format: date }
+              method: { type: string, maxLength: 80 }
+              reference: { type: string, maxLength: 160 }
+              evidence: { type: string, format: binary }
+              method_fields: { type: object, maxProperties: 50 }
+              lock_version: { type: integer, minimum: 1 }
   schemas:
+    DelinquencyStatus:
+      type: string
+      enum: [NOT_DELINQUENT, DELINQUENT, REGULARIZED_PENDING_REMOVAL]
+    RiskDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [reauthentication_token]
+      properties:
+        reauthentication_token: { type: string, writeOnly: true, maxLength: 512 }
+        reason: { type: [string, 'null'], maxLength: 1000 }
+    RemovalPreparationInput:
+      type: object
+      additionalProperties: false
+      properties:
+        reason: { type: [string, 'null'], maxLength: 1000 }
+    ExcessBalanceResponse:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ExcessBalance' }
+    ExcessBalance:
+      type: object
+      additionalProperties: false
+      required:
+        - id
+        - folio
+        - estado
+        - relacion_origen
+        - importe_original
+        - importe_pendiente_decision
+        - saldo_a_favor_disponible
+        - importe_reservado
+        - importe_aplicado
+        - importe_devuelto
+        - moneda
+        - acciones_permitidas
+      properties:
+        id: { type: string, format: uuid }
+        folio: { type: string, maxLength: 32 }
+        estado:
+          type: string
+          enum:
+            - PENDIENTE_DECISION
+            - SALDO_A_FAVOR
+            - APLICADO_PARCIAL
+            - APLICADO_TOTAL
+            - DEVOLUCION_PENDIENTE
+            - DEVUELTO
+        relacion_origen:
+          type: object
+          required: [id, folio]
+          properties:
+            id: { type: string, maxLength: 128 }
+            folio: { type: [string, 'null'] }
+        importe_original: { type: string, pattern: '^\d+\.\d{2}$' }
+        importe_pendiente_decision: { type: string, pattern: '^\d+\.\d{2}$' }
+        saldo_a_favor_disponible: { type: string, pattern: '^\d+\.\d{2}$' }
+        importe_reservado: { type: string, pattern: '^\d+\.\d{2}$' }
+        importe_aplicado: { type: string, pattern: '^\d+\.\d{2}$' }
+        importe_devuelto: { type: string, pattern: '^\d+\.\d{2}$' }
+        moneda: { type: string, const: MXN }
+        fecha_pago_origen: { type: [string, 'null'], format: date }
+        lock_version: { type: integer, minimum: 1 }
+        acciones_permitidas:
+          type: array
+          items:
+            type: string
+            enum: [ELEGIR_SALDO_A_FAVOR, SOLICITAR_DEVOLUCION]
+    PaymentReasonedMutationInput:
+      type: object
+      additionalProperties: false
+      required: [reason, lock_version]
+      properties:
+        reason: { type: string, minLength: 10, maxLength: 2000 }
+        lock_version: { type: integer, minimum: 1 }
+        authorization_id: { type: [string, 'null'], maxLength: 160 }
+    ClarificationInput:
+      type: object
+      additionalProperties: false
+      required: [reported_amount, reported_date, reported_reference, description, evidence]
+      properties:
+        relation_id: { type: [string, 'null'], maxLength: 128 }
+        reported_amount: { type: string, pattern: '^\d{1,14}(\.\d{1,4})?$' }
+        reported_date: { type: string, format: date }
+        reported_reference: { type: string, maxLength: 255 }
+        reported_bank_folio: { type: [string, 'null'], maxLength: 160 }
+        description: { type: string, minLength: 10, maxLength: 2000 }
+        evidence: { type: string, format: binary }
     Money:
       type: string
       pattern: '^\d+\.\d{2}$'
@@ -1264,6 +2381,90 @@ components:
         - clients.portfolio.view.own
         - clients.portfolio.write.own
         - clients.assignment.apply_internal
+        - configuration.view.current
+        - configuration.view.history
+        - configuration.manage
+        - configuration.publish
+        - configuration.category.view
+        - configuration.category.manage
+        - configuration.category.publish
+        - configuration.product.view
+        - configuration.product.manage
+        - configuration.product.publish
+        - configuration.redemption_period.view
+        - configuration.redemption_period.manage
+        - vouchers.view
+        - vouchers.open_at_counter
+        - vouchers.release
+        - vouchers.reject
+        - vouchers.fulfill
+        - voucher_modifications.request
+        - voucher_modifications.apply
+        - voucher_modifications.view
+        - voucher_modifications.decide
+        - payments.view.own
+        - payments.view.branch
+        - payments.view.assigned
+        - payments.view.global
+        - bank_imports.upload
+        - bank_imports.retry.branch
+        - bank_imports.retry.global
+        - clarifications.create.own
+        - clarifications.review.branch
+        - manual_reconciliations.request
+        - manual_reconciliations.authorize.assigned
+        - manual_reconciliations.authorize.branch
+        - manual_reconciliations.authorize.global
+        - manual_reconciliations.apply
+        - excess_balances.decide.own
+        - excess_balances.view.own
+        - excess_balances.view.branch
+        - excess_balances.view.assigned
+        - excess_balances.view.global
+        - refunds.view.own
+        - refunds.view.branch
+        - refunds.view.assigned
+        - refunds.view.global
+        - refunds.authorize.branch
+        - refunds.authorize.global
+        - refunds.complete
+        - refunds.evidence.view
+        - payment_evidence.view
+        - points.view.own
+        - points.view.branch
+        - points.view.assigned
+        - points.view.global
+        - points.redemptions.decide.branch
+        - points.redemptions.decide.global
+        - points.runs.view.global
+        - risk.view.own
+        - risk.view.assigned
+        - risk.view.branch
+        - risk.view.global
+        - risk.block.view.branch
+        - delinquency.apply.branch
+        - delinquency.apply.global
+        - delinquency.removal.prepare
+        - delinquency.removal.decide.branch
+        - delinquency.removal.decide.global
+        - mobility.view.own
+        - mobility.view.assigned
+        - mobility.view.branch
+        - mobility.view.global
+        - mobility.transfer.create.own
+        - mobility.transfer.respond.own
+        - mobility.transfer.authorize.assigned
+        - mobility.reassign.branch
+        - mobility.reassign.global
+        - mobility.branch_change.branch
+        - mobility.branch_change.global
+        - mobility.coordinator_reassign.branch
+        - mobility.coordinator_reassign.global
+        - mobility.assignment.view.branch
+        - reports.view.own
+        - reports.view.assigned
+        - reports.view.branch
+        - reports.view.global
     AccountState:
       type: string
       enum:
@@ -1748,3 +2949,204 @@ components:
         informational_status: { type: string, enum: [PENDING, PARTIAL, PAID] }
         note: { type: [string, 'null'], maxLength: 1000 }
         lock_version: { type: integer, minimum: 1 }
+    VoucherStatus:
+      type: string
+      enum: [GENERADO, VALIDACION_CAJA, CORRECCION_PENDIENTE, LIBERADO, FERIADO, RECHAZADO, CANCELADO]
+    DataChangeRequestStatus:
+      type: string
+      enum: [PENDIENTE, AUTORIZADO, RECHAZADO, USADO, VENCIDO]
+    VersionedVoucherAction:
+      type: object
+      additionalProperties: false
+      required: [lock_version]
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+    VoucherModificationRequestInput:
+      type: object
+      additionalProperties: false
+      required: [fields, reason, lock_version]
+      properties:
+        fields:
+          type: array
+          minItems: 1
+          maxItems: 20
+          uniqueItems: true
+          items: { type: string, maxLength: 160 }
+        reason: { type: string, maxLength: 500 }
+        lock_version: { type: integer, minimum: 1 }
+    VoucherModificationDecisionInput:
+      type: object
+      additionalProperties: false
+      required: [decision_reason, reauthentication_token, lock_version]
+      properties:
+        decision_reason: { type: string, maxLength: 500 }
+        reauthentication_token: { type: string, writeOnly: true, maxLength: 512 }
+        lock_version: { type: integer, minimum: 1 }
+    VoucherModificationApplyInput:
+      type: object
+      additionalProperties: false
+      required: [token, changes, lock_version]
+      properties:
+        token: { type: string, writeOnly: true, maxLength: 512 }
+        changes:
+          type: object
+          minProperties: 1
+          maxProperties: 20
+          additionalProperties:
+            type: object
+            additionalProperties: false
+            required: [value]
+            properties:
+              value: {}
+        lock_version: { type: integer, minimum: 1 }
+    VoucherReleaseInput:
+      type: object
+      additionalProperties: false
+      required: [checks, lock_version]
+      properties:
+        checks:
+          type: object
+          additionalProperties: false
+          required: [identity_verified, address_verified, identification_verified, proof_of_address_verified, bank_account_verified]
+          properties:
+            identity_verified: { type: boolean, const: true }
+            address_verified: { type: boolean, const: true }
+            identification_verified: { type: boolean, const: true }
+            proof_of_address_verified: { type: boolean, const: true }
+            bank_account_verified: { type: boolean, const: true }
+        lock_version: { type: integer, minimum: 1 }
+    VoucherRejectInput:
+      type: object
+      additionalProperties: false
+      required: [reason_code, description, lock_version]
+      properties:
+        reason_code:
+          type: string
+          enum: [IDENTITY_MISMATCH, DOCUMENTS_MISMATCH, BANK_ACCOUNT_MISMATCH, INFORMATION_MISMATCH]
+        description: { type: string, maxLength: 500 }
+        lock_version: { type: integer, minimum: 1 }
+    VoucherFulfillInput:
+      type: object
+      additionalProperties: false
+      required: [transaction_number, lock_version]
+      properties:
+        transaction_number: { type: string, writeOnly: true, maxLength: 255 }
+        lock_version: { type: integer, minimum: 1 }
+    VoucherResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          required: [voucher_id, folio, type, status, capital, lock_version]
+          properties:
+            voucher_id: { type: string, format: uuid }
+            folio: { type: string }
+            type: { type: string }
+            status: { $ref: '#/components/schemas/VoucherStatus' }
+            capital: { type: string, pattern: '^\d+\.\d{2,4}$' }
+            financial_snapshot: { type: object }
+            client: { type: object }
+            credit_line:
+              type: object
+              properties:
+                total: { type: string }
+                used: { type: string }
+                available: { type: string }
+            fulfilled_at: { type: [string, 'null'], format: date-time }
+            lock_version: { type: integer, minimum: 1 }
+    ReportCode:
+      type: string
+      enum:
+        - DISTRIBUTORS_BY_BRANCH_COORDINATOR
+        - CREDIT_LINE_SUMMARY
+        - VOUCHERS_BY_STATUS
+        - RELATIONS_BY_CUT
+        - RELATION_BALANCES
+        - DISTRIBUTOR_PAYMENT_CLASSIFICATION
+        - DELINQUENT_DISTRIBUTORS
+        - CLIENT_INFORMATIONAL_PORTFOLIO
+        - RISK_ALERT_CONSECUTIVE_RELATIONS
+        - RECONCILED_PAYMENTS
+        - UNRECONCILED_PAYMENTS
+        - MANUAL_RECONCILIATIONS
+        - PENDING_EXCESSES
+        - CREDIT_BALANCES_AND_APPLICATIONS
+        - REFUNDS_BY_STATUS
+        - DISTRIBUTOR_POINTS_BALANCE
+        - POINT_MOVEMENTS
+        - DISTRIBUTOR_APPLICATIONS_BY_RESULT
+        - CREDIT_INCREASES_BY_STATUS
+        - CLIENT_TRANSFERS_AND_REASSIGNMENTS
+        - BRANCH_AND_COORDINATOR_CHANGES
+    ReportDefinition:
+      type: object
+      additionalProperties: false
+      required: [code, name, description, contract_version, filters, sortable_fields, columns, groupings, totals, modes, actions]
+      properties:
+        code: { $ref: '#/components/schemas/ReportCode' }
+        name: { type: string }
+        description: { type: string }
+        contract_version: { type: integer, const: 1 }
+        filters: { type: array, items: { type: string } }
+        sortable_fields: { type: array, items: { type: string } }
+        columns: { type: array, items: { type: string } }
+        groupings: { type: array, items: { type: string } }
+        totals: { type: array, items: { type: string } }
+        modes: { type: array, items: { type: string, enum: [SYNCHRONOUS, ASYNCHRONOUS] } }
+        actions:
+          type: object
+          properties:
+            view: { type: boolean }
+            run: { type: boolean }
+            export: { type: boolean, const: false }
+            download_relation: { type: boolean, const: false }
+    ReportDefinitionEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ReportDefinition' }
+    ReportRun:
+      type: object
+      required: [id, run_number, report_code, contract_version, status, scope, filters, queued_at, correlation_id]
+      properties:
+        id: { type: string, format: uuid }
+        run_number: { type: string }
+        report_code: { $ref: '#/components/schemas/ReportCode' }
+        contract_version: { type: integer }
+        status: { type: string, enum: [QUEUED, RUNNING, COMPLETED, FAILED, EXPIRED] }
+        scope: { type: object }
+        filters: { type: object }
+        queued_at: { type: string, format: date-time }
+        started_at: { type: [string, 'null'], format: date-time }
+        completed_at: { type: [string, 'null'], format: date-time }
+        failed_at: { type: [string, 'null'], format: date-time }
+        expires_at: { type: [string, 'null'], format: date-time }
+        as_of: { type: [string, 'null'], format: date-time }
+        row_count: { type: [integer, 'null'], minimum: 0 }
+        error_code: { type: [string, 'null'] }
+        correlation_id: { type: string, format: uuid }
+    ReportRunEnvelope:
+      type: object
+      required: [data]
+      properties:
+        data: { $ref: '#/components/schemas/ReportRun' }
+    ReportResponse:
+      type: object
+      required: [data, meta]
+      properties:
+        data:
+          type: array
+          items: { type: object, additionalProperties: true }
+        meta:
+          type: object
+          required: [report_code, contract_version, timezone, as_of, filters, scope, pagination, summary]
+          properties:
+            report_code: { $ref: '#/components/schemas/ReportCode' }
+            contract_version: { type: integer }
+            generated_at: { type: string, format: date-time }
+            timezone: { type: string, const: America/Monterrey }
+            as_of: { type: string, format: date-time }
+            filters: { type: object }
+            scope: { type: object }
+            pagination: { type: object }
+            summary: { type: object }

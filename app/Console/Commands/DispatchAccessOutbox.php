@@ -17,6 +17,8 @@ final class DispatchAccessOutbox extends Command
         $limit = max(1, min(1000, (int) $this->option('limit')));
         $eventIds = OutboxEvent::query()
             ->whereIn('state', ['PENDING', 'RETRY'])
+            ->whereNotNull('recipient')
+            ->whereNotNull('template')
             ->where(function ($query): void {
                 $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', now());
             })

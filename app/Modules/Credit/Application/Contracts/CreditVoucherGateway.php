@@ -16,5 +16,5 @@ interface CreditVoucherGateway
 
     public function releaseRestriction(int $distributorId, string $voucherId, ?int $actorUserId = null): void;
 
-    public function applyFulfilledVoucher(VoucherCapitalUsage $usage): void;
+    public function applyFulfilledVoucher(VoucherCapitalUsage $usage): string;
 }

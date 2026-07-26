@@ -6,6 +6,7 @@ use App\Modules\Access\Domain\Authorization\PermissionCode;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
+/** @property PermissionCode $code */
 class Permission extends Model
 {
     /** @var list<string> */

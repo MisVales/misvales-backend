@@ -13,6 +13,7 @@ use App\Modules\Client\Application\Contracts\AuthorizedClientChange;
 use App\Modules\Client\Application\Contracts\ClientAuditPort;
 use App\Modules\Client\Application\Contracts\ClientChangeResult;
 use App\Modules\Client\Application\Contracts\ClientOutboxPort;
+use App\Modules\Client\Application\Contracts\CorrectableClientFieldRegistry;
 use App\Modules\Client\Application\Contracts\DistributorProfilePort;
 use App\Modules\Client\Application\Contracts\DocumentReferencePort;
 use App\Modules\Client\Domain\Addresses\AddressNormalizer;
@@ -33,21 +34,6 @@ use Illuminate\Support\Str;
 /** Aplica solo campos autorizados y crea versiones sin sobrescribir historia. */
 final readonly class ApplyAuthorizedChanges implements ApplyAuthorizedClientChanges
 {
-    private const ALLOWED_FIELDS = [
-        'given_names',
-        'surnames',
-        'curp',
-        'rfc',
-        'birth_date',
-        'birth_place',
-        'birth_state',
-        'birth_city',
-        'address',
-        'official_identification_media_id',
-        'address_proof_media_id',
-        'bank_account',
-    ];
-
     public function __construct(
         private AuthorizedChangePort $authorizations,
         private DistributorProfilePort $profiles,
@@ -58,6 +44,7 @@ final readonly class ApplyAuthorizedChanges implements ApplyAuthorizedClientChan
         private SensitiveDataProtector $protector,
         private ClientAuditPort $audit,
         private ClientOutboxPort $outbox,
+        private CorrectableClientFieldRegistry $correctableFields,
     ) {}
 
     public function handle(ApplyAuthorizedClientChangesCommand $command): ClientChangeResult
@@ -203,7 +190,7 @@ final readonly class ApplyAuthorizedChanges implements ApplyAuthorizedClientChan
         if (
             $fields === []
             || $fields !== $valueFields
-            || array_diff($fields, self::ALLOWED_FIELDS) !== []
+            || ! $this->correctableFields->containsExactly($fields)
         ) {
             throw ClientDomainException::changeAuthorizationInvalid();
         }

@@ -51,4 +51,14 @@ enum CriticalAction: string
     case REDEMPTION_PERIOD_EDIT = 'configuration.redemption_period.edit';
     case REDEMPTION_PERIOD_PUBLISH = 'configuration.redemption_period.publish';
     case REDEMPTION_PERIOD_DEACTIVATE = 'configuration.redemption_period.deactivate';
+    case VOUCHER_MODIFICATION_DECIDE = 'voucher.modification.decide';
+    case MANUAL_RECONCILIATION_DECIDE = 'payment.manual_reconciliation.decide';
+    case EXCESS_REFUND_DECIDE = 'payment.excess_refund.decide';
+    case POINT_REDEMPTION_AUTHORIZE = 'points.redemption.authorize';
+    case POINT_REDEMPTION_REJECT = 'points.redemption.reject';
+    case DELINQUENCY_APPLY = 'risk.delinquency.apply';
+    case DELINQUENCY_REMOVE = 'risk.delinquency.remove';
+    case MOBILITY_ADMINISTRATIVE_REASSIGNMENT = 'mobility.administrative_reassignment';
+    case MOBILITY_BRANCH_CHANGE = 'mobility.branch_change';
+    case MOBILITY_COORDINATOR_REASSIGNMENT = 'mobility.coordinator_reassignment';
 }

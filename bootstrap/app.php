@@ -11,6 +11,18 @@ use App\Modules\Credit\Infrastructure\Persistence\Eloquent\Models\CreditIncrease
 use App\Modules\DistributorOnboarding\Domain\Exceptions\OnboardingDomainException;
 use App\Modules\DistributorOnboarding\Presentation\Http\Middleware\AuditOnboardingFailure;
 use App\Modules\DistributorOnboarding\Presentation\Http\Middleware\EnsureRequestId;
+use App\Modules\ExcessBalance\Application\DTOs\OperationContext;
+use App\Modules\ExcessBalance\Application\Services\ExcessRecorder;
+use App\Modules\ExcessBalance\Domain\Exceptions\ExcessBalanceException;
+use App\Modules\Mobility\Domain\Exceptions\MobilityException;
+use App\Modules\Payment\Domain\Exceptions\PaymentDomainException;
+use App\Modules\Points\Domain\Exceptions\PointsDomainException;
+use App\Modules\Reporting\Domain\Exceptions\ReportingException;
+use App\Modules\RiskDelinquency\Domain\Exceptions\RiskDelinquencyException;
+use App\Modules\Voucher\Application\DTOs\OperationMetadata;
+use App\Modules\Voucher\Application\Security\VoucherActorContextFactory;
+use App\Modules\Voucher\Application\Services\VoucherRecorder;
+use App\Modules\Voucher\Domain\Exceptions\VoucherDomainException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Foundation\Application;
@@ -122,8 +134,190 @@ return Application::configure(basePath: dirname(__DIR__))
                 'X-Request-Id' => (string) $request->attributes->get('request_id'),
             ]);
         });
+        $exceptions->render(function (VoucherDomainException $exception, Request $request) {
+            if (in_array($exception->errorCode(), [
+                'MODIFICATION_TOKEN_INVALID',
+                'MODIFICATION_TOKEN_EXPIRED',
+                'MODIFICATION_TOKEN_USED',
+            ], true)) {
+                try {
+                    $user = $request->user();
+                    $actor = $user instanceof User
+                        ? app(VoucherActorContextFactory::class)->fromUser($user)
+                        : null;
+                    app(VoucherRecorder::class)->audit(
+                        'VOUCHER_MODIFICATION_TOKEN_ATTEMPT',
+                        'DENIED',
+                        null,
+                        $actor,
+                        new OperationMetadata(
+                            requestId: (string) ($request->header('X-Request-Id') ?? Str::uuid()),
+                            idempotencyKey: (string) ($request->header('Idempotency-Key') ?? ''),
+                            ip: $request->ip(),
+                            userAgent: $request->userAgent(),
+                        ),
+                        ['modification_request_id' => $request->route('modificationRequest')],
+                        $exception->errorCode(),
+                    );
+                } catch (Throwable) {
+                    // La auditoría nunca altera ni filtra la respuesta estable del dominio.
+                }
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get(
+                        'request_id',
+                        $request->header('X-Request-Id'),
+                    ),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) ($request->attributes->get(
+                    'request_id',
+                    $request->header('X-Request-Id'),
+                ) ?? ''),
+            ]);
+        });
+        $exceptions->render(function (PaymentDomainException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (ExcessBalanceException $exception, Request $request) {
+            try {
+                $actor = $request->user();
+                $context = $actor instanceof User
+                    ? new OperationContext(
+                        actor: $actor,
+                        idempotencyKey: '',
+                        correlationId: (string) ($request->attributes->get('request_id') ?? Str::uuid()),
+                        ipAddress: $request->ip(),
+                        userAgent: $request->userAgent(),
+                    )
+                    : null;
+                $resourceId = collect([
+                    $request->route('excessBalance'),
+                    $request->route('refundRequest'),
+                ])->first(fn (mixed $value): bool => is_string($value) && $value !== '');
+
+                app(ExcessRecorder::class)->audit(
+                    'EXCESS_REQUEST_REJECTED',
+                    $exception->httpStatus() >= 500 ? 'ERROR' : 'DENIED',
+                    'http_request',
+                    is_string($resourceId) ? $resourceId : 'unresolved',
+                    $context,
+                    metadata: [
+                        'route' => $request->route()?->getName(),
+                        'error_code' => $exception->errorCode(),
+                    ],
+                    reason: $exception->errorCode(),
+                );
+            } catch (Throwable) {
+                // El registro secundario nunca altera la respuesta estable del dominio.
+            }
+
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (PointsDomainException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (RiskDelinquencyException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) $request->attributes->get('request_id'),
+            ]);
+        });
+        $exceptions->render(function (MobilityException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id', $request->header('X-Request-Id')),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) ($request->attributes->get('request_id', $request->header('X-Request-Id')) ?? ''),
+            ]);
+        });
+        $exceptions->render(function (ReportingException $exception, Request $request) {
+            return response()->json([
+                'error' => [
+                    'code' => $exception->errorCode(),
+                    'message' => $exception->getMessage(),
+                    'fields' => $exception->fields() === [] ? (object) [] : $exception->fields(),
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id', $request->header('X-Request-Id')),
+                ],
+            ], $exception->httpStatus(), [
+                'X-Request-Id' => (string) ($request->attributes->get('request_id', $request->header('X-Request-Id')) ?? ''),
+            ]);
+        });
         $exceptions->render(function (ValidationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
+            if (! $request->routeIs(
+                'api.v1.distributor-applications.*',
+                'api.v1.clients.*',
+                'api.v1.vouchers.*',
+                'api.v1.modification-requests.*',
+                'api.v1.bank-imports.*',
+                'api.v1.bank-movements.*',
+                'api.v1.relations.payments',
+                'api.v1.payment-allocations.*',
+                'api.v1.clarifications.*',
+                'api.v1.manual-reconciliations.*',
+                'api.v1.excess-balances.*',
+                'api.v1.refunds.*',
+                'api.v1.me.excess-balances.*',
+                'api.v1.me.refund-requests.*',
+                'api.v1.refund-requests.*',
+                'api.v1.risk.*',
+                'api.v1.delinquency.*',
+                'api.v1.client-transfers.*',
+                'api.v1.client-reassignments.*',
+                'api.v1.distributor-branch-changes.*',
+                'api.v1.coordinator-reassignments.*',
+                'api.v1.reports.*',
+                'api.v1.report-runs.*',
+            )) {
                 return null;
             }
 
@@ -140,7 +334,31 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         });
         $exceptions->render(function (AuthenticationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
+            if (! $request->routeIs(
+                'api.v1.distributor-applications.*',
+                'api.v1.clients.*',
+                'api.v1.vouchers.*',
+                'api.v1.modification-requests.*',
+                'api.v1.bank-imports.*',
+                'api.v1.bank-movements.*',
+                'api.v1.relations.payments',
+                'api.v1.payment-allocations.*',
+                'api.v1.clarifications.*',
+                'api.v1.manual-reconciliations.*',
+                'api.v1.excess-balances.*',
+                'api.v1.refunds.*',
+                'api.v1.me.excess-balances.*',
+                'api.v1.me.refund-requests.*',
+                'api.v1.refund-requests.*',
+                'api.v1.risk.*',
+                'api.v1.delinquency.*',
+                'api.v1.client-transfers.*',
+                'api.v1.client-reassignments.*',
+                'api.v1.distributor-branch-changes.*',
+                'api.v1.coordinator-reassignments.*',
+                'api.v1.reports.*',
+                'api.v1.report-runs.*',
+            )) {
                 return null;
             }
 
@@ -157,7 +375,31 @@ return Application::configure(basePath: dirname(__DIR__))
             ]);
         });
         $exceptions->render(function (AuthorizationException $exception, Request $request) {
-            if (! $request->routeIs('api.v1.distributor-applications.*', 'api.v1.clients.*')) {
+            if (! $request->routeIs(
+                'api.v1.distributor-applications.*',
+                'api.v1.clients.*',
+                'api.v1.vouchers.*',
+                'api.v1.modification-requests.*',
+                'api.v1.bank-imports.*',
+                'api.v1.bank-movements.*',
+                'api.v1.relations.payments',
+                'api.v1.payment-allocations.*',
+                'api.v1.clarifications.*',
+                'api.v1.manual-reconciliations.*',
+                'api.v1.excess-balances.*',
+                'api.v1.refunds.*',
+                'api.v1.me.excess-balances.*',
+                'api.v1.me.refund-requests.*',
+                'api.v1.refund-requests.*',
+                'api.v1.risk.*',
+                'api.v1.delinquency.*',
+                'api.v1.client-transfers.*',
+                'api.v1.client-reassignments.*',
+                'api.v1.distributor-branch-changes.*',
+                'api.v1.coordinator-reassignments.*',
+                'api.v1.reports.*',
+                'api.v1.report-runs.*',
+            )) {
                 return null;
             }
 

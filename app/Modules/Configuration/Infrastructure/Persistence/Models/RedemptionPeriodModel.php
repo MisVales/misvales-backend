@@ -7,6 +7,7 @@ namespace App\Modules\Configuration\Infrastructure\Persistence\Models;
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use App\Modules\Configuration\Domain\Enums\VersionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -14,18 +15,18 @@ use LogicException;
 /**
  * Periodo de canje de puntos.
  *
- * @property int                          $id
- * @property string                       $public_id
- * @property \Carbon\CarbonImmutable      $starts_at
- * @property \Carbon\CarbonImmutable      $ends_at
- * @property string                       $status
- * @property string|null                  $reason
- * @property int                          $created_by
- * @property int|null                     $published_by
- * @property \Carbon\CarbonImmutable|null $published_at
- * @property int                          $lock_version
- * @property \Carbon\CarbonImmutable      $created_at
- * @property \Carbon\CarbonImmutable      $updated_at
+ * @property int $id
+ * @property string $public_id
+ * @property CarbonImmutable $starts_at
+ * @property CarbonImmutable $ends_at
+ * @property string $status
+ * @property string|null $reason
+ * @property int $created_by
+ * @property int|null $published_by
+ * @property CarbonImmutable|null $published_at
+ * @property int $lock_version
+ * @property CarbonImmutable $created_at
+ * @property CarbonImmutable $updated_at
  * @property-read User                    $creator
  * @property-read User|null               $publisher
  */
@@ -51,7 +52,9 @@ final class RedemptionPeriodModel extends Model
 
     public function versionStatus(): VersionStatus
     {
-        return VersionStatus::from($this->status);
+        return $this->status === 'CLOSED'
+            ? VersionStatus::INACTIVE
+            : VersionStatus::from($this->status);
     }
 
     protected function casts(): array

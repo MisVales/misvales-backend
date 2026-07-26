@@ -125,9 +125,9 @@ final readonly class CreditLineOperationsService implements CreditRecoveryGatewa
         }, 3);
     }
 
-    public function applyFulfilledVoucher(VoucherCapitalUsage $usage): void
+    public function applyFulfilledVoucher(VoucherCapitalUsage $usage): string
     {
-        DB::transaction(function () use ($usage): void {
+        return DB::transaction(function () use ($usage): string {
             $line = $this->requiredLockedLine($usage->distributorId);
             $duplicate = CreditLineMovementModel::query()
                 ->where(fn ($query) => $query
@@ -151,7 +151,7 @@ final readonly class CreditLineOperationsService implements CreditRecoveryGatewa
                     idempotencyKey: $usage->idempotencyKey,
                 );
 
-                return;
+                return $duplicate->public_id;
             }
 
             $this->assertActiveDistributor($usage->distributorId);
@@ -210,6 +210,14 @@ final readonly class CreditLineOperationsService implements CreditRecoveryGatewa
                     'amount' => $usage->capital->format(),
                     'occurred_at' => now('UTC')->toIso8601String(),
                 ]);
+                $this->recorder->event('CreditRestrictionConsumed', "credit-restriction-consumed:{$restriction->public_id}", [
+                    'distributor_id' => $usage->distributorId,
+                    'branch_id' => $usage->branchId,
+                    'voucher_id' => $usage->voucherId,
+                    'restriction_id' => $restriction->public_id,
+                    'amount' => $usage->capital->format(),
+                    'occurred_at' => now('UTC')->toIso8601String(),
+                ]);
             }
 
             $this->recorder->audit(
@@ -236,6 +244,8 @@ final readonly class CreditLineOperationsService implements CreditRecoveryGatewa
                 'balances_after' => $this->snapshot($after),
                 'occurred_at' => now('UTC')->toIso8601String(),
             ]);
+
+            return $movement->public_id;
         }, 3);
     }
 
