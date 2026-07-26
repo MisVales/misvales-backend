@@ -31,7 +31,7 @@ final class CategoryVersionController extends Controller
     public function index(string $publicId): JsonResponse
     {
         $category = CategoryModel::query()->where('public_id', $publicId)->firstOrFail();
-        
+
         $versions = $category->versions()->orderBy('version_number', 'desc')->paginate(20);
 
         return CategoryVersionResource::collection($versions)->response();

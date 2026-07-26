@@ -51,7 +51,7 @@ final class CreateProductVersionUseCase
             $now = CarbonImmutable::now();
             $correlationId = (string) Str::uuid();
 
-            $version = new ProductVersionModel();
+            $version = new ProductVersionModel;
             $version->public_id = (string) Str::uuid();
             $version->product_id = $product->id;
             $version->version_number = $versionNumber;

@@ -20,7 +20,7 @@ final readonly class PaymentBehaviorPointsPolicy implements JsonSerializable
     private array $rules;
 
     /**
-     * @param PaymentBehaviorRule[] $rules
+     * @param  PaymentBehaviorRule[]  $rules
      *
      * @throws ConfigurationException Si faltan comportamientos o hay duplicados.
      */
@@ -45,30 +45,22 @@ final readonly class PaymentBehaviorPointsPolicy implements JsonSerializable
             }
         }
 
-        if (count($indexed) !== count($expected)) {
-            throw ConfigurationException::valueInvalid(
-                'La política contiene comportamientos no reconocidos.'
-            );
-        }
-
         $this->rules = $indexed;
     }
 
     /**
      * Construye la política desde la representación JSON persistida.
      *
-     * @param string $json
      *
      * @throws ConfigurationException Si el JSON no es válido o la estructura es incorrecta.
      */
     public static function fromJson(string $json): self
     {
         try {
-            /** @var list<array{behavior: string, generates_points: bool, reduces_points: bool}> $data */
             $data = json_decode($json, true, 4, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw ConfigurationException::valueInvalid(
-                'La política de comportamiento no es un JSON válido: ' . $e->getMessage()
+                'La política de comportamiento no es un JSON válido: '.$e->getMessage()
             );
         }
 
@@ -81,7 +73,10 @@ final readonly class PaymentBehaviorPointsPolicy implements JsonSerializable
         $rules = [];
         foreach ($data as $item) {
             if (! is_array($item)
-                || ! isset($item['behavior'], $item['generates_points'], $item['reduces_points'])) {
+                || ! isset($item['behavior'], $item['generates_points'], $item['reduces_points'])
+                || ! is_string($item['behavior'])
+                || ! is_bool($item['generates_points'])
+                || ! is_bool($item['reduces_points'])) {
                 throw ConfigurationException::valueInvalid(
                     'Cada regla debe contener behavior, generates_points y reduces_points.'
                 );

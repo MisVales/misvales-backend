@@ -59,7 +59,7 @@ final class CreateConfigurationVersionUseCase
             $now = CarbonImmutable::now();
             $correlationId = (string) Str::uuid();
 
-            $version = new ConfigurationVersionModel();
+            $version = new ConfigurationVersionModel;
             $version->public_id = (string) Str::uuid();
             $version->definition_id = $definition->id;
             $version->version_number = $versionNumber;

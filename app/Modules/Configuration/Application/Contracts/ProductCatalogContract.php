@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Configuration\Application\Contracts;
 
 use App\Modules\Configuration\Application\DTOs\ResolvedProduct;
+use App\Modules\Configuration\Domain\Exceptions\ConfigurationException;
 use Carbon\CarbonImmutable;
 
 /**
@@ -17,7 +18,7 @@ interface ProductCatalogContract
     /**
      * Resuelve la versión vigente de un producto.
      *
-     * @throws \App\Modules\Configuration\Domain\Exceptions\ConfigurationException
+     * @throws ConfigurationException
      */
     public function resolve(string $productPublicId, CarbonImmutable $at): ResolvedProduct;
 }

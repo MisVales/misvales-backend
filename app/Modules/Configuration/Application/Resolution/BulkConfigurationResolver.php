@@ -24,9 +24,8 @@ final class BulkConfigurationResolver
     /**
      * Resuelve un conjunto de configuraciones para una fecha efectiva.
      *
-     * @param ConfigurationKey[] $keys Claves a resolver.
-     * @param CarbonImmutable    $at   Fecha efectiva única.
-     *
+     * @param  ConfigurationKey[]  $keys  Claves a resolver.
+     * @param  CarbonImmutable  $at  Fecha efectiva única.
      * @return array<string, ResolvedConfiguration> Indexado por clave.
      */
     public function resolveMany(array $keys, CarbonImmutable $at): array

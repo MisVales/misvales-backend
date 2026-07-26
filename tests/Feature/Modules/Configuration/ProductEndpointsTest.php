@@ -3,6 +3,10 @@
 namespace Tests\Feature\Modules\Configuration;
 
 use App\Models\User;
+use App\Modules\Access\Domain\Accounts\AccountState;
+use App\Modules\Access\Domain\Authorization\CriticalAction;
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch;
+use App\Modules\Access\Infrastructure\Persistence\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -11,7 +15,6 @@ class ProductEndpointsTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
-    private User $viewer;
 
     protected function setUp(): void
     {
@@ -19,22 +22,22 @@ class ProductEndpointsTest extends TestCase
 
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\AccessFoundationSeeder']);
 
-        $adminRole = \App\Modules\Access\Infrastructure\Persistence\Models\Role::query()->where('code', 'GENERAL_MANAGER')->firstOrFail();
+        $adminRole = Role::query()->where('code', 'GENERAL_MANAGER')->firstOrFail();
         $this->admin = clone User::factory()->create([
             'role_id' => $adminRole->id,
             'branch_id' => null,
-            'state' => \App\Modules\Access\Domain\Accounts\AccountState::ACTIVE,
+            'state' => AccountState::ACTIVE,
         ]);
 
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\ConfigurationFoundationSeeder']);
 
-        $viewerRole = \App\Modules\Access\Infrastructure\Persistence\Models\Role::query()->where('code', 'VERIFIER')->firstOrFail();
-        $branch = \App\Modules\Access\Infrastructure\Persistence\Models\Branch::query()->firstOrFail();
+        $viewerRole = Role::query()->where('code', 'VERIFIER')->firstOrFail();
+        $branch = Branch::query()->firstOrFail();
 
-        $this->viewer = clone User::factory()->create([
+        User::factory()->create([
             'role_id' => $viewerRole->id,
             'branch_id' => $branch->id,
-            'state' => \App\Modules\Access\Domain\Accounts\AccountState::ACTIVE,
+            'state' => AccountState::ACTIVE,
         ]);
     }
 
@@ -48,12 +51,12 @@ class ProductEndpointsTest extends TestCase
             'fortnight_count' => 12,
         ];
 
-        $this->withSession(['critical_actions' => [\App\Modules\Access\Domain\Authorization\CriticalAction::PRODUCT_CREATE->value => time()]]);
+        $this->withSession(['critical_actions' => [CriticalAction::PRODUCT_CREATE->value => time()]]);
 
         $response = $this->actingAs($this->admin)->postJson('/api/products', $payload);
 
         $response->assertStatus(201)
-                 ->assertJsonPath('data.amount', '1000.0000'); // Assuming it casts to string format based on resource
+            ->assertJsonPath('data.amount', '1000.0000'); // Assuming it casts to string format based on resource
     }
 
     public function test_cannot_create_product_without_mfa(): void
@@ -80,10 +83,10 @@ class ProductEndpointsTest extends TestCase
             'insurance_amount' => 50,
             'fortnight_count' => 12,
         ];
-        
+
         $this->withSession(['critical_actions' => [
-            \App\Modules\Access\Domain\Authorization\CriticalAction::PRODUCT_CREATE->value => time(),
-            \App\Modules\Access\Domain\Authorization\CriticalAction::PRODUCT_VERSION_PUBLISH->value => time(),
+            CriticalAction::PRODUCT_CREATE->value => time(),
+            CriticalAction::PRODUCT_VERSION_PUBLISH->value => time(),
         ]]);
         $data = $this->actingAs($this->admin)->postJson('/api/products', $payload)->json('data');
 
@@ -93,7 +96,7 @@ class ProductEndpointsTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.status', 'PUBLISHED');
+            ->assertJsonPath('data.status', 'PUBLISHED');
     }
 
     public function test_can_list_products(): void
@@ -105,12 +108,12 @@ class ProductEndpointsTest extends TestCase
             'insurance_amount' => 50,
             'fortnight_count' => 12,
         ];
-        
+
         $this->withSession(['critical_actions' => [
-            \App\Modules\Access\Domain\Authorization\CriticalAction::PRODUCT_CREATE->value => time(),
-            \App\Modules\Access\Domain\Authorization\CriticalAction::PRODUCT_VERSION_PUBLISH->value => time(),
+            CriticalAction::PRODUCT_CREATE->value => time(),
+            CriticalAction::PRODUCT_VERSION_PUBLISH->value => time(),
         ]]);
-        
+
         $data = $this->actingAs($this->admin)->postJson('/api/products', $payload)->json('data');
 
         $this->actingAs($this->admin)->postJson("/api/products/{$data['product_id']}/versions/{$data['version_id']}/publish", [

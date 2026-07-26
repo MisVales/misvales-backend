@@ -14,7 +14,7 @@ final class TimezoneValueTest extends TestCase
     {
         $tz = new TimezoneValue('America/Monterrey');
         $this->assertEquals('America/Monterrey', $tz->value());
-        
+
         $tz2 = new TimezoneValue('UTC');
         $this->assertEquals('UTC', $tz2->value());
     }

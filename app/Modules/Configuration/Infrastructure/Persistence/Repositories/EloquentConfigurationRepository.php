@@ -72,7 +72,7 @@ final class EloquentConfigurationRepository
             ->where('effective_from', '<=', $effectiveDate)
             ->where(function ($q) use ($effectiveDate): void {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $effectiveDate);
+                    ->orWhere('effective_to', '>', $effectiveDate);
             })
             ->orderByDesc('effective_from')
             ->first();
@@ -93,9 +93,8 @@ final class EloquentConfigurationRepository
     /**
      * Lista definiciones con paginación.
      *
-     * @param array<string, mixed> $filters
-     *
-     * @return LengthAwarePaginator<ConfigurationDefinitionModel>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, ConfigurationDefinitionModel>
      */
     public function listDefinitions(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
@@ -115,9 +114,8 @@ final class EloquentConfigurationRepository
     /**
      * Lista versiones de una definición con paginación.
      *
-     * @param array<string, mixed> $filters
-     *
-     * @return LengthAwarePaginator<ConfigurationVersionModel>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, ConfigurationVersionModel>
      */
     public function listVersions(ConfigurationDefinitionModel $definition, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
@@ -135,7 +133,7 @@ final class EloquentConfigurationRepository
     /**
      * Verifica si existe superposición de vigencia con versiones publicadas.
      *
-     * @param array<int> $excludeVersionIds
+     * @param  array<int>  $excludeVersionIds
      */
     public function hasOverlap(
         ConfigurationDefinitionModel $definition,
@@ -149,10 +147,10 @@ final class EloquentConfigurationRepository
             ->where('effective_from', '<', $effectiveTo ?? CarbonImmutable::create(9999, 12, 31))
             ->where(function ($q) use ($effectiveFrom): void {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $effectiveFrom);
+                    ->orWhere('effective_to', '>', $effectiveFrom);
             });
 
-        if (!empty($excludeVersionIds)) {
+        if (! empty($excludeVersionIds)) {
             $query->whereNotIn('id', $excludeVersionIds);
         }
 

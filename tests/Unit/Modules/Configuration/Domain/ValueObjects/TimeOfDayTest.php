@@ -14,7 +14,7 @@ final class TimeOfDayTest extends TestCase
     {
         $time = new TimeOfDay('14:30:00');
         $this->assertEquals('14:30:00', $time->value());
-        
+
         $time2 = new TimeOfDay('09:05:15');
         $this->assertEquals('09:05:15', $time2->value());
     }

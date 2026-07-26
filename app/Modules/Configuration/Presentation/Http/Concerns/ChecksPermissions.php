@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Configuration\Presentation\Http\Concerns;
 
 use App\Models\User;
+use App\Modules\Access\Domain\Authorization\CriticalAction;
 use App\Modules\Access\Domain\Authorization\PermissionCode;
 
 /**
@@ -25,17 +26,17 @@ trait ChecksPermissions
         return $user->role->permissions->contains('code', $permission->value);
     }
 
-    protected function checkCriticalAction(User $user, \App\Modules\Access\Domain\Authorization\CriticalAction $action): bool
+    protected function checkCriticalAction(User $user, CriticalAction $action): bool
     {
         $actions = session('critical_actions', []);
-        
+
         if (! isset($actions[$action->value])) {
             return false;
         }
-        
+
         $ttl = config('configuration.modification_token_ttl_minutes', 5);
         $timePassed = time() - $actions[$action->value];
-        
+
         return $timePassed <= ($ttl * 60);
     }
 }

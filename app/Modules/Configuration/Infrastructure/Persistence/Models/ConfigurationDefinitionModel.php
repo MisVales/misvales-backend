@@ -7,20 +7,22 @@ namespace App\Modules\Configuration\Infrastructure\Persistence\Models;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use App\Modules\Configuration\Domain\Enums\ConfigurationKey;
 use App\Modules\Configuration\Domain\Enums\ConfigurationType;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 /**
  * Identidad estable de una configuración aprobada.
  *
- * @property int                $id
- * @property string             $public_id
- * @property string             $key
- * @property string             $type
- * @property bool               $is_administrable
- * @property \Carbon\CarbonImmutable $created_at
- * @property \Carbon\CarbonImmutable $updated_at
+ * @property int $id
+ * @property string $public_id
+ * @property string $key
+ * @property string $type
+ * @property bool $is_administrable
+ * @property CarbonImmutable $created_at
+ * @property CarbonImmutable $updated_at
  */
 final class ConfigurationDefinitionModel extends Model
 {
@@ -36,8 +38,8 @@ final class ConfigurationDefinitionModel extends Model
         return $this->hasMany(ConfigurationVersionModel::class, 'definition_id');
     }
 
-    /** @return \Illuminate\Database\Eloquent\Relations\HasOne<ConfigurationVersionModel, $this> */
-    public function currentVersion(): \Illuminate\Database\Eloquent\Relations\HasOne
+    /** @return HasOne<ConfigurationVersionModel, $this> */
+    public function currentVersion(): HasOne
     {
         return $this->hasOne(ConfigurationVersionModel::class, 'definition_id')
             ->where('status', 'PUBLISHED')

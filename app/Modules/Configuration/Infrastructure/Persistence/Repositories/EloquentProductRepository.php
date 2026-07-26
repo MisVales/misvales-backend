@@ -56,7 +56,7 @@ final class EloquentProductRepository
             ->where('effective_from', '<=', $effectiveDate)
             ->where(function ($q) use ($effectiveDate): void {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $effectiveDate);
+                    ->orWhere('effective_to', '>', $effectiveDate);
             })
             ->orderByDesc('effective_from')
             ->first();
@@ -72,9 +72,8 @@ final class EloquentProductRepository
     }
 
     /**
-     * @param array<string, mixed> $filters
-     *
-     * @return LengthAwarePaginator<ProductModel>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, ProductModel>
      */
     public function listProducts(array $filters = [], int $perPage = 15, bool $includeDrafts = false): LengthAwarePaginator
     {
@@ -92,9 +91,8 @@ final class EloquentProductRepository
     }
 
     /**
-     * @param array<string, mixed> $filters
-     *
-     * @return LengthAwarePaginator<ProductVersionModel>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, ProductVersionModel>
      */
     public function listVersions(ProductModel $product, array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
@@ -124,7 +122,7 @@ final class EloquentProductRepository
             ->where('effective_from', '<', $effectiveTo ?? CarbonImmutable::create(9999, 12, 31))
             ->where(function ($q) use ($effectiveFrom): void {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $effectiveFrom);
+                    ->orWhere('effective_to', '>', $effectiveFrom);
             });
 
         if ($excludeVersionId !== null) {

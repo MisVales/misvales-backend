@@ -50,7 +50,7 @@ final class MoneyTest extends TestCase
         $money = new Money('500.00');
         $this->assertTrue($money->isMultipleOf(100));
         $this->assertFalse($money->isMultipleOf(300));
-        
+
         $money2 = new Money('150.50');
         $this->assertFalse($money2->isMultipleOf(50));
     }

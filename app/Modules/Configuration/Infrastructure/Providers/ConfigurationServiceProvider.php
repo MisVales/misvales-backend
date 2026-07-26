@@ -10,6 +10,7 @@ use App\Modules\Configuration\Application\Contracts\RedemptionPeriodContract;
 use App\Modules\Configuration\Application\Resolution\ProductResolver;
 use App\Modules\Configuration\Application\Services\ConfigurationReadService;
 use App\Modules\Configuration\Application\Services\RedemptionPeriodReadService;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 
 /**
@@ -28,7 +29,7 @@ final class ConfigurationServiceProvider extends ServiceProvider
 
     public function boot(): void
     {
-        \Illuminate\Support\Facades\Route::prefix('api')
+        Route::prefix('api')
             ->middleware('api')
             ->group(__DIR__.'/../../Presentation/Http/routes.php');
     }

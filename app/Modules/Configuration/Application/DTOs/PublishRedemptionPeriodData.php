@@ -4,8 +4,6 @@ declare(strict_types=1);
 
 namespace App\Modules\Configuration\Application\DTOs;
 
-use Carbon\CarbonImmutable;
-
 /**
  * DTO para publicar un periodo de canje.
  */

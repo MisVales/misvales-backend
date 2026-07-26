@@ -7,6 +7,7 @@ namespace App\Modules\Configuration\Infrastructure\Persistence\Models;
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use App\Modules\Configuration\Domain\Enums\VersionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -14,21 +15,21 @@ use LogicException;
 /**
  * Versión de una configuración: valor, estado, vigencia, responsable y motivo.
  *
- * @property int                     $id
- * @property string                  $public_id
- * @property int                     $definition_id
- * @property int                     $version_number
- * @property string                  $value
- * @property string                  $status
- * @property \Carbon\CarbonImmutable|null $effective_from
- * @property \Carbon\CarbonImmutable|null $effective_to
- * @property int                     $created_by
- * @property int|null                $published_by
- * @property \Carbon\CarbonImmutable|null $published_at
- * @property string|null             $reason
- * @property int                     $lock_version
- * @property \Carbon\CarbonImmutable $created_at
- * @property \Carbon\CarbonImmutable $updated_at
+ * @property int $id
+ * @property string $public_id
+ * @property int $definition_id
+ * @property int $version_number
+ * @property string $value
+ * @property string $status
+ * @property CarbonImmutable|null $effective_from
+ * @property CarbonImmutable|null $effective_to
+ * @property int $created_by
+ * @property int|null $published_by
+ * @property CarbonImmutable|null $published_at
+ * @property string|null $reason
+ * @property int $lock_version
+ * @property CarbonImmutable $created_at
+ * @property CarbonImmutable $updated_at
  * @property-read ConfigurationDefinitionModel $definition
  * @property-read User               $creator
  * @property-read User|null          $publisher

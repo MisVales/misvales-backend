@@ -14,10 +14,10 @@ final class EarlyPaymentPeriodTest extends TestCase
     {
         $json = '{"start_offset_days": -5, "start_time": "00:00:00", "end_offset_days": 0, "end_time": "23:59:59", "timezone": "America/Monterrey"}';
         $period = EarlyPaymentPeriod::fromJson($json);
-        
+
         $this->assertEquals(-5, $period->startOffsetDays);
         $this->assertEquals(0, $period->endOffsetDays);
-        $this->assertEquals("00:00:00", $period->startTime);
+        $this->assertEquals('00:00:00', $period->startTime);
     }
 
     public function test_rejects_invalid_json(): void

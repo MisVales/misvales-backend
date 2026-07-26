@@ -64,7 +64,7 @@ final class PublishConfigurationVersionUseCase
 
             // Cerrar la vigencia anterior si existe (y obtenerla para excluirla de la regla de superposición)
             $currentVersion = $this->repository->resolveAt($definition, $data->effectiveFrom);
-            
+
             $excludeIds = [$version->id];
             if ($currentVersion !== null) {
                 $excludeIds[] = $currentVersion->id;

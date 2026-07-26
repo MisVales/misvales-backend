@@ -30,14 +30,14 @@ final class CreateCategoryUseCase
             $correlationId = (string) Str::uuid();
 
             // Identidad base
-            $category = new CategoryModel();
+            $category = new CategoryModel;
             $category->public_id = (string) Str::uuid();
             $category->status = VersionStatus::DRAFT->value;
             $category->created_by = $data->actorUserId;
             $category->save();
 
             // Primer borrador
-            $version = new CategoryVersionModel();
+            $version = new CategoryVersionModel;
             $version->public_id = (string) Str::uuid();
             $version->category_id = $category->id;
             $version->version_number = 1;

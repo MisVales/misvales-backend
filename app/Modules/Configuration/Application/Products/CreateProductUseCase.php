@@ -38,14 +38,14 @@ final class CreateProductUseCase
             $correlationId = (string) Str::uuid();
 
             // Identidad base
-            $product = new ProductModel();
+            $product = new ProductModel;
             $product->public_id = (string) Str::uuid();
             $product->status = VersionStatus::DRAFT->value;
             $product->created_by = $data->actorUserId;
             $product->save();
 
             // Primer borrador
-            $version = new ProductVersionModel();
+            $version = new ProductVersionModel;
             $version->public_id = (string) Str::uuid();
             $version->product_id = $product->id;
             $version->version_number = 1;

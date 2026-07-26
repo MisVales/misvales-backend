@@ -13,7 +13,6 @@ use App\Modules\Configuration\Application\DTOs\DeactivateConfigurationVersionDat
 use App\Modules\Configuration\Application\DTOs\EditConfigurationVersionData;
 use App\Modules\Configuration\Application\DTOs\PublishConfigurationVersionData;
 use App\Modules\Configuration\Infrastructure\Persistence\Models\ConfigurationDefinitionModel;
-use App\Modules\Configuration\Infrastructure\Persistence\Models\ConfigurationVersionModel;
 use App\Modules\Configuration\Presentation\Http\Requests\ConfigurationHistoryRequest;
 use App\Modules\Configuration\Presentation\Http\Requests\CreateConfigurationVersionRequest;
 use App\Modules\Configuration\Presentation\Http\Requests\DeactivateConfigurationVersionRequest;
@@ -23,6 +22,7 @@ use App\Modules\Configuration\Presentation\Http\Resources\ConfigurationVersionRe
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Routing\Controller;
+use Illuminate\Support\Str;
 
 final class ConfigurationVersionController extends Controller
 {
@@ -44,7 +44,7 @@ final class ConfigurationVersionController extends Controller
         }
 
         $perPage = (int) $request->input('per_page', 20);
-        
+
         return ConfigurationVersionResource::collection($query->paginate($perPage))->response();
     }
 
@@ -55,7 +55,7 @@ final class ConfigurationVersionController extends Controller
                 key: $request->input('key'),
                 value: $request->input('value'),
                 actorUserId: $request->user()->id,
-                idempotencyKey: $request->header('X-Idempotency-Key', (string) \Illuminate\Support\Str::uuid()),
+                idempotencyKey: $request->header('X-Idempotency-Key', (string) Str::uuid()),
             )
         );
 
@@ -86,7 +86,7 @@ final class ConfigurationVersionController extends Controller
                 effectiveFrom: CarbonImmutable::parse($request->input('effective_from')),
                 reason: $request->input('reason'),
                 actorUserId: $request->user()->id,
-                idempotencyKey: $request->header('X-Idempotency-Key', (string) \Illuminate\Support\Str::uuid()),
+                idempotencyKey: $request->header('X-Idempotency-Key', (string) Str::uuid()),
             )
         );
 
@@ -100,7 +100,7 @@ final class ConfigurationVersionController extends Controller
                 versionPublicId: $publicId,
                 reason: $request->input('reason'),
                 actorUserId: $request->user()->id,
-                idempotencyKey: $request->header('X-Idempotency-Key', (string) \Illuminate\Support\Str::uuid()),
+                idempotencyKey: $request->header('X-Idempotency-Key', (string) Str::uuid()),
             )
         );
 

@@ -21,8 +21,8 @@ final class ProductResolver
     /**
      * Resuelve la versión publicada vigente de un producto.
      *
-     * @param string          $productPublicId UUID público del producto.
-     * @param CarbonImmutable $at              Fecha efectiva.
+     * @param  string  $productPublicId  UUID público del producto.
+     * @param  CarbonImmutable  $at  Fecha efectiva.
      *
      * @throws ConfigurationException Si el producto no existe o no hay versión aplicable.
      */

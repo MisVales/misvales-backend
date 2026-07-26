@@ -18,11 +18,11 @@ use JsonSerializable;
 final readonly class EarlyPaymentPeriod implements JsonSerializable
 {
     /**
-     * @param int    $startOffsetDays Desplazamiento del inicio respecto de la fecha límite (negativo = antes).
-     * @param string $startTime       Hora local de inicio (HH:MM:SS).
-     * @param int    $endOffsetDays   Desplazamiento del fin respecto de la fecha límite.
-     * @param string $endTime         Hora local de fin (HH:MM:SS).
-     * @param string $timezone        Zona operativa.
+     * @param  int  $startOffsetDays  Desplazamiento del inicio respecto de la fecha límite (negativo = antes).
+     * @param  string  $startTime  Hora local de inicio (HH:MM:SS).
+     * @param  int  $endOffsetDays  Desplazamiento del fin respecto de la fecha límite.
+     * @param  string  $endTime  Hora local de fin (HH:MM:SS).
+     * @param  string  $timezone  Zona operativa.
      */
     public function __construct(
         public int $startOffsetDays,
@@ -55,18 +55,16 @@ final readonly class EarlyPaymentPeriod implements JsonSerializable
     /**
      * Construye el periodo desde la representación JSON persistida.
      *
-     * @param string $json
      *
      * @throws ConfigurationException Si el JSON no es válido o la estructura es incorrecta.
      */
     public static function fromJson(string $json): self
     {
         try {
-            /** @var array{start_offset_days: int, start_time: string, end_offset_days: int, end_time: string, timezone: string} $data */
             $data = json_decode($json, true, 4, JSON_THROW_ON_ERROR);
         } catch (\JsonException $e) {
             throw ConfigurationException::valueInvalid(
-                'El periodo anticipado no es un JSON válido: ' . $e->getMessage()
+                'El periodo anticipado no es un JSON válido: '.$e->getMessage()
             );
         }
 
@@ -88,6 +86,14 @@ final readonly class EarlyPaymentPeriod implements JsonSerializable
         if (! is_int($data['start_offset_days']) || ! is_int($data['end_offset_days'])) {
             throw ConfigurationException::valueInvalid(
                 'Los desplazamientos deben ser enteros.'
+            );
+        }
+
+        if (! is_string($data['start_time'])
+            || ! is_string($data['end_time'])
+            || ! is_string($data['timezone'])) {
+            throw ConfigurationException::valueInvalid(
+                'Las horas y la zona horaria deben ser cadenas.'
             );
         }
 

@@ -6,17 +6,20 @@ namespace App\Modules\Configuration\Presentation\Http\Requests;
 
 use App\Modules\Access\Domain\Authorization\CriticalAction;
 use App\Modules\Access\Domain\Authorization\PermissionCode;
+use App\Modules\Configuration\Presentation\Http\Concerns\ChecksPermissions;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class DeactivateProductRequest extends FormRequest
 {
-    use \App\Modules\Configuration\Presentation\Http\Concerns\ChecksPermissions;
+    use ChecksPermissions;
+
     public function authorize(): bool
     {
         return $this->checkPermission($this->user(), PermissionCode::PRODUCT_MANAGE)
             && $this->checkCriticalAction($this->user(), CriticalAction::PRODUCT_DEACTIVATE);
     }
 
+    /** @return array<string, mixed> */
     public function rules(): array
     {
         return [

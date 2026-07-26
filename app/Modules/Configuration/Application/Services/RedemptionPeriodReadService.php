@@ -22,7 +22,7 @@ final class RedemptionPeriodReadService implements RedemptionPeriodContract
         return $this->repository->findActiveAt($at) !== null;
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     public function getActivePeriod(CarbonImmutable $at): ?array
     {
         $period = $this->repository->findActiveAt($at);

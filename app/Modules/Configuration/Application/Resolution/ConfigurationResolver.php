@@ -27,8 +27,8 @@ final class ConfigurationResolver
     /**
      * Resuelve la versión publicada vigente de una configuración.
      *
-     * @param ConfigurationKey $key  Clave estable de la configuración.
-     * @param CarbonImmutable  $at   Fecha y hora efectiva de resolución.
+     * @param  ConfigurationKey  $key  Clave estable de la configuración.
+     * @param  CarbonImmutable  $at  Fecha y hora efectiva de resolución.
      *
      * @throws ConfigurationException Si la clave no existe o no hay versión aplicable.
      */

@@ -7,6 +7,7 @@ namespace App\Modules\Configuration\Infrastructure\Persistence\Models;
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
 use App\Modules\Configuration\Domain\Enums\VersionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use LogicException;
@@ -14,25 +15,25 @@ use LogicException;
 /**
  * Versión de producto: importe y parámetros financieros.
  *
- * @property int                          $id
- * @property string                       $public_id
- * @property int                          $product_id
- * @property int                          $version_number
- * @property string                       $amount
- * @property string                       $loan_commission_rate
- * @property string                       $interest_rate_per_fortnight
- * @property string                       $insurance_amount
- * @property int                          $fortnight_count
- * @property string                       $status
- * @property \Carbon\CarbonImmutable|null $effective_from
- * @property \Carbon\CarbonImmutable|null $effective_to
- * @property int                          $created_by
- * @property int|null                     $published_by
- * @property \Carbon\CarbonImmutable|null $published_at
- * @property string|null                  $reason
- * @property int                          $lock_version
- * @property \Carbon\CarbonImmutable      $created_at
- * @property \Carbon\CarbonImmutable      $updated_at
+ * @property int $id
+ * @property string $public_id
+ * @property int $product_id
+ * @property int $version_number
+ * @property string $amount
+ * @property string $loan_commission_rate
+ * @property string $interest_rate_per_fortnight
+ * @property string $insurance_amount
+ * @property int $fortnight_count
+ * @property string $status
+ * @property CarbonImmutable|null $effective_from
+ * @property CarbonImmutable|null $effective_to
+ * @property int $created_by
+ * @property int|null $published_by
+ * @property CarbonImmutable|null $published_at
+ * @property string|null $reason
+ * @property int $lock_version
+ * @property CarbonImmutable $created_at
+ * @property CarbonImmutable $updated_at
  * @property-read ProductModel            $product
  * @property-read User                    $creator
  * @property-read User|null               $publisher

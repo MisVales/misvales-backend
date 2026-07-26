@@ -16,14 +16,14 @@ final class ConfigurationValueValidatorTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->validator = new ConfigurationValueValidator();
+        $this->validator = new ConfigurationValueValidator;
     }
 
     public function test_validates_integers_correctly(): void
     {
         // Positivo (válido)
         $this->validator->validate(ConfigurationKey::PAYMENT_DAYS_AFTER_CUT, '5');
-        
+
         // Letras (inválido)
         $this->expectException(ConfigurationException::class);
         $this->validator->validate(ConfigurationKey::PAYMENT_DAYS_AFTER_CUT, 'abc');
@@ -59,8 +59,9 @@ final class ConfigurationValueValidatorTest extends TestCase
 
     public function test_validates_typed_objects(): void
     {
+        $this->expectNotToPerformAssertions();
+
         $json = '{"start_offset_days": -5, "start_time": "00:00:00", "end_offset_days": 0, "end_time": "23:59:59", "timezone": "America/Monterrey"}';
         $this->validator->validate(ConfigurationKey::EARLY_PAYMENT_PERIOD, $json);
-        $this->assertTrue(true); // Llegó aquí sin lanzar excepción
     }
 }

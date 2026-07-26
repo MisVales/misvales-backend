@@ -13,13 +13,13 @@ final class PaymentBehaviorRuleTest extends TestCase
     public function test_can_create_valid_rule(): void
     {
         $data = [
-            "behavior" => "ON_TIME_PAYMENT",
-            "generates_points" => true,
-            "reduces_points" => false
+            'behavior' => 'ON_TIME_PAYMENT',
+            'generates_points' => true,
+            'reduces_points' => false,
         ];
-        
+
         $rule = PaymentBehaviorRule::fromArray($data);
-        
+
         $this->assertEquals('ON_TIME_PAYMENT', $rule->behavior->value);
         $this->assertTrue($rule->generatesPoints);
         $this->assertFalse($rule->reducesPoints);
@@ -27,7 +27,7 @@ final class PaymentBehaviorRuleTest extends TestCase
 
     public function test_rejects_missing_keys(): void
     {
-        $this->expectException(\Error::class);
+        $this->expectException(ConfigurationException::class);
         PaymentBehaviorRule::fromArray(['behavior' => 'ON_TIME_PAYMENT']);
     }
 
@@ -35,9 +35,9 @@ final class PaymentBehaviorRuleTest extends TestCase
     {
         $this->expectException(\ValueError::class);
         PaymentBehaviorRule::fromArray([
-            "behavior" => "INVALID_BEHAVIOR",
-            "generates_points" => true,
-            "reduces_points" => false
+            'behavior' => 'INVALID_BEHAVIOR',
+            'generates_points' => true,
+            'reduces_points' => false,
         ]);
     }
 }

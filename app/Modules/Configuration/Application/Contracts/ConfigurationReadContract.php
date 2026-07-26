@@ -6,6 +6,7 @@ namespace App\Modules\Configuration\Application\Contracts;
 
 use App\Modules\Configuration\Application\DTOs\ResolvedConfiguration;
 use App\Modules\Configuration\Domain\Enums\ConfigurationKey;
+use App\Modules\Configuration\Domain\Exceptions\ConfigurationException;
 use Carbon\CarbonImmutable;
 
 /**
@@ -19,18 +20,17 @@ interface ConfigurationReadContract
     /**
      * Resuelve una configuración por clave y fecha.
      *
-     * @throws \App\Modules\Configuration\Domain\Exceptions\ConfigurationException
+     * @throws ConfigurationException
      */
     public function resolve(ConfigurationKey $key, CarbonImmutable $at): ResolvedConfiguration;
 
     /**
      * Resuelve varias configuraciones en una sola operación consistente.
      *
-     * @param ConfigurationKey[] $keys
-     *
+     * @param  ConfigurationKey[]  $keys
      * @return array<string, ResolvedConfiguration>
      *
-     * @throws \App\Modules\Configuration\Domain\Exceptions\ConfigurationException
+     * @throws ConfigurationException
      */
     public function resolveMany(array $keys, CarbonImmutable $at): array;
 }

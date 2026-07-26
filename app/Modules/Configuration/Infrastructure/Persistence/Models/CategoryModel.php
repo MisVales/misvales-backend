@@ -6,20 +6,23 @@ namespace App\Modules\Configuration\Infrastructure\Persistence\Models;
 
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Concerns\HasPublicUuid;
+use App\Modules\Configuration\Domain\Enums\VersionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use LogicException;
 
 /**
  * Identidad estable de una categoría de distribuidora.
  *
- * @property int                     $id
- * @property string                  $public_id
- * @property string                  $status
- * @property int                     $created_by
- * @property \Carbon\CarbonImmutable $created_at
- * @property \Carbon\CarbonImmutable $updated_at
+ * @property int $id
+ * @property string $public_id
+ * @property string $status
+ * @property int $created_by
+ * @property CarbonImmutable $created_at
+ * @property CarbonImmutable $updated_at
  * @property-read User               $creator
  */
 final class CategoryModel extends Model
@@ -36,11 +39,11 @@ final class CategoryModel extends Model
         return $this->hasMany(CategoryVersionModel::class, 'category_id');
     }
 
-    /** @return \Illuminate\Database\Eloquent\Relations\HasOne<CategoryVersionModel, $this> */
-    public function currentVersion(): \Illuminate\Database\Eloquent\Relations\HasOne
+    /** @return HasOne<CategoryVersionModel, $this> */
+    public function currentVersion(): HasOne
     {
         return $this->hasOne(CategoryVersionModel::class, 'category_id')
-            ->where('status', \App\Modules\Configuration\Domain\Enums\VersionStatus::PUBLISHED->value)
+            ->where('status', VersionStatus::PUBLISHED->value)
             ->where('effective_from', '<=', now())
             ->orderByDesc('effective_from');
     }

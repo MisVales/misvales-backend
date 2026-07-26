@@ -30,7 +30,7 @@ final class CreateRedemptionPeriodUseCase
             $now = CarbonImmutable::now();
             $correlationId = (string) Str::uuid();
 
-            $period = new RedemptionPeriodModel();
+            $period = new RedemptionPeriodModel;
             $period->public_id = (string) Str::uuid();
             $period->starts_at = $data->startsAt;
             $period->ends_at = $data->endsAt;

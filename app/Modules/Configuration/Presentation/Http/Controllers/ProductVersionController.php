@@ -31,7 +31,7 @@ final class ProductVersionController extends Controller
     public function index(string $publicId): JsonResponse
     {
         $product = ProductModel::query()->where('public_id', $publicId)->firstOrFail();
-        
+
         $versions = $product->versions()->orderBy('version_number', 'desc')->paginate(20);
 
         return ProductVersionResource::collection($versions)->response();

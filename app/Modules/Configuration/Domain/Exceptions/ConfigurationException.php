@@ -18,7 +18,7 @@ final class ConfigurationException extends RuntimeException
     private array $fields;
 
     /**
-     * @param array<string, mixed> $fields
+     * @param  array<string, mixed>  $fields
      */
     public function __construct(
         string $message,
@@ -67,7 +67,7 @@ final class ConfigurationException extends RuntimeException
     }
 
     /**
-     * @param array<string, mixed> $fields
+     * @param  array<string, mixed>  $fields
      */
     public static function valueInvalid(string $detail = '', array $fields = []): self
     {
@@ -183,7 +183,7 @@ final class ConfigurationException extends RuntimeException
     }
 
     /**
-     * @param array<string, mixed> $fields
+     * @param  array<string, mixed>  $fields
      */
     public static function productIncomplete(array $fields = []): self
     {

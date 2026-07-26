@@ -43,9 +43,8 @@ final class EloquentRedemptionPeriodRepository
     }
 
     /**
-     * @param array<string, mixed> $filters
-     *
-     * @return LengthAwarePaginator<RedemptionPeriodModel>
+     * @param  array<string, mixed>  $filters
+     * @return LengthAwarePaginator<int, RedemptionPeriodModel>
      */
     public function listPeriods(array $filters = [], int $perPage = 15, bool $includeDrafts = false): LengthAwarePaginator
     {

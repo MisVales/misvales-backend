@@ -3,6 +3,10 @@
 namespace Tests\Feature\Modules\Configuration;
 
 use App\Models\User;
+use App\Modules\Access\Domain\Accounts\AccountState;
+use App\Modules\Access\Domain\Authorization\CriticalAction;
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch;
+use App\Modules\Access\Infrastructure\Persistence\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -11,7 +15,6 @@ class RedemptionPeriodEndpointsTest extends TestCase
     use RefreshDatabase;
 
     private User $admin;
-    private User $viewer;
 
     protected function setUp(): void
     {
@@ -19,22 +22,22 @@ class RedemptionPeriodEndpointsTest extends TestCase
 
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\AccessFoundationSeeder']);
 
-        $adminRole = \App\Modules\Access\Infrastructure\Persistence\Models\Role::query()->where('code', 'GENERAL_MANAGER')->firstOrFail();
+        $adminRole = Role::query()->where('code', 'GENERAL_MANAGER')->firstOrFail();
         $this->admin = clone User::factory()->create([
             'role_id' => $adminRole->id,
             'branch_id' => null,
-            'state' => \App\Modules\Access\Domain\Accounts\AccountState::ACTIVE,
+            'state' => AccountState::ACTIVE,
         ]);
 
         $this->artisan('db:seed', ['--class' => 'Database\\Seeders\\ConfigurationFoundationSeeder']);
 
-        $viewerRole = \App\Modules\Access\Infrastructure\Persistence\Models\Role::query()->where('code', 'VERIFIER')->firstOrFail();
-        $branch = \App\Modules\Access\Infrastructure\Persistence\Models\Branch::query()->firstOrFail();
+        $viewerRole = Role::query()->where('code', 'VERIFIER')->firstOrFail();
+        $branch = Branch::query()->firstOrFail();
 
-        $this->viewer = clone User::factory()->create([
+        User::factory()->create([
             'role_id' => $viewerRole->id,
             'branch_id' => $branch->id,
-            'state' => \App\Modules\Access\Domain\Accounts\AccountState::ACTIVE,
+            'state' => AccountState::ACTIVE,
         ]);
     }
 
@@ -45,7 +48,7 @@ class RedemptionPeriodEndpointsTest extends TestCase
             'ends_at' => now()->addDays(15)->toIso8601String(),
         ];
 
-        $this->withSession(['critical_actions' => [\App\Modules\Access\Domain\Authorization\CriticalAction::REDEMPTION_PERIOD_CREATE->value => time()]]);
+        $this->withSession(['critical_actions' => [CriticalAction::REDEMPTION_PERIOD_CREATE->value => time()]]);
 
         $response = $this->actingAs($this->admin)->postJson('/api/redemption-periods', $payload);
 
@@ -70,10 +73,10 @@ class RedemptionPeriodEndpointsTest extends TestCase
             'starts_at' => now()->addDays(1)->toIso8601String(),
             'ends_at' => now()->addDays(15)->toIso8601String(),
         ];
-        
+
         $this->withSession(['critical_actions' => [
-            \App\Modules\Access\Domain\Authorization\CriticalAction::REDEMPTION_PERIOD_CREATE->value => time(),
-            \App\Modules\Access\Domain\Authorization\CriticalAction::REDEMPTION_PERIOD_PUBLISH->value => time(),
+            CriticalAction::REDEMPTION_PERIOD_CREATE->value => time(),
+            CriticalAction::REDEMPTION_PERIOD_PUBLISH->value => time(),
         ]]);
         $data = $this->actingAs($this->admin)->postJson('/api/redemption-periods', $payload)->json('data');
 
@@ -82,7 +85,7 @@ class RedemptionPeriodEndpointsTest extends TestCase
         ]);
 
         $response->assertStatus(200)
-                 ->assertJsonPath('data.status', 'PUBLISHED');
+            ->assertJsonPath('data.status', 'PUBLISHED');
     }
 
     public function test_can_list_redemption_periods(): void
@@ -91,12 +94,12 @@ class RedemptionPeriodEndpointsTest extends TestCase
             'starts_at' => now()->addDays(1)->toIso8601String(),
             'ends_at' => now()->addDays(15)->toIso8601String(),
         ];
-        
+
         $this->withSession(['critical_actions' => [
-            \App\Modules\Access\Domain\Authorization\CriticalAction::REDEMPTION_PERIOD_CREATE->value => time(),
-            \App\Modules\Access\Domain\Authorization\CriticalAction::REDEMPTION_PERIOD_PUBLISH->value => time(),
+            CriticalAction::REDEMPTION_PERIOD_CREATE->value => time(),
+            CriticalAction::REDEMPTION_PERIOD_PUBLISH->value => time(),
         ]]);
-        
+
         $data = $this->actingAs($this->admin)->postJson('/api/redemption-periods', $payload)->json('data');
 
         $this->actingAs($this->admin)->postJson("/api/redemption-periods/{$data['id']}/publish", [

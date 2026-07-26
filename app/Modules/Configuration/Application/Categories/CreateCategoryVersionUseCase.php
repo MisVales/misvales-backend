@@ -43,7 +43,7 @@ final class CreateCategoryVersionUseCase
             $now = CarbonImmutable::now();
             $correlationId = (string) Str::uuid();
 
-            $version = new CategoryVersionModel();
+            $version = new CategoryVersionModel;
             $version->public_id = (string) Str::uuid();
             $version->category_id = $category->id;
             $version->version_number = $versionNumber;

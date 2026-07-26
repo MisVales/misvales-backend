@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Database\Seeders;
 
+use App\Models\User;
 use App\Modules\Configuration\Domain\Enums\ConfigurationKey;
 use App\Modules\Configuration\Domain\Enums\VersionStatus;
 use App\Modules\Configuration\Infrastructure\Persistence\Models\ConfigurationDefinitionModel;
@@ -78,14 +79,14 @@ class ConfigurationFoundationSeeder extends Seeder
      */
     private function resolveSystemUserId(): int
     {
-        /** @var \App\Models\User|null $user */
-        $user = \App\Models\User::query()
+        /** @var User|null $user */
+        $user = User::query()
             ->whereHas('role', function ($q): void {
                 $q->where('code', 'GENERAL_MANAGER');
             })
             ->first();
 
         // Usa el primer usuario disponible si no existe un gerente general
-        return $user?->id ?? (\App\Models\User::query()->first()?->id ?? 1);
+        return $user->id ?? (User::query()->first()->id ?? 1);
     }
 }

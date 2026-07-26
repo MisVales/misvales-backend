@@ -20,7 +20,7 @@ Route::middleware('auth:sanctum')->group(function () {
     // Configuraciones (C02, C03)
     // ---------------------------------------------------------
     Route::get('configurations', [ConfigurationController::class, 'index']);
-    
+
     Route::prefix('configurations/{key}/versions')->group(function () {
         Route::get('/', [ConfigurationVersionController::class, 'index']);
         Route::post('/', [ConfigurationVersionController::class, 'store']);

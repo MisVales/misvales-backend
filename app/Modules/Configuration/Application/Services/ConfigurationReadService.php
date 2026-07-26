@@ -29,7 +29,7 @@ final class ConfigurationReadService implements ConfigurationReadContract
         return $this->resolver->resolve($key, $at);
     }
 
-    /** @inheritDoc */
+    /** {@inheritDoc} */
     public function resolveMany(array $keys, CarbonImmutable $at): array
     {
         return $this->bulkResolver->resolveMany($keys, $at);

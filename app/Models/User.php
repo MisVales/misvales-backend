@@ -22,7 +22,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property AccountState $state
  * @property int $credential_version
  * @property int $context_version
- * @property-read Role $role
+ * @property-read Role|null $role
  * @property-read Branch|null $branch
  */
 #[Hidden(['password', 'remember_token'])]
