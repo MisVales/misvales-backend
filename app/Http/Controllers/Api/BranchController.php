@@ -8,14 +8,27 @@ use Illuminate\Http\JsonResponse;
 
 class BranchController extends Controller
 {
+    private function normalizeRole($role): string
+    {
+        if ($role instanceof \BackedEnum) {
+            return $role->value;
+        }
+        if (is_object($role) && method_exists($role, 'value')) {
+            return $role->value;
+        }
+        return (string) $role;
+    }
+
     public function index(): JsonResponse
     {
         $user = auth()->user();
-        $role = $user->role->code ?? '';
+        $role = $this->normalizeRole($user->role->code ?? '');
 
         $query = Branch::query();
 
-        if ($role === 'BRANCH_MANAGER' || $role === 'COORDINATOR' || $role === 'VERIFIER' || $role === 'CASHIER' || $role === 'DISTRIBUTOR') {
+        $restrictedRoles = ['BRANCH_MANAGER', 'COORDINATOR', 'VERIFIER', 'CASHIER', 'DISTRIBUTOR'];
+
+        if (in_array($role, $restrictedRoles, true)) {
             $query->where('id', $user->branch_id);
         }
 
@@ -28,9 +41,11 @@ class BranchController extends Controller
     {
         $branch = Branch::where('public_id', $uuid)->firstOrFail();
         $user = auth()->user();
-        $role = $user->role->code ?? '';
+        $role = $this->normalizeRole($user->role->code ?? '');
 
-        if (in_array($role, ['BRANCH_MANAGER', 'COORDINATOR', 'VERIFIER', 'CASHIER', 'DISTRIBUTOR'])) {
+        $restrictedRoles = ['BRANCH_MANAGER', 'COORDINATOR', 'VERIFIER', 'CASHIER', 'DISTRIBUTOR'];
+
+        if (in_array($role, $restrictedRoles, true)) {
             if ($user->branch_id !== $branch->id) {
                 return response()->json([
                     'error' => [

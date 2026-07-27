@@ -12,6 +12,18 @@ use App\Modules\Access\Domain\Accounts\DistributorFinalAuthorizationCompleted;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\ServiceProvider;
 
+// Interfaces (Contratos)
+use App\Modules\Access\Domain\Contracts\OrganizationContextInvalidatorInterface;
+use App\Modules\Access\Domain\Contracts\OrganizationContextProviderInterface;
+use App\Modules\Access\Domain\Contracts\BranchScopeCheckerInterface;
+use App\Modules\Access\Domain\Contracts\RolePermissionCheckerInterface;
+
+// Servicios (Implementaciones)
+use App\Modules\Access\Application\Services\OrganizationContextInvalidatorService;
+use App\Modules\Access\Application\Services\OrganizationContextService;
+use App\Modules\Access\Application\Services\BranchScopeService;
+use App\Modules\Access\Application\Services\RolePermissionService;
+
 class AppServiceProvider extends ServiceProvider
 {
     /**
@@ -28,6 +40,26 @@ class AppServiceProvider extends ServiceProvider
                 rpName: (string) config('app.name', 'MisVales'),
                 origin: (string) config('access.webauthn.origin'),
             ),
+        );
+
+        $this->app->bind(
+            OrganizationContextInvalidatorInterface::class,
+            OrganizationContextInvalidatorService::class
+        );
+
+        $this->app->bind(
+            OrganizationContextProviderInterface::class,
+            OrganizationContextService::class
+        );
+
+        $this->app->bind(
+            BranchScopeCheckerInterface::class,
+            BranchScopeService::class
+        );
+
+        $this->app->bind(
+            RolePermissionCheckerInterface::class,
+            RolePermissionService::class
         );
     }
 

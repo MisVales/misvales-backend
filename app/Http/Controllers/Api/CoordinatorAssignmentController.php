@@ -7,7 +7,7 @@ use App\Http\Requests\StoreCoordinatorAssignmentRequest;
 use App\Models\CoordinatorDistributorAssignment;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests; 
 use App\Models\User;
-use App\Modules\Access\Infrastructure\Persistence\Models\Branch; // Asegurando el namespace modular correcto de la sucursal
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch; 
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +20,6 @@ class CoordinatorAssignmentController extends Controller
     {
         $branch = Branch::where('public_id', $request->branch_public_id)->firstOrFail();
 
-        // Corrección de la firma de autorización para políticas basadas en modelos
         $this->authorize('create', [CoordinatorDistributorAssignment::class, $branch]);
 
         $distributor = User::where('public_id', $request->distributor_public_id)->firstOrFail();
@@ -35,9 +34,8 @@ class CoordinatorAssignmentController extends Controller
             ], 422);
         }
 
-        // TRANSACCIÓN O12: Todo o nada (Creación + Evento de dominio para M18)
-        $assignment = DB::transaction(function () use ($request, $distributor, $coordinator, $branch) {
-            
+        DB::beginTransaction();
+        try {
             $assignment = CoordinatorDistributorAssignment::create([
                 'distributor_id'      => $distributor->id,
                 'coordinator_user_id' => $coordinator->id,
@@ -50,11 +48,15 @@ class CoordinatorAssignmentController extends Controller
                 'reason'              => $request->reason,
             ]);
 
-            // Emitir evento para que M18 (Auditoría general) archive el registro correspondiente
-            \App\Events\CoordinatorDistributorAssigned::dispatch($assignment);
+            DB::afterCommit(function () use ($assignment) {
+                event(new \App\Events\CoordinatorDistributorAssigned($assignment));
+            });
 
-            return $assignment;
-        });
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Asignación creada correctamente',
@@ -66,6 +68,10 @@ class CoordinatorAssignmentController extends Controller
     {
         $user = auth()->user();
         $role = $user->role->code ?? '';
+
+        if ($role instanceof \BackedEnum) {
+            $role = $role->value;
+        }
 
         $query = CoordinatorDistributorAssignment::with(['distributor', 'coordinator', 'branch']);
         
@@ -99,7 +105,18 @@ class CoordinatorAssignmentController extends Controller
         ]);
 
         $assignment = CoordinatorDistributorAssignment::where('public_id', $uuid)->firstOrFail();
-        $assignment->update($validated);
+        
+        $this->authorize('update', $assignment);
+
+        DB::beginTransaction();
+        try {
+            $assignment->update($validated);
+            
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Asignación actualizada correctamente',

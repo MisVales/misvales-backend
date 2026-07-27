@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Support\Facades\DB;
 
 class UserRoleScopeController extends Controller
 {
@@ -25,12 +26,24 @@ class UserRoleScopeController extends Controller
             $branchId = Branch::where('public_id', $request->branch_public_id)->firstOrFail()->id;
         }
 
-        $scope = UserRoleScope::create([
-            'user_id'    => $user->id,
-            'role_id'    => $request->role_id,
-            'branch_id'  => $branchId,
-            'scope_type' => $request->scope_type,
-        ]);
+        DB::beginTransaction();
+        try {
+            $scope = UserRoleScope::create([
+                'user_id'    => $user->id,
+                'role_id'    => $request->role_id,
+                'branch_id'  => $branchId,
+                'scope_type' => $request->scope_type,
+            ]);
+
+            DB::afterCommit(function () use ($scope) {
+                event(new \App\Events\UserOrganizationalScopeAssigned($scope));
+            });
+
+            DB::commit();
+        } catch (\Exception $e) {
+            DB::rollBack();
+            throw $e;
+        }
 
         return response()->json([
             'message' => 'Alcance de rol asignado correctamente',
@@ -44,6 +57,10 @@ class UserRoleScopeController extends Controller
 
         $user = auth()->user();
         $role = $user->role->code ?? '';
+
+        if ($role instanceof \BackedEnum) {
+            $role = $role->value;
+        }
 
         $query = UserRoleScope::with(['user', 'role', 'branch']);
 
