@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Branch;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 
 class CoordinatorAssignmentController extends Controller
 {
@@ -31,17 +32,36 @@ class CoordinatorAssignmentController extends Controller
             ], 422);
         }
 
-        $assignment = CoordinatorDistributorAssignment::create([
-            'distributor_id'      => $distributor->id,
-            'coordinator_user_id' => $coordinator->id,
-            'branch_id'           => $branch->id,
-            'starts_at'           => $request->starts_at,
-            'ends_at'             => $request->ends_at,
-            'assigned_by'         => auth()->id(), 
-            'source_type'         => 'MANUAL',
-            'source_id'           => 1, 
-            'reason'              => $request->reason,
-        ]);
+        $assignment = DB::transaction(function () use ($request, $distributor, $coordinator, $branch) {
+            
+            $assignment = CoordinatorDistributorAssignment::create([
+                'distributor_id'      => $distributor->id,
+                'coordinator_user_id' => $coordinator->id,
+                'branch_id'           => $branch->id,
+                'starts_at'           => $request->starts_at,
+                'ends_at'             => $request->ends_at,
+                'assigned_by'         => auth()->id(), 
+                'source_type'         => 'MANUAL',
+                'source_id'           => 1, 
+                'reason'              => $request->reason,
+            ]);
+
+            \App\Models\AuditLog::create([
+                'actor_user_id' => auth()->id(),
+                'action'        => 'COORDINATOR_ASSIGNMENT_CREATED',
+                'target_type'   => CoordinatorDistributorAssignment::class,
+                'target_id'     => $assignment->id,
+                'branch_id'     => $branch->id,
+                'old_values'    => null,
+                'new_values'    => $assignment->toArray(),
+                'reason'        => $request->reason,
+                'result'        => 'SUCCESS',
+                'request_id'    => request()->header('X-Request-ID') ?? (string) \Illuminate\Support\Str::uuid(),
+            ]);
+            \App\Events\CoordinatorDistributorAssigned::dispatch($assignment);
+            
+            return $assignment;
+        });
 
         return response()->json([
             'message' => 'Asignación creada correctamente',
