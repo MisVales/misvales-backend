@@ -5,19 +5,22 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreCoordinatorAssignmentRequest;
 use App\Models\CoordinatorDistributorAssignment;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests; 
 use App\Models\User;
-use App\Models\Branch;
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch; // Asegurando el namespace modular correcto de la sucursal
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 
 class CoordinatorAssignmentController extends Controller
 {
+    use AuthorizesRequests;
 
-   public function store(StoreCoordinatorAssignmentRequest $request): JsonResponse
+    public function store(StoreCoordinatorAssignmentRequest $request): JsonResponse
     {
         $branch = Branch::where('public_id', $request->branch_public_id)->firstOrFail();
 
+        // Corrección de la firma de autorización para políticas basadas en modelos
         $this->authorize('create', [CoordinatorDistributorAssignment::class, $branch]);
 
         $distributor = User::where('public_id', $request->distributor_public_id)->firstOrFail();
@@ -32,6 +35,7 @@ class CoordinatorAssignmentController extends Controller
             ], 422);
         }
 
+        // TRANSACCIÓN O12: Todo o nada (Creación + Evento de dominio para M18)
         $assignment = DB::transaction(function () use ($request, $distributor, $coordinator, $branch) {
             
             $assignment = CoordinatorDistributorAssignment::create([
@@ -46,20 +50,9 @@ class CoordinatorAssignmentController extends Controller
                 'reason'              => $request->reason,
             ]);
 
-            \App\Models\AuditLog::create([
-                'actor_user_id' => auth()->id(),
-                'action'        => 'COORDINATOR_ASSIGNMENT_CREATED',
-                'target_type'   => CoordinatorDistributorAssignment::class,
-                'target_id'     => $assignment->id,
-                'branch_id'     => $branch->id,
-                'old_values'    => null,
-                'new_values'    => $assignment->toArray(),
-                'reason'        => $request->reason,
-                'result'        => 'SUCCESS',
-                'request_id'    => request()->header('X-Request-ID') ?? (string) \Illuminate\Support\Str::uuid(),
-            ]);
+            // Emitir evento para que M18 (Auditoría general) archive el registro correspondiente
             \App\Events\CoordinatorDistributorAssigned::dispatch($assignment);
-            
+
             return $assignment;
         });
 
@@ -92,6 +85,7 @@ class CoordinatorAssignmentController extends Controller
         $assignment = CoordinatorDistributorAssignment::with(['distributor', 'coordinator', 'branch'])
             ->where('public_id', $uuid)
             ->firstOrFail();
+            
         $this->authorize('view', $assignment);
 
         return response()->json(['data' => $assignment]);
@@ -112,7 +106,6 @@ class CoordinatorAssignmentController extends Controller
             'data'    => $assignment
         ]);
     }
-
 
     public function destroy(string $uuid): JsonResponse
     {

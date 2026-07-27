@@ -4,6 +4,7 @@ namespace App\Policies;
 
 use App\Models\UserRoleScope;
 use App\Models\User;
+use App\Modules\Access\Infrastructure\Persistence\Models\Role;
 
 class UserRoleScopePolicy
 {
@@ -12,7 +13,9 @@ class UserRoleScopePolicy
      */
     public function before(User $user, string $ability): ?bool
     {
-        if ($user->role && $user->role->code === 'GENERAL_MANAGER') {
+        $role = $this->getUserRoleCode($user);
+
+        if ($role === 'GENERAL_MANAGER') {
             return true;
         }
 
@@ -24,9 +27,9 @@ class UserRoleScopePolicy
      */
     public function viewAny(User $user): bool
     {
-        $role = $user->role->code ?? '';
+        $role = $this->getUserRoleCode($user);
 
-        return in_array($role, ['ADMINISTRATOR', 'BRANCH_MANAGER']);
+        return in_array($role, ['ADMINISTRATOR', 'GENERAL_MANAGER', 'BRANCH_MANAGER']);
     }
 
     /**
@@ -34,6 +37,39 @@ class UserRoleScopePolicy
      */
     public function create(User $user): bool
     {
-        return false; 
+        $role = $this->getUserRoleCode($user);
+
+        return $role === 'GENERAL_MANAGER';
+    }
+
+    /**
+     * Método auxiliar robusto para obtener el código del rol como cadena de texto.
+     */
+    private function getUserRoleCode(User $user): string
+    {
+        $roleCode = null;
+
+        if ($user->relationLoaded('role') && $user->role) {
+            $roleCode = $user->role->code;
+        } elseif ($user->role_id) {
+            $role = Role::find($user->role_id);
+            $roleCode = $role ? $role->code : null;
+        }
+
+        if (!$roleCode) {
+            return '';
+        }
+
+        if (is_object($roleCode)) {
+            if (property_exists($roleCode, 'value')) {
+                return (string) $roleCode->value;
+            }
+            if (method_exists($roleCode, 'value')) {
+                return (string) $roleCode->value();
+            }
+            return (string) $roleCode;
+        }
+
+        return (string) $roleCode;
     }
 }

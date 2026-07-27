@@ -36,7 +36,15 @@ class User extends Authenticatable
     use Notifiable;
 
     /** @var list<string> */
-    protected $fillable = ['name', 'email'];
+    protected $fillable = [
+        'name',
+        'email',
+        'password',
+        'role_id',
+        'branch_id',
+        'state',
+        'context_version',
+    ];
 
     /** @return BelongsTo<Role, $this> */
     public function role(): BelongsTo

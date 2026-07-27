@@ -7,10 +7,13 @@ use App\Http\Requests\StoreUserRoleScopeRequest;
 use App\Models\UserRoleScope;
 use App\Models\User;
 use App\Models\Branch;
+use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 
 class UserRoleScopeController extends Controller
 {
+    use AuthorizesRequests;
+
     public function store(StoreUserRoleScopeRequest $request): JsonResponse
     {
         $this->authorize('create', UserRoleScope::class);
