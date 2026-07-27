@@ -25,7 +25,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property-read Role|null $role
  * @property-read Branch|null $branch
  */
-#[Hidden(['password', 'remember_token'])]
+#[Hidden(['id', 'role_id', 'branch_id', 'password', 'remember_token'])]
 class User extends Authenticatable
 {
     use HasApiTokens;

@@ -3,10 +3,16 @@
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CoordinatorAssignmentController;
 
+
 // Rutas del Módulo 02
 Route::prefix('m02')->group(function () {
+    Route::get('/assignments', [CoordinatorAssignmentController::class, 'index']);
     Route::post('/assignments', [CoordinatorAssignmentController::class, 'store']);
+    Route::get('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'show']);
+    Route::put('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'update']);
+    Route::delete('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'destroy']);
 });
+
 
 Route::prefix('v1')
     ->name('api.v1.')

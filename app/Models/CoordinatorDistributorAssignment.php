@@ -50,4 +50,14 @@ class CoordinatorDistributorAssignment extends Model
         return $this->belongsTo(Branch::class);
     }
 
+    public function distributor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'distributor_id');
+    }
+
+    public function coordinator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'coordinator_user_id');
+    }
+
 }
