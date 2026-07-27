@@ -1,6 +1,12 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\CoordinatorAssignmentController;
+
+// Rutas del Módulo 02
+Route::prefix('m02')->group(function () {
+    Route::post('/assignments', [CoordinatorAssignmentController::class, 'store']);
+});
 
 Route::prefix('v1')
     ->name('api.v1.')
