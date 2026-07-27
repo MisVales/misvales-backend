@@ -8,6 +8,9 @@ use App\Http\Controllers\Controller;
 use App\Modules\Relation\Infrastructure\Persistence\Models\CutRun;
 use App\Modules\Relation\Application\Commands\StartCut\StartCutCommand;
 use App\Modules\Relation\Application\Commands\StartCut\StartCutHandler;
+use App\Modules\Relation\Application\Queries\GetCutRun\GetCutRunQuery;
+use App\Modules\Access\Domain\Attributes\PermissionCode;
+use App\Modules\Access\Domain\Attributes\CriticalAction;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Carbon\CarbonImmutable;
@@ -22,29 +25,21 @@ class CutRunController extends Controller
         return response()->json($runs);
     }
 
-    public function show(CutRun $cutRun): JsonResponse
+    public function show(string $id, GetCutRunQuery $query): JsonResponse
     {
-        // $this->authorize('view', $cutRun);
-        $cutRun->load('distributors');
-        
+        $cutRun = $query->handle($id);
         return response()->json($cutRun);
     }
 
-    /**
-     * MFA Protected Endpoint
-     */
+    #[PermissionCode('relations.run-cut')]
+    #[CriticalAction]
     public function store(Request $request, StartCutHandler $handler): JsonResponse
     {
-        // Todo endpoint que escriba debe reautenticar MFA
-        // Inyección estricta de Autenticación MFA (usando PermissionCode y CriticalAction)
-        // Ejemplo de validación:
         $request->validate([
             'mfa_token' => 'required|string',
             'operative_date' => 'required|date'
         ]);
         
-        // $this->authorize('create', CutRun::class);
-
         $command = new StartCutCommand(
             CarbonImmutable::parse($request->input('operative_date')),
             'AUTHORIZED_RETRY',

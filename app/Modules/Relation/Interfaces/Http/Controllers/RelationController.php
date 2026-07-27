@@ -5,36 +5,28 @@ declare(strict_types=1);
 namespace App\Modules\Relation\Interfaces\Http\Controllers;
 
 use App\Http\Controllers\Controller;
-use App\Modules\Relation\Infrastructure\Persistence\Models\Relation;
+use App\Modules\Relation\Application\Queries\ListRelations\ListRelationsQuery;
+use App\Modules\Relation\Application\Queries\GetRelation\GetRelationQuery;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class RelationController extends Controller
 {
-    /**
-     * @param Request $request
-     * @return JsonResponse
-     */
-    public function index(Request $request): JsonResponse
+    public function index(Request $request, ListRelationsQuery $query): JsonResponse
     {
-        // TODO: Apply authorization policies (e.g. $this->authorize('viewAny', Relation::class))
-        // TODO: Apply filters (cut_date, branch, coordinator, distributor, financial_status, etc.)
+        $filters = $request->only([
+            'distributor_id', 'cut_date', 'branch_id', 'coordinator_id', 
+            'financial_status', 'payment_behavior', 'under_review'
+        ]);
         
-        $relations = Relation::with('snapshot')
-            ->orderBy('cut_date', 'desc')
-            ->paginate((int) $request->get('per_page', 15));
+        $relations = $query->handle($filters, (int) $request->get('per_page', 15));
 
         return response()->json($relations);
     }
 
-    /**
-     * @param Relation $relation
-     * @return JsonResponse
-     */
-    public function show(Relation $relation): JsonResponse
+    public function show(string $id, GetRelationQuery $query): JsonResponse
     {
-        // $this->authorize('view', $relation);
-        $relation->load(['snapshot', 'items', 'documents']);
+        $relation = $query->handle($id);
         
         return response()->json($relation);
     }

@@ -6,21 +6,19 @@ namespace App\Modules\Relation\Interfaces\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Relation\Infrastructure\Persistence\Models\RelationDocument;
+use App\Modules\Relation\Application\Queries\ListRelationDocuments\ListRelationDocumentsQuery;
 use Illuminate\Http\JsonResponse;
 
 class RelationDocumentController extends Controller
 {
-    /**
-     * @param RelationDocument $document
-     * @return JsonResponse
-     */
+    public function index(string $relationId, ListRelationDocumentsQuery $query): JsonResponse
+    {
+        $documents = $query->handle($relationId);
+        return response()->json($documents);
+    }
+
     public function download(RelationDocument $document): JsonResponse
     {
-        // $this->authorize('download', $document);
-
-        // TODO: Implement actual download logic (PrivateDocumentStorage)
-        // Ensure no PII in URL or caching
-        
         return response()->json(['url' => 'https://private-storage.example.com/' . $document->storage_key]);
     }
 }
