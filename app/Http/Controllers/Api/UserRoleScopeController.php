@@ -13,6 +13,8 @@ class UserRoleScopeController extends Controller
 {
     public function store(StoreUserRoleScopeRequest $request): JsonResponse
     {
+        $this->authorize('create', UserRoleScope::class);
+
         $user = User::where('public_id', $request->user_public_id)->firstOrFail();
         
         $branchId = null;
@@ -35,7 +37,19 @@ class UserRoleScopeController extends Controller
 
     public function index(): JsonResponse
     {
-        $scopes = UserRoleScope::with(['user', 'role', 'branch'])->paginate(15);
+        $this->authorize('viewAny', UserRoleScope::class);
+
+        $user = auth()->user();
+        $role = $user->role->code ?? '';
+
+        $query = UserRoleScope::with(['user', 'role', 'branch']);
+
+        if ($role === 'BRANCH_MANAGER') {
+            $query->where('branch_id', $user->branch_id);
+        }
+
+        $scopes = $query->paginate(15);
+
         return response()->json($scopes);
     }
 }
