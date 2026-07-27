@@ -25,7 +25,7 @@ class CoordinatorAssignmentController extends Controller
             'branch_id'           => $branch->id,
             'starts_at'           => $request->starts_at,
             'ends_at'             => $request->ends_at,
-            'assigned_by'         => $coordinator->id, 
+            'assigned_by'         => auth()->id(), // <-- ¡Ahora usa al usuario logueado!
             'source_type'         => 'MANUAL',
             'source_id'           => 1, 
             'reason'              => $request->reason,

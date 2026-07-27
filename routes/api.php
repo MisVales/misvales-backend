@@ -2,15 +2,21 @@
 
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Api\CoordinatorAssignmentController;
+use App\Http\Controllers\Api\UserRoleScopeController;
 
 
-// Rutas del Módulo 02
-Route::prefix('m02')->group(function () {
+Route::middleware('auth:sanctum')->prefix('m02')->group(function () {
+    
+
     Route::get('/assignments', [CoordinatorAssignmentController::class, 'index']);
     Route::post('/assignments', [CoordinatorAssignmentController::class, 'store']);
     Route::get('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'show']);
     Route::put('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'update']);
     Route::delete('/assignments/{uuid}', [CoordinatorAssignmentController::class, 'destroy']);
+
+
+    Route::get('/scopes', [UserRoleScopeController::class, 'index']);
+    Route::post('/scopes', [UserRoleScopeController::class, 'store']);
 });
 
 
