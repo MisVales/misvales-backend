@@ -13,11 +13,23 @@ use Illuminate\Http\Request;
 class CoordinatorAssignmentController extends Controller
 {
 
-    public function store(StoreCoordinatorAssignmentRequest $request): JsonResponse
+   public function store(StoreCoordinatorAssignmentRequest $request): JsonResponse
     {
+        $branch = Branch::where('public_id', $request->branch_public_id)->firstOrFail();
+
+        $this->authorize('create', [CoordinatorDistributorAssignment::class, $branch]);
+
         $distributor = User::where('public_id', $request->distributor_public_id)->firstOrFail();
         $coordinator = User::where('public_id', $request->coordinator_public_id)->firstOrFail();
-        $branch = Branch::where('public_id', $request->branch_public_id)->firstOrFail();
+
+        if ($distributor->branch_id !== $branch->id || $coordinator->branch_id !== $branch->id) {
+            return response()->json([
+                'error' => [
+                    'code' => 'COORDINATOR_BRANCH_MISMATCH',
+                    'message' => 'El coordinador y la distribuidora deben pertenecer a la misma sucursal.'
+                ]
+            ], 422);
+        }
 
         $assignment = CoordinatorDistributorAssignment::create([
             'distributor_id'      => $distributor->id,
@@ -25,7 +37,7 @@ class CoordinatorAssignmentController extends Controller
             'branch_id'           => $branch->id,
             'starts_at'           => $request->starts_at,
             'ends_at'             => $request->ends_at,
-            'assigned_by'         => auth()->id(), // <-- ¡Ahora usa al usuario logueado!
+            'assigned_by'         => auth()->id(), 
             'source_type'         => 'MANUAL',
             'source_id'           => 1, 
             'reason'              => $request->reason,
@@ -39,9 +51,18 @@ class CoordinatorAssignmentController extends Controller
 
     public function index(): JsonResponse
     {
+        $user = auth()->user();
+        $role = $user->role->code ?? '';
 
-        $assignments = CoordinatorDistributorAssignment::with(['distributor', 'coordinator', 'branch'])
-            ->paginate(15); 
+        $query = CoordinatorDistributorAssignment::with(['distributor', 'coordinator', 'branch']);
+        
+        if ($role === 'BRANCH_MANAGER') {
+            $query->where('branch_id', $user->branch_id);
+        } 
+        elseif ($role === 'COORDINATOR') {
+            $query->where('coordinator_user_id', $user->id);
+        }
+        $assignments = $query->paginate(15);
 
         return response()->json($assignments);
     }
@@ -51,6 +72,7 @@ class CoordinatorAssignmentController extends Controller
         $assignment = CoordinatorDistributorAssignment::with(['distributor', 'coordinator', 'branch'])
             ->where('public_id', $uuid)
             ->firstOrFail();
+        $this->authorize('view', $assignment);
 
         return response()->json(['data' => $assignment]);
     }
@@ -71,9 +93,13 @@ class CoordinatorAssignmentController extends Controller
         ]);
     }
 
+
     public function destroy(string $uuid): JsonResponse
     {
         $assignment = CoordinatorDistributorAssignment::where('public_id', $uuid)->firstOrFail();
+        
+        $this->authorize('delete', $assignment);
+
         $assignment->delete();
 
         return response()->json([
