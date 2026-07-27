@@ -17,6 +17,15 @@ Route::middleware('auth:sanctum')->prefix('m02')->group(function () {
 
     Route::get('/scopes', [UserRoleScopeController::class, 'index']);
     Route::post('/scopes', [UserRoleScopeController::class, 'store']);
+
+
+    // Rutas de Sucursales 
+    Route::get('/branches', [App\Http\Controllers\Api\BranchController::class, 'index']);
+    Route::get('/branches/{uuid}', [App\Http\Controllers\Api\BranchController::class, 'show']);
+
+    // Rutas de Roles 
+    Route::get('/roles', [App\Http\Controllers\Api\RoleController::class, 'index']);
+    Route::get('/roles/{id}', [App\Http\Controllers\Api\RoleController::class, 'show']);
 });
 
 
