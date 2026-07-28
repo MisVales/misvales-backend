@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Exceptions\BusinessRuleException;
 use Illuminate\Http\JsonResponse;
 
 class BranchController extends Controller
@@ -19,6 +20,19 @@ class BranchController extends Controller
         return (string) $role;
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/branches",
+     *     summary="Lista las sucursales",
+     *     description="Obtiene el listado de sucursales. Para roles de alcance local, solo devuelve la sucursal asignada al usuario.",
+     *     tags={"Organización (M02)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Response(
+     *         response=200,
+     *         description="Listado paginado de sucursales"
+     *     )
+     * )
+     */
     public function index(): JsonResponse
     {
         $user = auth()->user();
@@ -37,6 +51,30 @@ class BranchController extends Controller
         return response()->json($branches);
     }
 
+    /**
+     * @OA\Get(
+     *     path="/api/branches/{uuid}",
+     *     summary="Consulta el detalle de una sucursal",
+     *     description="Devuelve la información de una sucursal específica. Si un usuario con rol de alcance local intenta consultar una sucursal distinta a la suya, se simula un error 404 por seguridad (O11).",
+     *     tags={"Organización (M02)"},
+     *     security={{"bearerAuth":{}}},
+     *     @OA\Parameter(
+     *         name="uuid",
+     *         in="path",
+     *         required=true,
+     *         description="UUID público de la sucursal",
+     *         @OA\Schema(type="string", format="uuid")
+     *     ),
+     *     @OA\Response(
+     *         response=200,
+     *         description="Detalle de la sucursal"
+     *     ),
+     *     @OA\Response(
+     *         response=404,
+     *         description="BRANCH_NOT_FOUND - La sucursal no existe dentro del alcance visible"
+     *     )
+     * )
+     */
     public function show(string $uuid): JsonResponse
     {
         $branch = Branch::where('public_id', $uuid)->firstOrFail();
@@ -47,12 +85,12 @@ class BranchController extends Controller
 
         if (in_array($role, $restrictedRoles, true)) {
             if ($user->branch_id !== $branch->id) {
-                return response()->json([
-                    'error' => [
-                        'code' => 'ORGANIZATION_SCOPE_DENIED',
-                        'message' => 'No tienes permiso para consultar esta sucursal.'
-                    ]
-                ], 403);
+                // Aplicación estricta O11: No revelar que la sucursal existe
+                throw new BusinessRuleException(
+                    'BRANCH_NOT_FOUND',
+                    'La sucursal no existe dentro del alcance visible.',
+                    404
+                );
             }
         }
 
