@@ -10,8 +10,22 @@ use App\Modules\Distributor\Persistence\Models\DistributorCategoryAssignment;
 use App\Modules\Distributor\Presentation\Http\Requests\AssignCategoryRequest;
 use Illuminate\Http\JsonResponse;
 
+/**
+ * Controlador para la gestión y asignación de categorías de una Distribuidora.
+ * Encargado de exponer la creación o actualización de asignaciones históricas de categoría.
+ */
 class DistributorCategoryController extends Controller
 {
+    /**
+     * Asigna o actualiza la categoría de una distribuidora procesando de manera idempotente.
+     *
+     * @tags Distributor
+     * @param string $id UUID de la distribuidora.
+     * @param AssignCategoryRequest $request
+     * @param AssignCategoryHandler $assignHandler
+     * @param ChangeCategoryHandler $changeHandler
+     * @return JsonResponse
+     */
     public function store(
         string $id, 
         AssignCategoryRequest $request, 

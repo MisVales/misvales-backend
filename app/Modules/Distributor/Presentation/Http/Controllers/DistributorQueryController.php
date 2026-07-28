@@ -13,8 +13,20 @@ use App\Modules\Distributor\Presentation\Http\Resources\DistributorCapabilityRes
 use App\Modules\Distributor\Presentation\Http\Resources\DistributorCategoryAssignmentResource;
 use Illuminate\Http\Request;
 
+/**
+ * Controlador administrativo de consultas del módulo Distribuidoras.
+ * Resuelve listas, detalles, historiales y capabilities.
+ */
 class DistributorQueryController extends Controller
 {
+    /**
+     * Lista de distribuidoras con soporte de filtros por sucursal y estado.
+     *
+     * @tags Distributor Query
+     * @param Request $request
+     * @param ListDistributorsQuery $query
+     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     */
     public function index(Request $request, ListDistributorsQuery $query)
     {
         $this->authorize('viewAny', Distributor::class);
