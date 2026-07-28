@@ -16,6 +16,10 @@ class StartCutTest extends TestCase
 
     public function test_it_requires_mfa_token_to_start_cut()
     {
+        $this->mock(\App\Modules\Relation\Application\Contracts\ConfigurationSnapshotProvider::class, function ($mock) {
+            $mock->shouldReceive('resolveSnapshot')->andReturn(['mock' => true]);
+        });
+
         $response = $this->postJson('/api/v1/cut-runs', [
             'operative_date' => '2026-07-25',
         ]);

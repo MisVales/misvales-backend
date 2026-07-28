@@ -49,3 +49,7 @@ Route::prefix('v1')
 Route::prefix('v1')
     ->name('api.v1.')
     ->group(base_path('app/Modules/Reporting/Presentation/Http/routes.php'));
+
+
+use App\Modules\Relation\Interfaces\Http\Controllers\CutRunController;
+Route::post('v1/cut-runs', [CutRunController::class, 'store']);
