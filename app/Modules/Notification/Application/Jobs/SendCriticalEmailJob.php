@@ -13,6 +13,13 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
+/**
+ * Job asíncrono encargado de enviar de manera segura, transaccional e idempotente
+ * los correos electrónicos correspondientes a eventos críticos autorizados (M17).
+ *
+ * Utiliza bloqueo de base de datos (lockForUpdate) para evitar múltiples envíos simultáneos
+ * de un mismo correo debido a retrasos en Workers.
+ */
 class SendCriticalEmailJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

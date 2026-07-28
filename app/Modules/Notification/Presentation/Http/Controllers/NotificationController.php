@@ -9,8 +9,19 @@ use App\Modules\Notification\Presentation\Http\Resources\NotificationResource;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 
+/**
+ * Controlador de presentación para la API de Notificaciones de la aplicación.
+ * Permite listar de forma paginada y marcar notificaciones propias como leídas.
+ */
 class NotificationController extends Controller
 {
+    /**
+     * Lista de forma paginada las notificaciones asociadas al usuario autenticado.
+     *
+     * @tags Notifications
+     * @param Request $request
+     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     */
     public function index(Request $request)
     {
         $query = Notification::where('user_id', Auth::id());
@@ -29,6 +40,15 @@ class NotificationController extends Controller
         return NotificationResource::collection($notifications);
     }
 
+    /**
+     * Marca de forma idempotente una notificación individual como leída.
+     * Validando estrictamente mediante Policy la propiedad del recurso.
+     *
+     * @tags Notifications
+     * @param Request $request
+     * @param Notification $notification
+     * @return NotificationResource
+     */
     public function read(Request $request, Notification $notification)
     {
         $this->authorize('read', $notification);
