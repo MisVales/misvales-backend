@@ -18,6 +18,14 @@ final readonly class VoucherPolicy
         return $this->contexts->fromUser($user)->hasPermission(PermissionCode::VOUCHERS_VIEW->value);
     }
 
+    public function generate(User $user): bool
+    {
+        $actor = $this->contexts->fromUser($user);
+
+        return $actor->role === RoleCode::DISTRIBUTOR
+            && $actor->hasPermission(PermissionCode::VOUCHERS_GENERATE->value);
+    }
+
     public function openAtCounter(User $user): bool
     {
         return $this->cashierHas($user, PermissionCode::VOUCHERS_OPEN_AT_COUNTER);

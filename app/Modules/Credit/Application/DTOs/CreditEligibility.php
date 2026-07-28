@@ -14,5 +14,8 @@ final readonly class CreditEligibility
         public Money $availableBalance,
         public ?CreditRange $restrictionRange,
         public ?string $restrictionId,
+        public ?int $creditLineId = null,
+        public ?int $restrictionInternalId = null,
+        public ?string $boundVoucherId = null,
     ) {}
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Modules\Voucher\Presentation\Http\Requests;
 
 use App\Modules\Voucher\Domain\Enums\VoucherStatus;
+use App\Modules\Voucher\Domain\Enums\VoucherType;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
@@ -22,9 +23,14 @@ final class SearchVouchersRequest extends FormRequest
             'folio' => ['nullable', 'string', 'max:100'],
             'client_name' => ['nullable', 'string', 'min:2', 'max:200'],
             'status' => ['nullable', Rule::enum(VoucherStatus::class)],
+            'type' => ['nullable', Rule::enum(VoucherType::class)],
+            'client_id' => ['nullable', 'uuid'],
+            'distributor_id' => ['nullable', 'uuid'],
+            'branch_id' => ['nullable', 'uuid'],
+            'product_id' => ['nullable', 'uuid'],
             'generated_from' => ['nullable', 'date_format:Y-m-d'],
             'generated_to' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:generated_from'],
-            'sort' => ['nullable', Rule::in(['folio', 'status', 'generated_at'])],
+            'sort' => ['nullable', Rule::in(['folio', 'type', 'status', 'capital_amount', 'generated_at'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ];

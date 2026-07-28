@@ -50,6 +50,7 @@ final readonly class CounterVoucherService
         private IdempotencyService $idempotency,
         private VoucherRecorder $recorder,
         private SensitiveReasonGuard $reasons,
+        private VoucherDataBuilder $data,
     ) {}
 
     /**
@@ -418,22 +419,7 @@ final readonly class CounterVoucherService
     /** @return array<string, mixed> */
     private function voucherData(VoucherModel $voucher): array
     {
-        return [
-            'voucher_id' => $voucher->id,
-            'folio' => $voucher->folio,
-            'type' => $voucher->type,
-            'status' => $voucher->status->value,
-            'branch_id' => $voucher->branch_id,
-            'distributor_id' => $voucher->distributor_id,
-            'product_id' => $voucher->product_id,
-            'product_version_id' => $voucher->product_version_id,
-            'capital' => $voucher->capital_amount,
-            'financial_snapshot' => $voucher->financial_snapshot,
-            'generated_at' => $voucher->generated_at->toIso8601String(),
-            'released_at' => $voucher->released_at?->toIso8601String(),
-            'fulfilled_at' => $voucher->fulfilled_at?->toIso8601String(),
-            'lock_version' => $voucher->lock_version,
-        ];
+        return $this->data->build($voucher);
     }
 
     private function clientActor(VoucherActorContext $actor): ClientActorContext

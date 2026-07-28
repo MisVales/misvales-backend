@@ -7,7 +7,7 @@ namespace App\Modules\Voucher\Domain\Exceptions;
 use RuntimeException;
 use Throwable;
 
-/** Excepción pública estable del módulo de caja. */
+/** Excepción pública estable de generación y caja. */
 final class VoucherDomainException extends RuntimeException
 {
     /** @param array<string, list<string>> $fields */
@@ -139,6 +139,81 @@ final class VoucherDomainException extends RuntimeException
             'No fue posible resolver una dependencia propietaria requerida.',
             503,
             ['dependency' => [$dependency]],
+        );
+    }
+
+    /** Construye un error estable para una regla de generación de M08. */
+    public static function rule(string $code, string $message, int $status = 409): self
+    {
+        return new self($code, $message, $status);
+    }
+
+    public static function generationPermissionDenied(): self
+    {
+        return self::rule('AUTH_SCOPE_DENIED', 'Solo una distribuidora autorizada puede generar vales.', 403);
+    }
+
+    public static function distributorInactive(): self
+    {
+        return self::rule('DISTRIBUTOR_INACTIVE', 'La distribuidora no conserva una asignación operativa vigente.');
+    }
+
+    public static function clientNotAssigned(): self
+    {
+        return self::rule(
+            'CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR',
+            'El cliente no está asignado actualmente a la distribuidora.',
+            404,
+        );
+    }
+
+    public static function productUnavailable(): self
+    {
+        return self::rule('PRODUCT_NOT_AVAILABLE', 'El producto no está publicado y vigente.', 404);
+    }
+
+    public static function productIncomplete(): self
+    {
+        return self::rule('PRODUCT_CONFIGURATION_INCOMPLETE', 'La configuración financiera del producto está incompleta.', 422);
+    }
+
+    public static function categoryUnavailable(): self
+    {
+        return self::rule(
+            'DISTRIBUTOR_CATEGORY_NOT_AVAILABLE',
+            'La distribuidora no conserva una categoría publicada y vigente.',
+        );
+    }
+
+    public static function creditInsufficient(): self
+    {
+        return self::rule('CREDIT_INSUFFICIENT', 'El producto excede el saldo disponible.', 422);
+    }
+
+    public static function creditRangeInvalid(): self
+    {
+        return self::rule(
+            'CREDIT_50_PERCENT_RULE_NOT_SATISFIED',
+            'El producto está fuera del rango especial del 50 %.',
+            422,
+        );
+    }
+
+    public static function creditRestrictionLinked(): self
+    {
+        return self::rule(
+            'CREDIT_RESTRICTION_ALREADY_LINKED',
+            'Otro vale pendiente ocupa la restricción activa.',
+        );
+    }
+
+    public static function prevaleConflict(?Throwable $previous = null): self
+    {
+        return new self(
+            'VOUCHER_PREVALE_CONFLICT',
+            'El historial o una solicitud concurrente impide crear otro prevale.',
+            409,
+            previous: $previous,
         );
     }
 }

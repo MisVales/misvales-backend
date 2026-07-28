@@ -16,7 +16,7 @@ final class VoucherSummaryResource extends JsonResource
         return [
             'voucher_id' => $this->resource->id,
             'folio' => $this->resource->folio,
-            'type' => $this->resource->type,
+            'type' => $this->resource->type->value,
             'status' => $this->resource->status->value,
             'client_name' => $this->resource->client_name_snapshot,
             'capital' => $this->resource->capital_amount,

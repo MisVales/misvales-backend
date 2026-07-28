@@ -922,6 +922,32 @@ paths:
         '4XX': { $ref: '#/components/responses/ClientError' }
         default: { $ref: '#/components/responses/ClientError' }
   /api/v1/vouchers:
+    post:
+      operationId: generateVoucher
+      summary: Genera un prevale o vale digital con cálculo y snapshot inmutables
+      x-permission: vouchers.generate
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+        - $ref: '#/components/parameters/XRequestId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VoucherGenerationInput' }
+      responses:
+        '201':
+          description: Vale generado; la línea todavía no se descuenta
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoucherResponse' }
+        '200':
+          description: Repetición idempotente del vale original
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/VoucherResponse' }
+        '403': { description: Actor distinto de la distribuidora propietaria }
+        '409': { description: 'Morosidad, categoría, concurrencia, restricción ocupada o clave reutilizada' }
+        '422': { description: 'Producto incompleto, crédito insuficiente o regla del 50 % incumplida' }
     get:
       operationId: searchCounterVouchers
       summary: Busca vales dentro del alcance autorizado
@@ -930,6 +956,11 @@ paths:
         - { name: folio, in: query, schema: { type: string, maxLength: 100 } }
         - { name: client_name, in: query, schema: { type: string, maxLength: 200 } }
         - { name: status, in: query, schema: { $ref: '#/components/schemas/VoucherStatus' } }
+        - { name: type, in: query, schema: { $ref: '#/components/schemas/VoucherType' } }
+        - { name: client_id, in: query, schema: { type: string, format: uuid } }
+        - { name: distributor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: product_id, in: query, schema: { type: string, format: uuid } }
         - { name: generated_from, in: query, schema: { type: string, format: date } }
         - { name: generated_to, in: query, schema: { type: string, format: date } }
         - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
@@ -2394,6 +2425,7 @@ components:
         - configuration.redemption_period.view
         - configuration.redemption_period.manage
         - vouchers.view
+        - vouchers.generate
         - vouchers.open_at_counter
         - vouchers.release
         - vouchers.reject
@@ -2952,6 +2984,16 @@ components:
     VoucherStatus:
       type: string
       enum: [GENERADO, VALIDACION_CAJA, CORRECCION_PENDIENTE, LIBERADO, FERIADO, RECHAZADO, CANCELADO]
+    VoucherType:
+      type: string
+      enum: [PREVALE, VALE_DIGITAL]
+    VoucherGenerationInput:
+      type: object
+      additionalProperties: false
+      required: [client_id, product_id]
+      properties:
+        client_id: { type: string, format: uuid }
+        product_id: { type: string, format: uuid }
     DataChangeRequestStatus:
       type: string
       enum: [PENDIENTE, AUTORIZADO, RECHAZADO, USADO, VENCIDO]
@@ -3037,15 +3079,45 @@ components:
       properties:
         data:
           type: object
-          required: [voucher_id, folio, type, status, capital, lock_version]
+          required: [id, voucher_id, folio, type, status, client_id, product, financial_summary, credit_validation, installments, generated_at, lock_version]
           properties:
+            id: { type: string, format: uuid }
             voucher_id: { type: string, format: uuid }
             folio: { type: string }
-            type: { type: string }
+            type: { $ref: '#/components/schemas/VoucherType' }
             status: { $ref: '#/components/schemas/VoucherStatus' }
-            capital: { type: string, pattern: '^\d+\.\d{2,4}$' }
+            client_id: { type: string, format: uuid }
+            distributor_id: { type: string, format: uuid }
+            product:
+              type: object
+              properties:
+                id: { type: string, format: uuid }
+                version_id: { type: string, format: uuid }
+                version: { type: integer }
+                name: { type: string }
+                capital: { type: string, pattern: '^\d+\.\d{2}$' }
+            category: { type: object }
+            financial_summary: { type: object }
             financial_snapshot: { type: object }
             client: { type: object }
+            credit_validation: { type: object }
+            installments:
+              type: array
+              items:
+                type: object
+                properties:
+                  id: { type: string, format: uuid }
+                  payment_number: { type: integer, minimum: 1 }
+                  total_payments: { type: integer, minimum: 1 }
+                  capital: { type: string }
+                  loan_commission: { type: string }
+                  interest: { type: string }
+                  insurance: { type: string }
+                  base_payment: { type: string }
+                  distributor_profit: { type: string }
+                  client_total: { type: string }
+                  misvales_due: { type: string }
+            generated_at: { type: string, format: date-time }
             credit_line:
               type: object
               properties:

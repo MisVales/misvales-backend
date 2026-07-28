@@ -35,6 +35,7 @@ use App\Modules\Voucher\Infrastructure\Persistence\Eloquent\Models\VoucherModel;
 use Database\Seeders\AccessFoundationSeeder;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Tests\Support\FakeClientDistributorProfiles;
@@ -295,6 +296,36 @@ final class VoucherCounterWorkflowTest extends TestCase
             'lock_version' => 1,
         ])->save();
         $distributorId = (string) Str::uuid();
+        $distributorUser = User::factory()->distributor()->create([
+            'branch_id' => $branch->id,
+            'state' => AccountState::ACTIVE,
+        ]);
+        DB::table('distributors')->insert([
+            'id' => $distributorId,
+            'distributor_number' => 'D-'.Str::upper(Str::random(8)),
+            'onboarding_application_id' => (string) Str::uuid(),
+            'user_id' => $distributorUser->public_id,
+            'branch_id' => $branch->public_id,
+            'status' => 'ACTIVE',
+            'activated_at' => now('UTC'),
+            'activation_operation_id' => (string) Str::uuid(),
+            'lock_version' => 1,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+        DB::table('distributor_access_links')->insert([
+            'public_id' => (string) Str::uuid(),
+            'user_id' => $distributorUser->id,
+            'external_request_id' => 'request-'.Str::uuid(),
+            'external_distributor_id' => $distributorId,
+            'branch_id' => $branch->id,
+            'coordinator_user_id' => $authority->id,
+            'authorized_by' => $authority->id,
+            'initial_credit_line' => '30000.00',
+            'authorized_at' => now('UTC'),
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
         $assignment = new ClientDistributorAssignment;
         $assignment->forceFill([
             'client_id' => $client->id,
@@ -326,6 +357,72 @@ final class VoucherCounterWorkflowTest extends TestCase
         ));
         $this->app->instance(DistributorProfilePort::class, $profiles);
 
+        $productId = (string) Str::uuid();
+        $productVersionId = (string) Str::uuid();
+        $productInternalId = DB::table('products')->insertGetId([
+            'public_id' => $productId,
+            'status' => 'PUBLISHED',
+            'created_by' => $cashier->id,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+        DB::table('product_versions')->insert([
+            'public_id' => $productVersionId,
+            'product_id' => $productInternalId,
+            'version_number' => 1,
+            'amount' => '15000.0000',
+            'loan_commission_rate' => '0.1000',
+            'interest_rate_per_fortnight' => '0.0100',
+            'insurance_amount' => '100.0000',
+            'fortnight_count' => 8,
+            'status' => 'PUBLISHED',
+            'effective_from' => now('UTC')->subMinute(),
+            'created_by' => $cashier->id,
+            'published_by' => $cashier->id,
+            'published_at' => now('UTC'),
+            'reason' => 'Configuración sintética de M09.',
+            'lock_version' => 1,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+        $categoryId = (string) Str::uuid();
+        $categoryVersionId = (string) Str::uuid();
+        $categoryInternalId = DB::table('categories')->insertGetId([
+            'public_id' => $categoryId,
+            'status' => 'PUBLISHED',
+            'created_by' => $cashier->id,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+        DB::table('category_versions')->insert([
+            'public_id' => $categoryVersionId,
+            'category_id' => $categoryInternalId,
+            'version_number' => 1,
+            'name' => 'Categoría de prueba',
+            'description' => 'Datos sintéticos.',
+            'distributor_profit_rate' => '0.1000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now('UTC')->subMinute(),
+            'created_by' => $cashier->id,
+            'published_by' => $cashier->id,
+            'published_at' => now('UTC'),
+            'reason' => 'Configuración sintética de M09.',
+            'lock_version' => 1,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+        $creditLineId = DB::table('credit_lines')->insertGetId([
+            'public_id' => (string) Str::uuid(),
+            'distributor_id' => $distributorUser->id,
+            'total_authorized' => '30000.0000',
+            'used_balance' => '0.0000',
+            'available_balance' => '30000.0000',
+            'recovered_capital_total' => '0.0000',
+            'lock_version' => 1,
+            'created_at' => now('UTC'),
+            'updated_at' => now('UTC'),
+        ]);
+
         $voucher = new VoucherModel;
         $voucher->forceFill([
             'folio' => 'PV-000001',
@@ -334,10 +431,14 @@ final class VoucherCounterWorkflowTest extends TestCase
             'branch_id' => $branch->id,
             'client_id' => $client->id,
             'distributor_id' => $distributorId,
-            'distributor_user_id' => 777,
-            'product_id' => (string) Str::uuid(),
-            'product_version_id' => (string) Str::uuid(),
+            'distributor_user_id' => $distributorUser->id,
+            'product_id' => $productId,
+            'product_version_id' => $productVersionId,
+            'category_id' => $categoryId,
+            'category_version_id' => $categoryVersionId,
+            'credit_line_id' => $creditLineId,
             'capital_amount' => '15000.0000',
+            'credit_available_snapshot' => '30000.0000',
             'financial_snapshot' => [
                 'capital' => '15000.00',
                 'commission' => '1000.00',
@@ -347,6 +448,7 @@ final class VoucherCounterWorkflowTest extends TestCase
             ],
             'client_name_snapshot' => 'Nombre Original Apellido Prueba',
             'client_name_normalized' => 'nombre original apellido prueba',
+            'generated_by' => $distributorUser->id,
             'generated_at' => now('UTC'),
             'lock_version' => 1,
         ])->save();

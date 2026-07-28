@@ -21,6 +21,11 @@ final class FakeVoucherCreditGateway implements CreditVoucherGateway
         return new CreditEligibility(true, new Money('100000.00'), null, null);
     }
 
+    public function lockedEligibility(int $distributorId, Money $capital): CreditEligibility
+    {
+        return $this->eligibility($distributorId, $capital);
+    }
+
     public function bindRestriction(
         int $distributorId,
         string $voucherId,

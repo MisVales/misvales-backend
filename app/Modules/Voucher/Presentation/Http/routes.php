@@ -7,6 +7,9 @@ use App\Modules\Voucher\Presentation\Http\Controllers\VoucherController;
 use Illuminate\Support\Facades\Route;
 
 Route::middleware(['auth:sanctum'])->group(function (): void {
+    Route::post('/vouchers', [VoucherController::class, 'store'])
+        ->middleware('throttle:voucher-generate')
+        ->name('vouchers.store');
     Route::get('/vouchers', [VoucherController::class, 'index'])->name('vouchers.index');
     Route::get('/vouchers/{voucher}', [VoucherController::class, 'show'])
         ->whereUuid('voucher')

@@ -313,9 +313,12 @@ return new class extends Migration
                 'voucher_audits',
                 'voucher_outbox_events',
             ] as $table) {
+                $timing = in_array($table, ['voucher_operation_history', 'voucher_audits'], true)
+                    ? 'BEFORE UPDATE OR DELETE'
+                    : 'BEFORE DELETE';
                 DB::statement(
                     "CREATE TRIGGER {$table}_no_delete
-                     BEFORE DELETE ON {$table}
+                     {$timing} ON {$table}
                      FOR EACH ROW EXECUTE FUNCTION prevent_voucher_evidence_delete()",
                 );
             }

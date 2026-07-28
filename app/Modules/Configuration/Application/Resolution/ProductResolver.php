@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Modules\Configuration\Application\Resolution;
 
+use App\Modules\Configuration\Application\Contracts\ProductCatalogContract;
 use App\Modules\Configuration\Application\DTOs\ResolvedProduct;
 use App\Modules\Configuration\Domain\Exceptions\ConfigurationException;
 use App\Modules\Configuration\Infrastructure\Persistence\Repositories\EloquentProductRepository;
@@ -12,7 +13,7 @@ use Carbon\CarbonImmutable;
 /**
  * Resuelve la versión vigente de un producto para una fecha dada (C04/C09).
  */
-final class ProductResolver
+final class ProductResolver implements ProductCatalogContract
 {
     public function __construct(
         private readonly EloquentProductRepository $repository,

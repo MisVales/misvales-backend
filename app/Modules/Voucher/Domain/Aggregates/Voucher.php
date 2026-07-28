@@ -16,6 +16,12 @@ final class Voucher
         private int $lockVersion,
     ) {}
 
+    /** Única transición ejecutada por M08 al crear un folio. */
+    public static function generated(string $id): self
+    {
+        return new self($id, VoucherStatus::GENERATED, 1);
+    }
+
     public function status(): VoucherStatus
     {
         return $this->status;

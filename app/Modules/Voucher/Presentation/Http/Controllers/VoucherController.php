@@ -6,6 +6,8 @@ namespace App\Modules\Voucher\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Modules\Voucher\Application\Commands\GenerateVoucher\Command as GenerateVoucherCommand;
+use App\Modules\Voucher\Application\Commands\GenerateVoucher\Handler as GenerateVoucherHandler;
 use App\Modules\Voucher\Application\DTOs\OperationMetadata;
 use App\Modules\Voucher\Application\Security\VoucherActorContext;
 use App\Modules\Voucher\Application\Security\VoucherActorContextFactory;
@@ -16,6 +18,7 @@ use App\Modules\Voucher\Domain\Exceptions\VoucherDomainException;
 use App\Modules\Voucher\Infrastructure\Persistence\Eloquent\Models\DataChangeRequestModel;
 use App\Modules\Voucher\Infrastructure\Persistence\Eloquent\Models\VoucherModel;
 use App\Modules\Voucher\Presentation\Http\Requests\FulfillVoucherRequest;
+use App\Modules\Voucher\Presentation\Http\Requests\GenerateVoucherRequest;
 use App\Modules\Voucher\Presentation\Http\Requests\OpenVoucherRequest;
 use App\Modules\Voucher\Presentation\Http\Requests\RejectVoucherRequest;
 use App\Modules\Voucher\Presentation\Http\Requests\ReleaseVoucherRequest;
@@ -24,6 +27,7 @@ use App\Modules\Voucher\Presentation\Http\Requests\SearchVouchersRequest;
 use App\Modules\Voucher\Presentation\Http\Resources\ModificationRequestResource;
 use App\Modules\Voucher\Presentation\Http\Resources\VoucherResource;
 use App\Modules\Voucher\Presentation\Http\Resources\VoucherSummaryResource;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Gate;
@@ -35,7 +39,29 @@ final class VoucherController extends Controller
         private readonly CounterVoucherService $vouchers,
         private readonly ModificationWorkflowService $modifications,
         private readonly VoucherActorContextFactory $contexts,
+        private readonly GenerateVoucherHandler $generate,
     ) {}
+
+    public function store(GenerateVoucherRequest $request): JsonResponse
+    {
+        Gate::authorize('generate', VoucherModel::class);
+        $user = $request->user();
+        if (! $user instanceof User) {
+            throw VoucherDomainException::scopeDenied();
+        }
+        $result = $this->generate->handle(new GenerateVoucherCommand(
+            actor: $user,
+            clientId: (string) $request->validated('client_id'),
+            productId: (string) $request->validated('product_id'),
+            metadata: $this->metadata($request),
+        ));
+
+        return response()->json(
+            ['data' => $result->data],
+            $result->replayed ? 200 : 201,
+            ['X-Request-Id' => $this->requestId($request)],
+        );
+    }
 
     public function index(SearchVouchersRequest $request): AnonymousResourceCollection
     {

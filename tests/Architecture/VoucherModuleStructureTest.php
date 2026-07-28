@@ -26,4 +26,27 @@ final class VoucherModuleStructureTest extends TestCase
             self::assertFileExists($root.'/'.$path);
         }
     }
+
+    public function test_m08_generation_keeps_financial_rules_out_of_http_layer(): void
+    {
+        $root = dirname(__DIR__, 2).'/app/Modules/Voucher';
+        foreach ([
+            'Application/Commands/GenerateVoucher/Handler.php',
+            'Application/Contracts/VoucherGenerationRepository.php',
+            'Domain/Enums/VoucherType.php',
+            'Domain/Services/VoucherTypeResolver.php',
+            'Domain/Services/VoucherCalculator.php',
+            'Domain/Services/InstallmentAllocator.php',
+            'Domain/ValueObjects/Money.php',
+            'Infrastructure/Persistence/Eloquent/Repositories/EloquentVoucherGenerationRepository.php',
+            'Presentation/Http/Requests/GenerateVoucherRequest.php',
+        ] as $path) {
+            self::assertFileExists($root.'/'.$path);
+        }
+
+        $controller = file_get_contents($root.'/Presentation/Http/Controllers/VoucherController.php');
+        self::assertIsString($controller);
+        self::assertStringNotContainsString('bcadd(', $controller);
+        self::assertStringNotContainsString('bcmul(', $controller);
+    }
 }

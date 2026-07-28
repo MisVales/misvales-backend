@@ -44,17 +44,52 @@ final readonly class CreditLineOperationsService implements CreditRecoveryGatewa
 
         $domain = $this->mapper->toDomain($line);
         if ($capital->greaterThan($domain->availableBalance()) || ! $capital->isPositive()) {
-            return new CreditEligibility(false, $domain->availableBalance(), null, null);
+            return new CreditEligibility(false, $domain->availableBalance(), null, null, $line->id);
         }
 
         $restriction = $this->restrictions->activeForLine($line->id);
         if ($restriction === null) {
-            return new CreditEligibility(true, $domain->availableBalance(), null, null);
+            return new CreditEligibility(true, $domain->availableBalance(), null, null, $line->id);
         }
 
         $range = $this->restrictions->range($restriction, $domain->availableBalance());
 
-        return new CreditEligibility($range->admits($capital), $domain->availableBalance(), $range, $restriction->public_id);
+        return new CreditEligibility(
+            $range->admits($capital),
+            $domain->availableBalance(),
+            $range,
+            $restriction->public_id,
+            $line->id,
+            $restriction->id,
+            $restriction->bound_voucher_id,
+        );
+    }
+
+    public function lockedEligibility(int $distributorId, Money $capital): CreditEligibility
+    {
+        $this->assertActiveDistributor($distributorId);
+        $line = $this->requiredLockedLine($distributorId);
+        $domain = $this->mapper->toDomain($line);
+        if ($capital->greaterThan($domain->availableBalance()) || ! $capital->isPositive()) {
+            return new CreditEligibility(false, $domain->availableBalance(), null, null, $line->id);
+        }
+
+        $restriction = $this->restrictions->activeForLine($line->id, true);
+        if ($restriction === null) {
+            return new CreditEligibility(true, $domain->availableBalance(), null, null, $line->id);
+        }
+
+        $range = $this->restrictions->range($restriction, $domain->availableBalance());
+
+        return new CreditEligibility(
+            $range->admits($capital),
+            $domain->availableBalance(),
+            $range,
+            $restriction->public_id,
+            $line->id,
+            $restriction->id,
+            $restriction->bound_voucher_id,
+        );
     }
 
     public function bindRestriction(int $distributorId, string $voucherId, Money $capital, ?int $actorUserId = null): void

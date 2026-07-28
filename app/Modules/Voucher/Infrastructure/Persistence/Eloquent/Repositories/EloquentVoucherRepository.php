@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace App\Modules\Voucher\Infrastructure\Persistence\Eloquent\Repositories;
 
 use App\Modules\Access\Domain\Authorization\RoleCode;
+use App\Modules\Access\Infrastructure\Persistence\Models\Branch;
+use App\Modules\Access\Infrastructure\Persistence\Models\DistributorAccessLink;
 use App\Modules\Voucher\Application\Contracts\VoucherRepository;
 use App\Modules\Voucher\Application\Security\VoucherActorContext;
 use App\Modules\Voucher\Domain\Exceptions\VoucherDomainException;
@@ -23,7 +25,11 @@ final class EloquentVoucherRepository implements VoucherRepository
             'folio',
             'type',
             'status',
+            'client_id',
+            'distributor_id',
+            'distributor_user_id',
             'branch_id',
+            'product_id',
             'client_name_snapshot',
             'client_name_normalized',
             'capital_amount',
@@ -40,6 +46,15 @@ final class EloquentVoucherRepository implements VoucherRepository
         }
         if (is_string($filters['status'] ?? null)) {
             $query->where('status', $filters['status']);
+        }
+        foreach (['type', 'client_id', 'distributor_id', 'product_id'] as $field) {
+            if (is_string($filters[$field] ?? null)) {
+                $query->where($field, $filters[$field]);
+            }
+        }
+        if (is_string($filters['branch_id'] ?? null)) {
+            $branchId = Branch::query()->where('public_id', $filters['branch_id'])->value('id');
+            $query->where('branch_id', is_numeric($branchId) ? (int) $branchId : -1);
         }
         if (is_string($filters['generated_from'] ?? null)) {
             $query->where('generated_at', '>=', $filters['generated_from'].' 00:00:00');
@@ -60,7 +75,9 @@ final class EloquentVoucherRepository implements VoucherRepository
 
     public function findScoped(string $id, VoucherActorContext $actor): VoucherModel
     {
-        $query = VoucherModel::query()->whereKey($id);
+        $query = VoucherModel::query()
+            ->with(['financialSnapshot', 'installments', 'branch', 'generator', 'creditRestriction'])
+            ->whereKey($id);
         $this->applyScope($query, $actor);
 
         return $query->first() ?? throw VoucherDomainException::notFound();
@@ -82,6 +99,17 @@ final class EloquentVoucherRepository implements VoucherRepository
         }
         if ($actor->role === RoleCode::DISTRIBUTOR) {
             $query->where('distributor_user_id', $actor->userId);
+
+            return;
+        }
+        if ($actor->role === RoleCode::COORDINATOR) {
+            $distributorUsers = DistributorAccessLink::query()
+                ->where('coordinator_user_id', $actor->userId)
+                ->pluck('user_id');
+            $query->whereIn('distributor_user_id', $distributorUsers);
+            if ($actor->branchId !== null) {
+                $query->where('branch_id', $actor->branchId);
+            }
 
             return;
         }

@@ -12,6 +12,12 @@ interface CreditVoucherGateway
 {
     public function eligibility(int $distributorId, Money $capital): CreditEligibility;
 
+    /**
+     * Resuelve la elegibilidad manteniendo bloqueadas la línea y su restricción
+     * durante la transacción exterior de generación del vale.
+     */
+    public function lockedEligibility(int $distributorId, Money $capital): CreditEligibility;
+
     public function bindRestriction(int $distributorId, string $voucherId, Money $capital, ?int $actorUserId = null): void;
 
     public function releaseRestriction(int $distributorId, string $voucherId, ?int $actorUserId = null): void;

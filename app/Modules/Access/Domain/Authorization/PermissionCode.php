@@ -57,8 +57,11 @@ enum PermissionCode: string
     case REDEMPTION_PERIOD_VIEW = 'configuration.redemption_period.view';
     case REDEMPTION_PERIOD_MANAGE = 'configuration.redemption_period.manage';
 
-    // M09 — Caja, modificaciones autorizadas y feriado
+    // M08 — Generación y consulta de vales
+    case VOUCHERS_GENERATE = 'vouchers.generate';
     case VOUCHERS_VIEW = 'vouchers.view';
+
+    // M09 — Caja, modificaciones autorizadas y feriado
     case VOUCHERS_OPEN_AT_COUNTER = 'vouchers.open_at_counter';
     case VOUCHERS_RELEASE = 'vouchers.release';
     case VOUCHERS_REJECT = 'vouchers.reject';

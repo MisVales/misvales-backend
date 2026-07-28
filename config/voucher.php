@@ -12,6 +12,7 @@ return [
         'maximum_page_size' => 100,
     ],
     'rate_limits' => [
+        'generate_per_minute' => 10,
         'open_per_minute' => 20,
         'modification_requests_per_minute' => 10,
         'token_attempts_per_minute' => 10,
