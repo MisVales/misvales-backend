@@ -14,7 +14,7 @@ final readonly class DateRange
         private CarbonImmutable $endsAt
     ) {
         if ($startsAt->greaterThan($endsAt)) {
-            throw new InvalidArgumentException("Start date cannot be after end date");
+            throw new InvalidArgumentException('Start date cannot be after end date');
         }
     }
 

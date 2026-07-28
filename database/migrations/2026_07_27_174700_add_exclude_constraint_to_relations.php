@@ -9,7 +9,7 @@ return new class extends Migration
     {
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('CREATE EXTENSION IF NOT EXISTS btree_gist');
-            
+
             DB::statement("
                 ALTER TABLE relations 
                 ADD CONSTRAINT relations_date_range_exclude 
@@ -28,5 +28,3 @@ return new class extends Migration
         }
     }
 };
-
-

@@ -19,6 +19,5 @@ class RelationGenerated
         public readonly string $paymentReference,
         public readonly string $portfolioTotal,
         public readonly string $misvalesDueTotal
-    ) {
-    }
+    ) {}
 }

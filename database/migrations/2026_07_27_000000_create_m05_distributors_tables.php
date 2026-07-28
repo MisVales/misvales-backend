@@ -30,7 +30,7 @@ return new class extends Migration
             $table->index('branch_id');
             $table->index('status');
             $table->index('activated_at');
-            
+
             // Índice compuesto
             $table->index(['branch_id', 'status', 'distributor_number']);
         });

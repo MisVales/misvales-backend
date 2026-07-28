@@ -4,10 +4,8 @@ declare(strict_types=1);
 
 namespace Tests\Feature\Modules\Relation;
 
-use App\Modules\Relation\Domain\Enums\CutRunStatus;
-use App\Modules\Relation\Infrastructure\Persistence\Models\CutRun;
+use App\Modules\Relation\Application\Contracts\ConfigurationSnapshotProvider;
 use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Support\Carbon;
 use Tests\TestCase;
 
 class StartCutTest extends TestCase
@@ -16,7 +14,7 @@ class StartCutTest extends TestCase
 
     public function test_it_requires_mfa_token_to_start_cut()
     {
-        $this->mock(\App\Modules\Relation\Application\Contracts\ConfigurationSnapshotProvider::class, function ($mock) {
+        $this->mock(ConfigurationSnapshotProvider::class, function ($mock) {
             $mock->shouldReceive('resolveSnapshot')->andReturn(['mock' => true]);
         });
 
@@ -31,9 +29,9 @@ class StartCutTest extends TestCase
     public function test_it_starts_cut_successfully_and_returns_201()
     {
         // Setup simple route manually if it wasn't registered in api.php to avoid 404
-        // Typically, we would mock the snapshot provider, but since we are just 
+        // Typically, we would mock the snapshot provider, but since we are just
         // validating the structure, we can skip full execution if snapshot provider is not bound.
-        
+
         // This is a placeholder test for integration
         $this->assertTrue(true);
     }

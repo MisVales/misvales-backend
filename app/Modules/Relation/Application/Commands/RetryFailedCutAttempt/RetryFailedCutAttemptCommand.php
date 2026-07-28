@@ -10,6 +10,5 @@ readonly class RetryFailedCutAttemptCommand
         public string $cutRunId,
         public string $distributorId,
         public string $triggeredBy
-    ) {
-    }
+    ) {}
 }

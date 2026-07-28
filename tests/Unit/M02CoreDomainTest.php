@@ -5,8 +5,8 @@ namespace Tests\Unit;
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Branch;
 use App\Modules\Access\Infrastructure\Persistence\Models\Role;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Database\QueryException;
+use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class M02CoreDomainTest extends TestCase
@@ -21,8 +21,8 @@ class M02CoreDomainTest extends TestCase
         $roleGlobal = Role::firstOrCreate(['code' => 'GENERAL_MANAGER'], ['name' => 'Gerente general', 'scope' => 'GLOBAL']);
 
         User::factory()->create([
-            'role_id'   => $roleGlobal->id,
-            'branch_id' => $branch->id // Trigger rechaza esto
+            'role_id' => $roleGlobal->id,
+            'branch_id' => $branch->id, // Trigger rechaza esto
         ]);
     }
 
@@ -35,19 +35,19 @@ class M02CoreDomainTest extends TestCase
 
         // Intentar crear un usuario con rol local pero sin branch_id debe fallar por el trigger de BD
         User::factory()->create([
-            'role_id'   => $roleBranch->id,
-            'branch_id' => null 
+            'role_id' => $roleBranch->id,
+            'branch_id' => null,
         ]);
     }
 
     public function test_no_se_puede_deshabilitar_o_eliminar_al_ultimo_gerente_general(): void
     {
         $roleGlobal = Role::firstOrCreate(['code' => 'GENERAL_MANAGER'], ['name' => 'Gerente general', 'scope' => 'GLOBAL']);
-        
+
         $manager = User::factory()->create([
-            'role_id'   => $roleGlobal->id,
+            'role_id' => $roleGlobal->id,
             'branch_id' => null,
-            'state'     => 'ACTIVE'
+            'state' => 'ACTIVE',
         ]);
 
         $activeGeneralManagersCount = User::where('role_id', $roleGlobal->id)
@@ -57,9 +57,9 @@ class M02CoreDomainTest extends TestCase
         $this->assertEquals(1, $activeGeneralManagersCount);
 
         $canDeactivate = $activeGeneralManagersCount > 1;
-        
+
         $this->assertFalse(
-            $canDeactivate, 
+            $canDeactivate,
             'El sistema no debe permitir desactivar al único Gerente General existente.'
         );
     }
@@ -70,10 +70,10 @@ class M02CoreDomainTest extends TestCase
 
         $roleGlobal = Role::firstOrCreate(['code' => 'GENERAL_MANAGER'], ['name' => 'Gerente general', 'scope' => 'GLOBAL']);
         // Usamos 'COORDINATOR' o el código válido que soporte tu Enum RoleCode para sucursales
-        $roleLocal  = Role::firstOrCreate(['code' => 'COORDINATOR'], ['name' => 'Coordinador', 'scope' => 'BRANCH']);
+        $roleLocal = Role::firstOrCreate(['code' => 'COORDINATOR'], ['name' => 'Coordinador', 'scope' => 'BRANCH']);
 
         $userGlobal = User::factory()->create(['role_id' => $roleGlobal->id, 'branch_id' => null]);
-        $userLocal  = User::factory()->create(['role_id' => $roleLocal->id, 'branch_id' => $branchTorreón->id]);
+        $userLocal = User::factory()->create(['role_id' => $roleLocal->id, 'branch_id' => $branchTorreón->id]);
 
         $this->assertEquals('GLOBAL', strtoupper((string) $userGlobal->role->scope));
         $this->assertEquals('BRANCH', strtoupper((string) $userLocal->role->scope));

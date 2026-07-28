@@ -19,6 +19,5 @@ class DistributorCategoryChanged
         public readonly string $reason,
         public readonly \DateTimeImmutable $effectiveAt,
         public readonly string $idempotencyKey
-    ) {
-    }
+    ) {}
 }

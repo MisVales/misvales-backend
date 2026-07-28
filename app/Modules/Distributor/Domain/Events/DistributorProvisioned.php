@@ -13,6 +13,5 @@ class DistributorProvisioned
         public readonly \DateTimeImmutable $effectiveAt,
         public readonly string $operationId,
         public readonly string $idempotencyKey
-    ) {
-    }
+    ) {}
 }

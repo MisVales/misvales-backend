@@ -4,7 +4,9 @@ namespace App\Modules\Audit\Presentation\Http\Controllers;
 
 use App\Http\Controllers\Controller;
 use App\Modules\Audit\Persistence\Models\AuditEvent;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 /**
@@ -18,8 +20,8 @@ class AuditController extends Controller
      * Evalúa las políticas de seguridad antes de devolver información operativa.
      *
      * @tags Audit
-     * @param Request $request
-     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     *
+     * @return AnonymousResourceCollection
      */
     public function index(Request $request)
     {
@@ -31,7 +33,7 @@ class AuditController extends Controller
         $allowedFilters = [
             'event_code', 'category', 'result', 'branch_id', 'requester_user_id',
             'authorizer_user_id', 'executor_user_id', 'subject_type', 'subject_id',
-            'subject_public_number', 'process_code', 'request_id', 'trace_id', 'correlation_id'
+            'subject_public_number', 'process_code', 'request_id', 'trace_id', 'correlation_id',
         ];
 
         foreach ($allowedFilters as $filter) {
@@ -62,7 +64,7 @@ class AuditController extends Controller
                 'action' => $event->action,
                 'result' => $event->result,
                 'subject_public_number' => $event->subject_public_number,
-                'has_evidence' => !empty($event->evidence_file_ids)
+                'has_evidence' => ! empty($event->evidence_file_ids),
             ];
         }));
     }
@@ -72,9 +74,9 @@ class AuditController extends Controller
      * Solo se exponen los payloads cuando se aprueba la Policy correspondiente.
      *
      * @tags Audit
-     * @param Request $request
-     * @param AuditEvent $auditEvent El modelo del evento auditable resuelto.
-     * @return \Illuminate\Http\JsonResponse
+     *
+     * @param  AuditEvent  $auditEvent  El modelo del evento auditable resuelto.
+     * @return JsonResponse
      */
     public function show(Request $request, AuditEvent $auditEvent)
     {
@@ -82,7 +84,7 @@ class AuditController extends Controller
 
         // 11.4 Detalle completo protegido
         return response()->json([
-            'data' => $auditEvent->toArray() // En la vida real, se filtra datos extremadamente sensibles.
+            'data' => $auditEvent->toArray(), // En la vida real, se filtra datos extremadamente sensibles.
         ]);
     }
 }

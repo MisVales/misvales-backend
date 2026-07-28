@@ -6,6 +6,7 @@ interface RecipientResolver
 {
     /**
      * Resuelve los destinatarios basados en el código del evento y el payload.
+     *
      * @return array<int, array{
      *   recipient_key: string,
      *   recipient_type: string,

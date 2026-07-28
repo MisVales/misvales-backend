@@ -4,10 +4,10 @@ declare(strict_types=1);
 
 namespace App\Modules\Relation\Application\Commands\StartCut;
 
+use App\Modules\Relation\Application\Contracts\ConfigurationSnapshotProvider;
 use App\Modules\Relation\Domain\Enums\CutRunStatus;
 use App\Modules\Relation\Domain\Events\CutStarted;
 use App\Modules\Relation\Infrastructure\Persistence\Models\CutRun;
-use App\Modules\Relation\Application\Contracts\ConfigurationSnapshotProvider;
 use Illuminate\Support\Facades\DB;
 use RuntimeException;
 
@@ -15,8 +15,7 @@ class StartCutHandler
 {
     public function __construct(
         private readonly ConfigurationSnapshotProvider $snapshotProvider
-    ) {
-    }
+    ) {}
 
     public function handle(StartCutCommand $command): CutRun
     {
@@ -29,6 +28,7 @@ class StartCutHandler
                 if ($existingRun->status === CutRunStatus::COMPLETADA) {
                     throw new RuntimeException('CUT_ALREADY_COMPLETED');
                 }
+
                 return $existingRun;
             }
 

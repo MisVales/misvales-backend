@@ -12,6 +12,5 @@ readonly class StartCutCommand
         public CarbonImmutable $operativeDate,
         public string $triggerType,
         public ?string $triggeredBy = null
-    ) {
-    }
+    ) {}
 }

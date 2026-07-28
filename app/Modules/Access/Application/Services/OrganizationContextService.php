@@ -11,7 +11,7 @@ class OrganizationContextService implements OrganizationContextProviderInterface
     {
         $user = User::with(['role', 'branch'])->find($userId);
 
-        if (!$user) {
+        if (! $user) {
             return [];
         }
 
@@ -21,10 +21,10 @@ class OrganizationContextService implements OrganizationContextProviderInterface
         }
 
         return [
-            'user_id'     => $user->id,
-            'role_code'   => (string) $roleCode,
-            'role_scope'  => $user->role->scope ?? 'LOCAL',
-            'branch_id'   => $user->branch_id,
+            'user_id' => $user->id,
+            'role_code' => (string) $roleCode,
+            'role_scope' => $user->role->scope ?? 'LOCAL',
+            'branch_id' => $user->branch_id,
             'branch_name' => $user->branch->name ?? null,
         ];
     }

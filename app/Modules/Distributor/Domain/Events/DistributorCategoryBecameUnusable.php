@@ -11,6 +11,5 @@ class DistributorCategoryBecameUnusable
         public readonly string $categoryId,
         public readonly string $categoryVersionId,
         public readonly \DateTimeImmutable $effectiveAt
-    ) {
-    }
+    ) {}
 }

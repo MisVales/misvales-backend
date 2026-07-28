@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class CoordinatorDistributorAssignment extends Model
 {
@@ -17,7 +17,7 @@ class CoordinatorDistributorAssignment extends Model
         'assigned_by',
         'source_type',
         'source_id',
-        'reason'
+        'reason',
     ];
 
     protected $hidden = [
@@ -25,7 +25,7 @@ class CoordinatorDistributorAssignment extends Model
         'distributor_id',
         'coordinator_user_id',
         'branch_id',
-        'assigned_by'
+        'assigned_by',
     ];
 
     protected $casts = [
@@ -44,7 +44,6 @@ class CoordinatorDistributorAssignment extends Model
         });
     }
 
-
     public function branch(): BelongsTo
     {
         return $this->belongsTo(Branch::class);
@@ -59,5 +58,4 @@ class CoordinatorDistributorAssignment extends Model
     {
         return $this->belongsTo(User::class, 'coordinator_user_id');
     }
-
 }

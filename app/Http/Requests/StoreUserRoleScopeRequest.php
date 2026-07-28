@@ -14,9 +14,9 @@ class StoreUserRoleScopeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'user_public_id'   => ['required', 'uuid', 'exists:users,public_id'],
-            'role_id'          => ['required', 'integer', 'exists:roles,id'], 
-            'scope_type'       => ['required', 'in:GLOBAL,BRANCH'],
+            'user_public_id' => ['required', 'uuid', 'exists:users,public_id'],
+            'role_id' => ['required', 'integer', 'exists:roles,id'],
+            'scope_type' => ['required', 'in:GLOBAL,BRANCH'],
             'branch_public_id' => ['required_if:scope_type,BRANCH', 'nullable', 'uuid', 'exists:branches,public_id'],
         ];
     }

@@ -12,7 +12,7 @@ class NotificationPolicy
 
     public function viewAny(User $user): bool
     {
-        return true; 
+        return true;
     }
 
     public function read(User $user, Notification $notification): bool

@@ -16,6 +16,5 @@ class CutStarted
         public readonly string $cutDate,
         public readonly array $configurationSnapshot,
         public readonly string $triggerType
-    ) {
-    }
+    ) {}
 }

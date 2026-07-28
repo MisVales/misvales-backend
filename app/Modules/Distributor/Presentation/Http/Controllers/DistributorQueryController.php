@@ -12,6 +12,7 @@ use App\Modules\Distributor\Presentation\Http\Resources\DistributorAdminDetailRe
 use App\Modules\Distributor\Presentation\Http\Resources\DistributorCapabilityResource;
 use App\Modules\Distributor\Presentation\Http\Resources\DistributorCategoryAssignmentResource;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 
 /**
  * Controlador administrativo de consultas del módulo Distribuidoras.
@@ -23,9 +24,8 @@ class DistributorQueryController extends Controller
      * Lista de distribuidoras con soporte de filtros por sucursal y estado.
      *
      * @tags Distributor Query
-     * @param Request $request
-     * @param ListDistributorsQuery $query
-     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     *
+     * @return AnonymousResourceCollection
      */
     public function index(Request $request, ListDistributorsQuery $query)
     {

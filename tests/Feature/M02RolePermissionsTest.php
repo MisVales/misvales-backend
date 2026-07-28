@@ -3,10 +3,10 @@
 namespace Tests\Feature;
 
 use App\Models\User;
-use App\Modules\Access\Domain\Authorization\RoleCode;
 use App\Modules\Access\Domain\Authorization\PermissionCode;
-use App\Modules\Access\Infrastructure\Persistence\Models\Role;
+use App\Modules\Access\Domain\Authorization\RoleCode;
 use App\Modules\Access\Infrastructure\Persistence\Models\Permission;
+use App\Modules\Access\Infrastructure\Persistence\Models\Role;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -21,14 +21,14 @@ class M02RolePermissionsTest extends TestCase
             'code' => RoleCode::GENERAL_MANAGER,
             'name' => 'Gerente General',
             'scope' => 'GLOBAL',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $roleTarget = Role::create([
             'code' => RoleCode::COORDINATOR,
             'name' => 'Coordinador',
             'scope' => 'BRANCH',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $permissionCase = PermissionCode::cases()[0] ?? null;
@@ -36,26 +36,26 @@ class M02RolePermissionsTest extends TestCase
 
         $permission = Permission::create([
             'code' => $permCode,
-            'name' => 'Permiso de Prueba'
+            'name' => 'Permiso de Prueba',
         ]);
 
         $actorGG = User::factory()->create([
-            'role_id'   => $roleGG->id,
+            'role_id' => $roleGG->id,
             'branch_id' => null,
-            'state'     => 'ACTIVE'
+            'state' => 'ACTIVE',
         ]);
 
         $affectedUser = User::factory()->create([
-            'role_id'         => $roleTarget->id,
+            'role_id' => $roleTarget->id,
             'context_version' => 1,
-            'state'           => 'ACTIVE'
+            'state' => 'ACTIVE',
         ]);
 
         Sanctum::actingAs($actorGG);
 
         $response = $this->putJson("/api/m02/roles/{$roleTarget->id}/permissions", [
             'permissions' => [$permCode],
-            'reason'      => 'Actualización de permisos por auditoría'
+            'reason' => 'Actualización de permisos por auditoría',
         ]);
 
         $response->assertStatus(200);
@@ -70,29 +70,29 @@ class M02RolePermissionsTest extends TestCase
             'code' => RoleCode::COORDINATOR,
             'name' => 'Gerente de Sucursal',
             'scope' => 'BRANCH',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $roleTarget = Role::create([
             'code' => RoleCode::GENERAL_MANAGER,
             'name' => 'General',
             'scope' => 'GLOBAL',
-            'is_active' => true
+            'is_active' => true,
         ]);
 
         $actorBM = User::factory()->create([
             'role_id' => $roleBM->id,
-            'state'   => 'ACTIVE'
+            'state' => 'ACTIVE',
         ]);
 
         Sanctum::actingAs($actorBM);
 
         $response = $this->putJson("/api/m02/roles/{$roleTarget->id}/permissions", [
             'permissions' => [],
-            'reason'      => 'Intento de escalamiento'
+            'reason' => 'Intento de escalamiento',
         ]);
 
         $response->assertStatus(403)
-                 ->assertJsonPath('error.code', 'ORGANIZATION_SCOPE_DENIED');
+            ->assertJsonPath('error.code', 'ORGANIZATION_SCOPE_DENIED');
     }
 }

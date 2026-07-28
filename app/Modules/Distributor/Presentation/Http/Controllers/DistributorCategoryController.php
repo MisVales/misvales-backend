@@ -20,15 +20,12 @@ class DistributorCategoryController extends Controller
      * Asigna o actualiza la categoría de una distribuidora procesando de manera idempotente.
      *
      * @tags Distributor
-     * @param string $id UUID de la distribuidora.
-     * @param AssignCategoryRequest $request
-     * @param AssignCategoryHandler $assignHandler
-     * @param ChangeCategoryHandler $changeHandler
-     * @return JsonResponse
+     *
+     * @param  string  $id  UUID de la distribuidora.
      */
     public function store(
-        string $id, 
-        AssignCategoryRequest $request, 
+        string $id,
+        AssignCategoryRequest $request,
         AssignCategoryHandler $assignHandler,
         ChangeCategoryHandler $changeHandler
     ): JsonResponse {

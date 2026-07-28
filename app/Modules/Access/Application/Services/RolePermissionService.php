@@ -11,12 +11,13 @@ class RolePermissionService implements RolePermissionCheckerInterface
     {
         $user = User::with('role.permissions')->find($userId);
 
-        if (!$user || !$user->role || !$user->role->permissions) {
+        if (! $user || ! $user->role || ! $user->role->permissions) {
             return false;
         }
 
         return $user->role->permissions->contains(function ($permission) use ($permissionCode) {
             $code = $permission->code instanceof \BackedEnum ? $permission->code->value : (string) $permission->code;
+
             return $code === $permissionCode;
         });
     }

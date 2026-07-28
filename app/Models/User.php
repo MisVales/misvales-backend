@@ -32,6 +32,7 @@ class User extends Authenticatable
 
     /** @use HasFactory<UserFactory> */
     use HasFactory;
+
     use HasPublicUuid;
     use Notifiable;
 

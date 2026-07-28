@@ -47,7 +47,7 @@ return new class extends Migration
             $table->jsonb('metadata')->nullable();
             $table->timestamp('created_at')->useCurrent();
             // NO updated_at, NO deleted_at
-            
+
             $table->index(['event_code', 'occurred_at']);
             $table->index(['subject_type', 'subject_id']);
             $table->index(['correlation_id']);
@@ -119,7 +119,7 @@ return new class extends Migration
             $table->timestamp('bound_at')->useCurrent();
             $table->uuid('superseded_by_binding_id')->nullable();
             $table->jsonb('metadata')->nullable();
-            
+
             $table->foreign('file_id')->references('id')->on('media_files')->onDelete('cascade');
             $table->index(['owner_type', 'owner_id', 'purpose']);
         });

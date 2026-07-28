@@ -13,7 +13,7 @@ class ListDistributorsQuery
         if (isset($filters['branch_id'])) {
             $query->where('branch_id', $filters['branch_id']);
         }
-        
+
         if (isset($filters['status'])) {
             $query->where('status', $filters['status']);
         }

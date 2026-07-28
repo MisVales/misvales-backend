@@ -11,6 +11,5 @@ class ProvisionAuthorizedDistributorCommand
         public readonly string $branchId,
         public readonly ?string $activatedBy,
         public readonly \DateTimeImmutable $activatedAt
-    ) {
-    }
+    ) {}
 }

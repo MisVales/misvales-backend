@@ -6,6 +6,7 @@ namespace Tests\Feature\Modules\Relation;
 
 use App\Modules\Relation\Domain\Enums\CutRunStatus;
 use App\Modules\Relation\Infrastructure\Persistence\Models\CutRun;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
@@ -24,7 +25,7 @@ class CutRunIntegrationTest extends TestCase
             'trigger_type' => 'SCHEDULED',
         ]);
 
-        $this->expectException(\Illuminate\Database\QueryException::class);
+        $this->expectException(QueryException::class);
 
         // Intenta crear otra corrida para el mismo día
         CutRun::create([

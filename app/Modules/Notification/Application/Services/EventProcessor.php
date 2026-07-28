@@ -11,8 +11,10 @@ class EventProcessor
     {
         if (preg_match('/^EV-0[0-9]{2}$/', $eventCode)) {
             $number = (int) str_replace('EV-', '', $eventCode);
+
             return $number >= 1 && $number <= 97;
         }
+
         return false;
     }
 

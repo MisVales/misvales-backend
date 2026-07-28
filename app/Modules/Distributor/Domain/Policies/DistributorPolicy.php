@@ -13,17 +13,17 @@ class DistributorPolicy
     public function viewAny(User $user): bool
     {
         // Validación de permisos según matriz (DI10)
-        return true; 
+        return true;
     }
 
     public function view(User $user, Distributor $distributor): bool
     {
-        return true; 
+        return true;
     }
 
     public function viewHistory(User $user, Distributor $distributor): bool
     {
-        return true; 
+        return true;
     }
 
     public function viewSelf(User $user, Distributor $distributor): bool
@@ -33,6 +33,6 @@ class DistributorPolicy
 
     public function assignCategory(User $user, Distributor $distributor): bool
     {
-        return true; 
+        return true;
     }
 }

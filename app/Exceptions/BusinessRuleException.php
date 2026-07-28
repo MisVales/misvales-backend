@@ -9,15 +9,18 @@ use Illuminate\Support\Str;
 class BusinessRuleException extends Exception
 {
     protected string $errorCode;
+
     protected int $statusCode;
+
     protected array $fields;
+
     protected array $details;
 
     public function __construct(
-        string $errorCode, 
-        string $message, 
-        int $statusCode = 400, 
-        array $fields = [], 
+        string $errorCode,
+        string $message,
+        int $statusCode = 400,
+        array $fields = [],
         array $details = []
     ) {
         parent::__construct($message);
@@ -34,14 +37,14 @@ class BusinessRuleException extends Exception
     {
         return response()->json([
             'error' => [
-                'code'       => $this->errorCode,
-                'message'    => $this->getMessage(),
+                'code' => $this->errorCode,
+                'message' => $this->getMessage(),
                 // Se hace cast a (object) para que si el array está vacío en JSON salga como {} en vez de []
-                'fields'     => (object) $this->fields,
-                'details'    => (object) $this->details,
+                'fields' => (object) $this->fields,
+                'details' => (object) $this->details,
                 // Si tienes un middleware que inyecta request_id úsalo, sino generamos un UUID por defecto.
-                'request_id' => $request->header('X-Request-ID') ?? (string) Str::uuid()
-            ]
+                'request_id' => $request->header('X-Request-ID') ?? (string) Str::uuid(),
+            ],
         ], $this->statusCode);
     }
 }

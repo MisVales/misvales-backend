@@ -12,7 +12,7 @@ class HeadquartersBranchSeeder extends Seeder
     {
         $exists = DB::table('branches')->where('is_headquarters', true)->exists();
 
-       if (!$exists) {
+        if (! $exists) {
             DB::table('branches')->insert([
                 'public_id' => Str::uuid(),
                 'name' => 'Matriz Torreón',

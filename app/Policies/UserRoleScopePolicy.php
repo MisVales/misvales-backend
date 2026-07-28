@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\UserRoleScope;
 use App\Models\User;
 use App\Modules\Access\Infrastructure\Persistence\Models\Role;
 
@@ -56,7 +55,7 @@ class UserRoleScopePolicy
             $roleCode = $role ? $role->code : null;
         }
 
-        if (!$roleCode) {
+        if (! $roleCode) {
             return '';
         }
 
@@ -67,6 +66,7 @@ class UserRoleScopePolicy
             if (method_exists($roleCode, 'value')) {
                 return (string) $roleCode->value();
             }
+
             return (string) $roleCode;
         }
 

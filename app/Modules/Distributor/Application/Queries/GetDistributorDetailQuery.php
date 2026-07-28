@@ -11,7 +11,7 @@ class GetDistributorDetailQuery
     {
         $distributor = Distributor::find($id);
 
-        if (!$distributor) {
+        if (! $distributor) {
             throw DistributorDomainException::notFound();
         }
 

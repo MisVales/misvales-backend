@@ -11,7 +11,7 @@ class GetDistributorCapabilitiesQuery
     {
         $distributor = Distributor::find($distributorId);
 
-        if (!$distributor) {
+        if (! $distributor) {
             throw DistributorDomainException::notFound();
         }
 
@@ -23,7 +23,7 @@ class GetDistributorCapabilitiesQuery
             'can_view_relations' => true,
             'can_submit_clarifications' => true,
             'can_request_point_redemption' => false,
-            'blocking_codes' => []
+            'blocking_codes' => [],
         ];
     }
 }

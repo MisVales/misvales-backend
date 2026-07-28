@@ -2,11 +2,12 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Events\UserOrganizationalScopeAssigned;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\StoreUserRoleScopeRequest;
-use App\Models\UserRoleScope;
-use App\Models\User;
 use App\Models\Branch;
+use App\Models\User;
+use App\Models\UserRoleScope;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Support\Facades\DB;
@@ -20,7 +21,7 @@ class UserRoleScopeController extends Controller
         $this->authorize('create', UserRoleScope::class);
 
         $user = User::where('public_id', $request->user_public_id)->firstOrFail();
-        
+
         $branchId = null;
         if ($request->branch_public_id) {
             $branchId = Branch::where('public_id', $request->branch_public_id)->firstOrFail()->id;
@@ -29,14 +30,14 @@ class UserRoleScopeController extends Controller
         DB::beginTransaction();
         try {
             $scope = UserRoleScope::create([
-                'user_id'    => $user->id,
-                'role_id'    => $request->role_id,
-                'branch_id'  => $branchId,
+                'user_id' => $user->id,
+                'role_id' => $request->role_id,
+                'branch_id' => $branchId,
                 'scope_type' => $request->scope_type,
             ]);
 
             DB::afterCommit(function () use ($scope) {
-                event(new \App\Events\UserOrganizationalScopeAssigned($scope));
+                event(new UserOrganizationalScopeAssigned($scope));
             });
 
             DB::commit();
@@ -47,7 +48,7 @@ class UserRoleScopeController extends Controller
 
         return response()->json([
             'message' => 'Alcance de rol asignado correctamente',
-            'data'    => $scope
+            'data' => $scope,
         ], 201);
     }
 

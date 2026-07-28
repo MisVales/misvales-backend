@@ -13,7 +13,7 @@ class PaymentReferenceTest extends TestCase
     public function test_it_creates_payment_reference()
     {
         $reference = new PaymentReference('REF123456');
-        
+
         $this->assertEquals('REF123456', $reference->getReference());
         $this->assertEquals('REF123456', (string) $reference);
     }

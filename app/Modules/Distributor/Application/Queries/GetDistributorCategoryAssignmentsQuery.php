@@ -2,7 +2,6 @@
 
 namespace App\Modules\Distributor\Application\Queries;
 
-use App\Modules\Distributor\Domain\Distributors\DistributorDomainException;
 use App\Modules\Distributor\Persistence\Models\DistributorCategoryAssignment;
 
 class GetDistributorCategoryAssignmentsQuery

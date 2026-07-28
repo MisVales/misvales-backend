@@ -7,6 +7,7 @@ use App\Modules\Notification\Domain\Enums\NotificationStatus;
 use App\Modules\Notification\Persistence\Models\Notification;
 use App\Modules\Notification\Presentation\Http\Resources\NotificationResource;
 use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\AnonymousResourceCollection;
 use Illuminate\Support\Facades\Auth;
 
 /**
@@ -19,8 +20,8 @@ class NotificationController extends Controller
      * Lista de forma paginada las notificaciones asociadas al usuario autenticado.
      *
      * @tags Notifications
-     * @param Request $request
-     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     *
+     * @return AnonymousResourceCollection
      */
     public function index(Request $request)
     {
@@ -34,8 +35,8 @@ class NotificationController extends Controller
         }
 
         $notifications = $query->orderBy('occurred_at', 'desc')
-                               ->orderBy('id', 'desc')
-                               ->paginate(20);
+            ->orderBy('id', 'desc')
+            ->paginate(20);
 
         return NotificationResource::collection($notifications);
     }
@@ -45,8 +46,7 @@ class NotificationController extends Controller
      * Validando estrictamente mediante Policy la propiedad del recurso.
      *
      * @tags Notifications
-     * @param Request $request
-     * @param Notification $notification
+     *
      * @return NotificationResource
      */
     public function read(Request $request, Notification $notification)

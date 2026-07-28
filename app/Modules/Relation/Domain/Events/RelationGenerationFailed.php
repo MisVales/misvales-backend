@@ -15,6 +15,5 @@ class RelationGenerationFailed
         public readonly string $cutRunId,
         public readonly string $distributorId,
         public readonly string $errorCode
-    ) {
-    }
+    ) {}
 }

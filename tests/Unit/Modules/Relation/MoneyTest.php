@@ -13,7 +13,7 @@ class MoneyTest extends TestCase
     public function test_it_creates_money_with_four_decimals()
     {
         $money = Money::fromString('100.5');
-        
+
         $this->assertEquals('100.5000', $money->getAmount());
     }
 
@@ -30,7 +30,7 @@ class MoneyTest extends TestCase
     public function test_it_rounds_to_two_decimals_for_presentation()
     {
         $money = Money::fromString('10.1255');
-        
+
         $this->assertEquals('10.13', $money->getRoundedAmount());
     }
 

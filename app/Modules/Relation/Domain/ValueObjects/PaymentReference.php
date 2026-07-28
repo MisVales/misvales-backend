@@ -13,9 +13,9 @@ final readonly class PaymentReference
     public function __construct(string $reference)
     {
         if (empty(trim($reference))) {
-            throw new InvalidArgumentException("Payment reference cannot be empty");
+            throw new InvalidArgumentException('Payment reference cannot be empty');
         }
-        
+
         $this->reference = trim($reference);
     }
 

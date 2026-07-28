@@ -16,7 +16,7 @@ class CoordinatorDistributorAssignmentPolicy
             return true;
         }
 
-        return null; 
+        return null;
     }
 
     public function view(User $user, CoordinatorDistributorAssignment $assignment): bool
@@ -45,7 +45,7 @@ class CoordinatorDistributorAssignmentPolicy
         if ($role === 'ADMINISTRATOR') {
             return false;
         }
-     
+
         if ($role === 'BRANCH_MANAGER') {
             return $user->branch_id === $assignment->branch_id;
         }
@@ -70,10 +70,11 @@ class CoordinatorDistributorAssignmentPolicy
             if (is_object($branch) && isset($branch->id)) {
                 return $user->branch_id === $branch->id;
             }
+
             return true;
         }
 
-        return false; 
+        return false;
     }
 
     private function getUserRoleCode(User $user): string
@@ -83,15 +84,15 @@ class CoordinatorDistributorAssignmentPolicy
         // Intentar obtener a través de la relación cargada
         if ($user->relationLoaded('role') && $user->role) {
             $roleCode = $user->role->code;
-        } 
-        
+        }
+
         // Si no está cargada pero tiene ID, consultarlo directamente
-        if (!$roleCode && $user->role_id) {
+        if (! $roleCode && $user->role_id) {
             $role = Role::find($user->role_id);
             $roleCode = $role ? $role->code : null;
         }
 
-        if (!$roleCode) {
+        if (! $roleCode) {
             return '';
         }
 
@@ -103,6 +104,7 @@ class CoordinatorDistributorAssignmentPolicy
             if (method_exists($roleCode, 'value')) {
                 return (string) $roleCode->value();
             }
+
             return (string) $roleCode;
         }
 

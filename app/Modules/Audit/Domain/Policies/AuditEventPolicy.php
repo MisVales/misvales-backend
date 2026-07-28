@@ -18,8 +18,10 @@ class AuditEventPolicy
 
     public function view(User $user, AuditEvent $auditEvent): bool
     {
-        if (in_array($user->role, ['ADMIN', 'GENERAL_MANAGER'])) return true;
-        
+        if (in_array($user->role, ['ADMIN', 'GENERAL_MANAGER'])) {
+            return true;
+        }
+
         // El Gerente de Sucursal solo ve su propia sucursal
         if ($user->role === 'BRANCH_MANAGER' && $user->branch_id === $auditEvent->branch_id) {
             return true;

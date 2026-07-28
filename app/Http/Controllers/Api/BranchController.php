@@ -2,9 +2,9 @@
 
 namespace App\Http\Controllers\Api;
 
+use App\Exceptions\BusinessRuleException;
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
-use App\Exceptions\BusinessRuleException;
 use Illuminate\Http\JsonResponse;
 
 class BranchController extends Controller
@@ -17,6 +17,7 @@ class BranchController extends Controller
         if (is_object($role) && method_exists($role, 'value')) {
             return $role->value;
         }
+
         return (string) $role;
     }
 
@@ -27,6 +28,7 @@ class BranchController extends Controller
      *     description="Obtiene el listado de sucursales. Para roles de alcance local, solo devuelve la sucursal asignada al usuario.",
      *     tags={"Organización (M02)"},
      *     security={{"bearerAuth":{}}},
+     *
      *     @OA\Response(
      *         response=200,
      *         description="Listado paginado de sucursales"
@@ -58,13 +60,16 @@ class BranchController extends Controller
      *     description="Devuelve la información de una sucursal específica. Si un usuario con rol de alcance local intenta consultar una sucursal distinta a la suya, se simula un error 404 por seguridad (O11).",
      *     tags={"Organización (M02)"},
      *     security={{"bearerAuth":{}}},
+     *
      *     @OA\Parameter(
      *         name="uuid",
      *         in="path",
      *         required=true,
      *         description="UUID público de la sucursal",
+     *
      *         @OA\Schema(type="string", format="uuid")
      *     ),
+     *
      *     @OA\Response(
      *         response=200,
      *         description="Detalle de la sucursal"

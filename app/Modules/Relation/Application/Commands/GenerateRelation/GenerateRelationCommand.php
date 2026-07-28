@@ -9,6 +9,5 @@ readonly class GenerateRelationCommand
     public function __construct(
         public string $cutRunId,
         public string $distributorId
-    ) {
-    }
+    ) {}
 }

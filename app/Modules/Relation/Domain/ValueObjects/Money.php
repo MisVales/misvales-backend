@@ -13,10 +13,10 @@ final readonly class Money implements JsonSerializable
 
     public function __construct(string $amount)
     {
-        if (!is_numeric($amount)) {
-            throw new InvalidArgumentException("Amount must be numeric");
+        if (! is_numeric($amount)) {
+            throw new InvalidArgumentException('Amount must be numeric');
         }
-        
+
         // Ensure 4 decimal precision internally
         $this->amount = bcadd($amount, '0', 4);
     }
@@ -39,7 +39,7 @@ final readonly class Money implements JsonSerializable
     public function getRoundedAmount(): string
     {
         // Round arithmetic to 2 decimals
-        return number_format((float)$this->amount, 2, '.', '');
+        return number_format((float) $this->amount, 2, '.', '');
     }
 
     public function add(Money $other): self

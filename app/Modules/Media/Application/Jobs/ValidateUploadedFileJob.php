@@ -15,7 +15,7 @@ use Illuminate\Support\Str;
 
 /**
  * Job asíncrono que procesa la validación de un archivo recién cargado.
- * 
+ *
  * Se encarga de aislar la carga del hilo principal de HTTP,
  * evaluar los tipos MIME, extraer el SHA-256 consumiendo el stream
  * y transicionar el estado del archivo a 'AVAILABLE' o 'VALIDATION_FAILED'.
@@ -34,7 +34,7 @@ class ValidateUploadedFileJob implements ShouldQueue
             // 1. Bloquear el registro de archivo (Sección 16.3.1)
             $file = MediaFile::where('id', $this->mediaFileId)->lockForUpdate()->first();
 
-            if (!$file || !in_array($file->status, ['PENDING_UPLOAD', 'UPLOADED_TEMPORARY'])) {
+            if (! $file || ! in_array($file->status, ['PENDING_UPLOAD', 'UPLOADED_TEMPORARY'])) {
                 return; // Estado no permite validar
             }
 
@@ -50,7 +50,7 @@ class ValidateUploadedFileJob implements ShouldQueue
             try {
                 $disk = Storage::disk($file->storage_disk);
 
-                if (!$file->temporary_storage_key || !$disk->exists($file->temporary_storage_key)) {
+                if (! $file->temporary_storage_key || ! $disk->exists($file->temporary_storage_key)) {
                     throw new \Exception('FILE_CONTENT_INVALID');
                 }
 
@@ -58,7 +58,7 @@ class ValidateUploadedFileJob implements ShouldQueue
                 $stream = $disk->readStream($file->temporary_storage_key);
                 $hashCtx = hash_init('sha256');
                 $size = 0;
-                while (!feof($stream)) {
+                while (! feof($stream)) {
                     $chunk = fread($stream, 8192);
                     $size += strlen($chunk);
                     hash_update($hashCtx, $chunk);
@@ -68,12 +68,12 @@ class ValidateUploadedFileJob implements ShouldQueue
 
                 // 5. Detectar MIME real
                 $mimeType = $disk->mimeType($file->temporary_storage_key);
-                
+
                 // NOTA: Para M18, aquí se invocaría la política definida para comparar
                 // $mimeType y $size con los límites permitidos, así como el Antivirus.
 
                 // Simular validación exitosa (mover a clave definitiva)
-                $finalKey = 'media/' . date('Y/m/d') . '/' . Str::uuid()->toString();
+                $finalKey = 'media/'.date('Y/m/d').'/'.Str::uuid()->toString();
                 $disk->move($file->temporary_storage_key, $finalKey);
 
                 $file->update([
@@ -93,7 +93,7 @@ class ValidateUploadedFileJob implements ShouldQueue
                     'detected_mime' => $mimeType,
                     'size_bytes' => $size,
                     'sha256' => $sha256,
-                    'result' => 'SUCCESS'
+                    'result' => 'SUCCESS',
                 ]);
             } catch (\Exception $e) {
                 $file->update([
@@ -104,7 +104,7 @@ class ValidateUploadedFileJob implements ShouldQueue
                 $attempt->update([
                     'finished_at' => now(),
                     'result' => 'FAILED',
-                    'error_code' => $e->getMessage()
+                    'error_code' => $e->getMessage(),
                 ]);
             }
         });

@@ -19,7 +19,7 @@ class NotificationResource extends JsonResource
             'read_at' => $this->read_at,
             'target' => $this->target_type ? [
                 'type' => $this->target_type,
-                'id' => $this->target_id
+                'id' => $this->target_id,
             ] : null,
         ];
     }

@@ -25,6 +25,7 @@ class ProvisionAuthorizedDistributorHandler implements ProvisionAuthorizedDistri
                 if ($existingByOperation->onboarding_application_id !== $command->onboardingApplicationId) {
                     throw DistributorDomainException::idempotencyKeyReused();
                 }
+
                 return $existingByOperation->id;
             }
 
@@ -41,7 +42,7 @@ class ProvisionAuthorizedDistributorHandler implements ProvisionAuthorizedDistri
             }
 
             // 4. Generar número visible (Mock/Placeholder ya que no hay formato final definido en DI02)
-            $distributorNumber = 'D-' . strtoupper(Str::random(8));
+            $distributorNumber = 'D-'.strtoupper(Str::random(8));
 
             // Colisión check (teóricamente manejado por el generador o constraint en db)
             if (Distributor::where('distributor_number', $distributorNumber)->exists()) {
@@ -64,7 +65,7 @@ class ProvisionAuthorizedDistributorHandler implements ProvisionAuthorizedDistri
 
             // 6. Registrar evento pendiente (Outbox/Audit - Mock/Placeholder para M18)
             // EventPublisher::publish(new DistributorProvisioned(...));
-            
+
             return $distributor->id;
         });
     }

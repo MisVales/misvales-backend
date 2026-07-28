@@ -22,8 +22,7 @@ class GenerateRelationHandler
     public function __construct(
         private readonly InstallmentCycleResolver $cycleResolver,
         private readonly PaymentReferenceGenerator $referenceGenerator
-    ) {
-    }
+    ) {}
 
     public function handle(GenerateRelationCommand $command): void
     {
@@ -31,7 +30,7 @@ class GenerateRelationHandler
             DB::transaction(function () use ($command) {
                 // 1. Resolver la corrida y el intento.
                 $cutRun = CutRun::findOrFail($command->cutRunId);
-                
+
                 // 2. Bloquear el intento por distribuidora.
                 $attempt = CutRunDistributor::where('cut_run_id', $cutRun->id)
                     ->where('distributor_id', $command->distributorId)
@@ -51,6 +50,7 @@ class GenerateRelationHandler
                 // 4. Si ya existe y está confirmada, devolverla.
                 if ($existingRelation) {
                     $attempt->update(['status' => CutAttemptStatus::GENERADA, 'relation_id' => $existingRelation->id]);
+
                     return;
                 }
 
@@ -58,7 +58,7 @@ class GenerateRelationHandler
                 // 6. Obtener el snapshot de línea y puntos para presentación.
                 // 7. Bloquear las parcialidades elegibles.
                 // (Pending implementation of actual models, using dummy logic for now)
-                
+
                 $eligibleInstallments = $this->cycleResolver->resolveEligibleInstallments(
                     $command->distributorId,
                     $cutRun->cut_date
@@ -66,6 +66,7 @@ class GenerateRelationHandler
 
                 if (empty($eligibleInstallments)) {
                     $attempt->update(['status' => CutAttemptStatus::SIN_PARTIDAS]);
+
                     return;
                 }
 
@@ -94,7 +95,7 @@ class GenerateRelationHandler
                 ]);
 
                 // 12-18. Crear snapshot, partidas, actualizar totales...
-                
+
                 $attempt->update([
                     'status' => CutAttemptStatus::GENERADA,
                     'relation_id' => $relation->id,
@@ -107,8 +108,8 @@ class GenerateRelationHandler
                     $cutRun->id,
                     $relation->due_at->toIso8601String(),
                     $relation->payment_reference,
-                    (string)$relation->portfolio_total,
-                    (string)$relation->initial_misvales_due_total
+                    (string) $relation->portfolio_total,
+                    (string) $relation->initial_misvales_due_total
                 ));
             });
         } catch (Throwable $e) {

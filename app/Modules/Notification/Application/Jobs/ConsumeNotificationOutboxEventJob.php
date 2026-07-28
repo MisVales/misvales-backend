@@ -53,8 +53,9 @@ class ConsumeNotificationOutboxEventJob implements ShouldQueue
             return; // Ya procesado o no soportado
         }
 
-        if (!$processor->isSupported($eventCode)) {
+        if (! $processor->isSupported($eventCode)) {
             $notificationEvent->update(['processing_status' => ProcessingStatus::UNSUPPORTED->value]);
+
             return;
         }
 
@@ -70,7 +71,7 @@ class ConsumeNotificationOutboxEventJob implements ShouldQueue
                 $recipient = NotificationRecipient::firstOrCreate(
                     [
                         'notification_event_id' => $notificationEvent->id,
-                        'recipient_key' => $recipientData['recipient_key']
+                        'recipient_key' => $recipientData['recipient_key'],
                     ],
                     array_merge($recipientData, [
                         'id' => Str::uuid()->toString(),
@@ -83,14 +84,14 @@ class ConsumeNotificationOutboxEventJob implements ShouldQueue
                     Notification::firstOrCreate(
                         [
                             'notification_event_id' => $notificationEvent->id,
-                            'user_id' => $recipient->user_id
+                            'user_id' => $recipient->user_id,
                         ],
                         [
                             'id' => Str::uuid()->toString(),
                             'notification_recipient_id' => $recipient->id,
                             'event_code' => $notificationEvent->event_code,
-                            'title' => 'Notificación ' . $notificationEvent->event_code,
-                            'summary' => 'Detalle de evento ' . $notificationEvent->event_code,
+                            'title' => 'Notificación '.$notificationEvent->event_code,
+                            'summary' => 'Detalle de evento '.$notificationEvent->event_code,
                             'occurred_at' => $notificationEvent->occurred_at,
                         ]
                     );
@@ -101,14 +102,14 @@ class ConsumeNotificationOutboxEventJob implements ShouldQueue
                     $email = EmailDelivery::firstOrCreate(
                         [
                             'notification_event_id' => $notificationEvent->id,
-                            'notification_recipient_id' => $recipient->id
+                            'notification_recipient_id' => $recipient->id,
                         ],
                         [
                             'id' => Str::uuid()->toString(),
                             'event_code' => $notificationEvent->event_code,
                             'recipient_email_snapshot' => $recipient->email_snapshot,
-                            'subject_snapshot' => 'Aviso ' . $notificationEvent->event_code,
-                            'message_key' => 'msg_' . Str::random(10) . '_' . time(),
+                            'subject_snapshot' => 'Aviso '.$notificationEvent->event_code,
+                            'message_key' => 'msg_'.Str::random(10).'_'.time(),
                         ]
                     );
 
@@ -123,7 +124,7 @@ class ConsumeNotificationOutboxEventJob implements ShouldQueue
             // Marcar como procesado
             $notificationEvent->update([
                 'processing_status' => ProcessingStatus::PROCESSED->value,
-                'processed_at' => now()
+                'processed_at' => now(),
             ]);
         });
     }

@@ -11,7 +11,7 @@ class BranchScopeService implements BranchScopeCheckerInterface
     {
         $user = User::with('role')->find($userId);
 
-        if (!$user || !$user->role) {
+        if (! $user || ! $user->role) {
             return false;
         }
 

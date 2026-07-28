@@ -3,8 +3,8 @@
 namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
-use App\Models\User;
 use App\Http\Resources\UserOrganizationalResource;
+use App\Models\User;
 use Illuminate\Http\Request;
 
 class OrganizationUserController extends Controller
@@ -15,23 +15,23 @@ class OrganizationUserController extends Controller
         $actor->load('role');
 
         $allowedRoleCodes = ['GENERAL_MANAGER', 'ADMINISTRATOR', 'BRANCH_MANAGER', 'COORDINATOR'];
-        
+
         $roleCode = $actor->role->code ?? null;
-        
+
         if ($roleCode instanceof \BackedEnum) {
             $roleCode = $roleCode->value;
         } elseif (is_object($roleCode) && enum_exists(get_class($roleCode))) {
-            $roleCode = $roleCode->value ?? (string)$roleCode;
+            $roleCode = $roleCode->value ?? (string) $roleCode;
         } else {
             $roleCode = (string) $roleCode;
         }
 
-        if (!in_array($roleCode, $allowedRoleCodes)) {
+        if (! in_array($roleCode, $allowedRoleCodes)) {
             return response()->json([
                 'error' => [
                     'code' => 'ORGANIZATION_SCOPE_DENIED',
-                    'message' => 'Tu perfil no tiene acceso al directorio general de usuarios.'
-                ]
+                    'message' => 'Tu perfil no tiene acceso al directorio general de usuarios.',
+                ],
             ], 403);
         }
 
@@ -45,7 +45,7 @@ class OrganizationUserController extends Controller
             $search = $request->search;
             $query->where(function ($q) use ($search) {
                 $q->where('name', 'ilike', "%{$search}%")
-                  ->orWhere('email', 'ilike', "%{$search}%");
+                    ->orWhere('email', 'ilike', "%{$search}%");
             });
         }
 
@@ -64,8 +64,8 @@ class OrganizationUserController extends Controller
                 return response()->json([
                     'error' => [
                         'code' => 'ORGANIZATION_SCOPE_DENIED',
-                        'message' => 'El usuario solicitado no pertenece a tu alcance organizacional.'
-                    ]
+                        'message' => 'El usuario solicitado no pertenece a tu alcance organizacional.',
+                    ],
                 ], 403);
             }
         }

@@ -13,8 +13,7 @@ class ChangeCategoryHandler
 {
     public function __construct(
         private CategoryModuleContract $categoryModule
-    ) {
-    }
+    ) {}
 
     public function handle(
         string $distributorId,
@@ -36,12 +35,13 @@ class ChangeCategoryHandler
                 if ($existingAssignment->category_version_id !== $categoryVersionId || $existingAssignment->distributor_id !== $distributorId) {
                     throw DistributorDomainException::idempotencyKeyReused();
                 }
+
                 return $existingAssignment->toArray();
             }
 
             // Bloquear distribuidora
             $distributor = Distributor::where('id', $distributorId)->lockForUpdate()->first();
-            if (!$distributor) {
+            if (! $distributor) {
                 throw DistributorDomainException::notFound();
             }
 
@@ -56,7 +56,7 @@ class ChangeCategoryHandler
                 ->lockForUpdate()
                 ->first();
 
-            if (!$currentAssignment) {
+            if (! $currentAssignment) {
                 throw DistributorDomainException::categoryRequired();
             }
 

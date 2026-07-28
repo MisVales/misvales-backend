@@ -34,20 +34,21 @@ class SendCriticalEmailJob implements ShouldQueue
             // Bloquear para evitar concurrencia
             $delivery = EmailDelivery::where('id', $this->emailDeliveryId)->lockForUpdate()->first();
 
-            if (!$delivery || in_array($delivery->status, [EmailStatus::SENT->value, EmailStatus::PERMANENT_FAILED->value])) {
+            if (! $delivery || in_array($delivery->status, [EmailStatus::SENT->value, EmailStatus::PERMANENT_FAILED->value])) {
                 return;
             }
 
             // Validar límites de intentos técnicos
             if ($delivery->attempt_count >= 3) {
                 $delivery->update(['status' => EmailStatus::PERMANENT_FAILED->value, 'failed_at' => now()]);
+
                 return;
             }
 
             // Iniciar intento
             $delivery->update([
                 'status' => EmailStatus::SENDING->value,
-                'attempt_count' => $delivery->attempt_count + 1
+                'attempt_count' => $delivery->attempt_count + 1,
             ]);
 
             $attempt = EmailDeliveryAttempt::create([
@@ -59,36 +60,36 @@ class SendCriticalEmailJob implements ShouldQueue
             try {
                 // AQUÍ IRÍA LA INTEGRACIÓN CON TRANSPORT (Mail::send / API)
                 // Usando $delivery->recipient_email_snapshot, subject, etc.
-                
+
                 // Simulación exitosa
                 $success = true;
-                $providerId = 'prov_' . Str::random(12);
+                $providerId = 'prov_'.Str::random(12);
 
                 if ($success) {
                     $attempt->update([
                         'finished_at' => now(),
                         'result' => 'SUCCESS',
-                        'provider_message_id' => $providerId
+                        'provider_message_id' => $providerId,
                     ]);
 
                     $delivery->update([
                         'status' => EmailStatus::SENT->value,
                         'sent_at' => now(),
-                        'provider_message_id' => $providerId
+                        'provider_message_id' => $providerId,
                     ]);
                 } else {
-                    throw new \Exception("Temporal error from provider");
+                    throw new \Exception('Temporal error from provider');
                 }
             } catch (\Throwable $e) {
                 $attempt->update([
                     'finished_at' => now(),
                     'result' => 'RETRYABLE_FAILURE',
-                    'error_code' => 'PROVIDER_TEMP_ERROR'
+                    'error_code' => 'PROVIDER_TEMP_ERROR',
                 ]);
 
                 $delivery->update([
                     'status' => EmailStatus::RETRYABLE_FAILED->value,
-                    'last_error_code' => 'PROVIDER_TEMP_ERROR'
+                    'last_error_code' => 'PROVIDER_TEMP_ERROR',
                 ]);
 
                 // Podríamos reprogramar el Job aquí si aplica, o un Worker general lo hará.

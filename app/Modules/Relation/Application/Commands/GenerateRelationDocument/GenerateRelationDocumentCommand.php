@@ -8,6 +8,5 @@ readonly class GenerateRelationDocumentCommand
 {
     public function __construct(
         public string $relationId
-    ) {
-    }
+    ) {}
 }

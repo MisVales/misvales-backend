@@ -17,7 +17,7 @@ class DistributorProfileController extends Controller
      * Muestra el detalle de la distribuidora asociada al usuario autenticado.
      *
      * @tags Distributor Profile
-     * @param Request $request
+     *
      * @return DistributorAdminDetailResource
      */
     public function show(Request $request)

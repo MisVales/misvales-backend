@@ -16,9 +16,9 @@ class ListRelationsQuery
         if (isset($filters['distributor_id'])) {
             $query->where('distributor_id', $filters['distributor_id']);
         }
-        
+
         // Appends more filters as required by specification...
-        
+
         return $query->orderBy('cut_date', 'desc')->paginate($perPage);
     }
 }

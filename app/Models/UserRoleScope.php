@@ -3,8 +3,8 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Support\Str;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Support\Str;
 
 class UserRoleScope extends Model
 {
@@ -12,14 +12,14 @@ class UserRoleScope extends Model
         'user_id',
         'role_id',
         'branch_id',
-        'scope_type'
+        'scope_type',
     ];
 
     protected $hidden = [
         'id',
         'user_id',
         'role_id',
-        'branch_id'
+        'branch_id',
     ];
 
     protected static function boot()
@@ -32,7 +32,6 @@ class UserRoleScope extends Model
             }
         });
     }
-
 
     public function user(): BelongsTo
     {

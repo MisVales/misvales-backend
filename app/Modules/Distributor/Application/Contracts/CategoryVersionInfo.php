@@ -9,6 +9,5 @@ class CategoryVersionInfo
         public readonly string $versionId,
         public readonly string $name,
         public readonly string $profitRate
-    ) {
-    }
+    ) {}
 }
