@@ -13,6 +13,13 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
+/**
+ * Job asíncrono que procesa la validación de un archivo recién cargado.
+ * 
+ * Se encarga de aislar la carga del hilo principal de HTTP,
+ * evaluar los tipos MIME, extraer el SHA-256 consumiendo el stream
+ * y transicionar el estado del archivo a 'AVAILABLE' o 'VALIDATION_FAILED'.
+ */
 class ValidateUploadedFileJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;

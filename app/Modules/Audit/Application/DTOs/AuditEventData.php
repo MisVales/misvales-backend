@@ -2,6 +2,12 @@
 
 namespace App\Modules\Audit\Application\DTOs;
 
+/**
+ * DTO (Data Transfer Object) inmutable que encapsula los datos requeridos
+ * para registrar un evento auditable dentro del ecosistema MisVales.
+ *
+ * Esta clase restringe los campos para evitar la inserción de payloads completos e indiscriminados.
+ */
 class AuditEventData
 {
     public function __construct(

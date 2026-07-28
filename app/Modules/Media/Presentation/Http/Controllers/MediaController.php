@@ -10,8 +10,21 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
+/**
+ * Controlador encargado de administrar las peticiones HTTP del módulo Media.
+ * Procesa intenciones de carga, consumo y streaming seguro de evidencias.
+ */
 class MediaController extends Controller
 {
+    /**
+     * Recibe el contenido de un archivo asociado a una intención temporal autorizada.
+     * Posiciona el archivo en almacenamiento temporal y encola su validación asíncrona.
+     *
+     * @tags Media
+     * @param Request $request
+     * @param FileUploadIntent $intent Intención autorizada generada por el módulo propietario.
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function uploadContent(Request $request, FileUploadIntent $intent)
     {
         $this->authorize('upload', $intent);

@@ -7,8 +7,20 @@ use App\Modules\Audit\Persistence\Models\AuditEvent;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
+/**
+ * Controlador de presentación para la API REST del módulo Audit.
+ * Maneja la lectura y listado paginado de eventos de auditoría inmutables.
+ */
 class AuditController extends Controller
 {
+    /**
+     * Lista de forma paginada los eventos de auditoría utilizando los filtros permitidos.
+     * Evalúa las políticas de seguridad antes de devolver información operativa.
+     *
+     * @tags Audit
+     * @param Request $request
+     * @return \Illuminate\Http\Resources\Json\AnonymousResourceCollection
+     */
     public function index(Request $request)
     {
         $this->authorize('viewAny', AuditEvent::class);
@@ -55,6 +67,15 @@ class AuditController extends Controller
         }));
     }
 
+    /**
+     * Devuelve el detalle completo de un evento auditable individual.
+     * Solo se exponen los payloads cuando se aprueba la Policy correspondiente.
+     *
+     * @tags Audit
+     * @param Request $request
+     * @param AuditEvent $auditEvent El modelo del evento auditable resuelto.
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function show(Request $request, AuditEvent $auditEvent)
     {
         $this->authorize('view', $auditEvent);
