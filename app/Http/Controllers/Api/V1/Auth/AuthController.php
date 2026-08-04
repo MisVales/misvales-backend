@@ -26,7 +26,7 @@ class AuthController extends Controller
         ]);
 
         $ip = $request->ip();
-        $email = trim(strtolower($request->email));
+        $email = trim(strtoupper($request->email));
         $throttleKey = "login_attempts_{$ip}_{$email}";
 
         // 1. Bloqueo Progresivo Ciego (Punto 42)
