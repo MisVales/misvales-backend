@@ -14,34 +14,56 @@ return new class extends Migration
     {
         Schema::create('coordinator_distributor_assignments', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->foreignUuid('coordinator_id')->constrained('users');
-            $table->foreignUuid('distributor_id')->constrained('distributors');
-            $table->foreignUuid('branch_id')->constrained('branches');
+            $table->foreignUuid('coordinator_id')->constrained('users')->restrictOnDelete();
+            
+            // FK diferida hacia distributors
+            $table->uuid('distributor_id');
+            $table->index('distributor_id');
+            
+            $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->timestampTz('valid_from');
             $table->timestampTz('valid_to')->nullable();
             $table->string('status', 20);
-            $table->foreignUuid('assigned_by')->constrained('users');
-            $table->foreignUuid('ended_by')->nullable()->constrained('users');
+            
+            $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
+            $table->foreignUuid('ended_by')->nullable()->constrained('users')->restrictOnDelete();
+            
             $table->text('assignment_reason')->nullable();
             $table->text('end_reason')->nullable();
             $table->unsignedInteger('lock_version')->default(0);
             $table->timestampsTz();
 
-            // Índices solicitados
-            $table->index('coordinator_id');
-            $table->index('distributor_id');
-            $table->index('branch_id');
-            $table->index('status');
-            $table->index(['coordinator_id', 'branch_id', 'status']);
+            // Índices de consulta
+            $table->index(['coordinator_id', 'status']);
+            $table->index(['branch_id', 'status']);
+            $table->index(['distributor_id', 'status']);
+            $table->index(['valid_from', 'valid_to']);
         });
 
-        // Índice único parcial para una asignación activa por distribuidora
-        DB::statement("CREATE UNIQUE INDEX coord_dist_assign_active_unique ON coordinator_distributor_assignments (distributor_id) WHERE status = 'ACTIVE' AND valid_to IS NULL;");
+        // 6.6 Índices
+        // Una distribuidora solo puede tener un coordinador activo:
+        DB::statement("
+            CREATE UNIQUE INDEX coordinator_distributor_active_distributor_unique
+            ON coordinator_distributor_assignments (distributor_id)
+            WHERE status = 'ACTIVE' AND valid_to IS NULL;
+        ");
 
-        // Restricciones a nivel de base de datos
+        // Evitar duplicar la misma asignación activa:
+        DB::statement("
+            CREATE UNIQUE INDEX coordinator_distributor_active_pair_unique
+            ON coordinator_distributor_assignments (coordinator_id, distributor_id, branch_id)
+            WHERE status = 'ACTIVE' AND valid_to IS NULL;
+        ");
+
+        // 6.5 Constraints
+        DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_status CHECK (status IN ('ACTIVE', 'ENDED', 'REASSIGNED'));");
         DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);");
-        DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_active_valid_to CHECK (status != 'ACTIVE' OR valid_to IS NULL);");
-        DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_status CHECK (status IN ('ACTIVE', 'INACTIVE'));");
+        DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_lock_version CHECK (lock_version >= 0);");
+        DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_status_consistency CHECK (
+            (status = 'ACTIVE' AND valid_to IS NULL AND ended_by IS NULL)
+            OR
+            (status IN ('ENDED', 'REASSIGNED') AND valid_to IS NOT NULL)
+        );");
 
         // Trigger para evitar eliminación física
         DB::statement("
@@ -57,16 +79,6 @@ return new class extends Migration
             BEFORE DELETE ON coordinator_distributor_assignments
             FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
         ");
-        
-        /* 
-         * Nota: Las reglas de negocio complejas como:
-         * - El coordinador debe tener el rol COORDINATOR.
-         * - El coordinador debe estar activo.
-         * - La distribuidora debe estar activa.
-         * - El coordinador y la distribuidora deben pertenecer a la misma sucursal.
-         * - Al cambiar de coordinador se debe cerrar la asignación anterior y crear una nueva.
-         * Deberán ser gestionadas desde la lógica de la aplicación (Modelos/Servicios)
-         */
     }
 
     /**

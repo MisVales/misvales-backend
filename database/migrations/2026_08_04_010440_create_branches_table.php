@@ -32,6 +32,7 @@ return new class extends Migration
 
         // Restricción: status solo admite ACTIVE o INACTIVE
         DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'));");
+        DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);");
 
         // Triggers para proteger la sucursal matriz
         // 1. No puede eliminarse físicamente
