@@ -1,0 +1,271 @@
+openapi: 3.0.3
+info:
+  title: MisVales API - Auth Zero Trust Module
+  description: Endpoints for the Zero Trust Authentication and Security Module.
+  version: 1.0.0
+servers:
+  - url: 'http://localhost/api/v1'
+    description: Entorno de Desarrollo Local
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT/Sanctum
+
+  schemas:
+    ErrorResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        errors:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              type: string
+
+paths:
+  /auth/invitations/inspect:
+    post:
+      summary: Inspeccionar una invitación
+      tags:
+        - Auth Invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+      responses:
+        '200':
+          description: Invitación válida. Retorna token de intercambio.
+        '400':
+          description: Invitación expirada o inválida.
+        '429':
+          description: Demasiados intentos.
+
+  /auth/invitations/setup:
+    post:
+      summary: Configurar contraseña inicial
+      tags:
+        - Auth Invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - exchange_token
+                - password
+                - password_confirmation
+              properties:
+                exchange_token:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                password_confirmation:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Contraseña configurada exitosamente. Retorna secreto TOTP.
+        '400':
+          description: Token inválido o política de contraseñas no cumplida.
+
+  /auth/invitations/complete:
+    post:
+      summary: Completar configuración de cuenta con MFA
+      tags:
+        - Auth Invitations
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - exchange_token
+                - totp_code
+              properties:
+                exchange_token:
+                  type: string
+                totp_code:
+                  type: string
+      responses:
+        '200':
+          description: Cuenta activada. Retorna códigos de recuperación.
+        '400':
+          description: Código TOTP inválido.
+
+  /auth/login:
+    post:
+      summary: Iniciar sesión (Fase 1)
+      tags:
+        - Auth Sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - password
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Credenciales válidas. Retorna MFA challenge token.
+        '401':
+          description: Credenciales inválidas.
+
+  /auth/mfa/totp/verify:
+    post:
+      summary: Verificar TOTP (Fase 2)
+      tags:
+        - Auth MFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_token
+                - totp_code
+              properties:
+                challenge_token:
+                  type: string
+                totp_code:
+                  type: string
+      responses:
+        '200':
+          description: TOTP válido. Retorna access_token y refresh_token.
+        '400':
+          description: Código inválido.
+
+  /auth/mfa/recovery-code/verify:
+    post:
+      summary: Verificar código de recuperación (Fase 2)
+      tags:
+        - Auth MFA
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - challenge_token
+                - recovery_code
+              properties:
+                challenge_token:
+                  type: string
+                recovery_code:
+                  type: string
+      responses:
+        '200':
+          description: Código válido. Retorna access_token y refresh_token.
+        '400':
+          description: Código inválido.
+
+  /auth/refresh:
+    post:
+      summary: Refrescar token de acceso
+      tags:
+        - Auth Sessions
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - refresh_token
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        '200':
+          description: Token refrescado. Retorna nuevo access_token.
+        '401':
+          description: Refresh token inválido o expirado.
+
+  /auth/logout:
+    post:
+      summary: Cerrar sesión actual
+      tags:
+        - Auth Sessions
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: Sesión revocada.
+        '401':
+          description: No autenticado.
+
+  /auth/password/forgot:
+    post:
+      summary: Solicitar recuperación de contraseña
+      tags:
+        - Auth Password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        '200':
+          description: Instrucciones enviadas si el correo existe (prevención de enumeración).
+
+  /auth/password/reset:
+    post:
+      summary: Restablecer contraseña
+      tags:
+        - Auth Password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - password
+                - password_confirmation
+              properties:
+                token:
+                  type: string
+                password:
+                  type: string
+                  format: password
+                password_confirmation:
+                  type: string
+                  format: password
+      responses:
+        '200':
+          description: Contraseña restablecida exitosamente.
+        '400':
+          description: Token inválido o política no cumplida.
