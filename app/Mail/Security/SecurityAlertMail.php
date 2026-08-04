@@ -4,23 +4,24 @@ namespace App\Mail\Security;
 
 use App\Models\User;
 use Illuminate\Bus\Queueable;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
+use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Mail\Mailable;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 
-class SecurityAlertMail extends Mailable implements ShouldQueue, ShouldBeUnique
+class SecurityAlertMail extends Mailable implements ShouldBeUnique, ShouldQueue
 {
     use Queueable, SerializesModels;
 
     public $tries = 3;
+
     public $backoff = [10, 30, 60];
 
     public function uniqueId(): string
     {
-        return $this->user->id . '_' . hash('sha256', $this->alertTitle);
+        return $this->user->id.'_'.hash('sha256', $this->alertTitle);
     }
 
     public function __construct(
@@ -33,7 +34,7 @@ class SecurityAlertMail extends Mailable implements ShouldQueue, ShouldBeUnique
     public function envelope(): Envelope
     {
         return new Envelope(
-            subject: 'Alerta de Seguridad: ' . $this->alertTitle,
+            subject: 'Alerta de Seguridad: '.$this->alertTitle,
         );
     }
 

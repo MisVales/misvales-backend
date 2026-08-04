@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\ReauthenticatesMfa;
 use App\Models\Role;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
 class RoleController extends Controller
 {
+    use ReauthenticatesMfa;
+
     /**
      * GET /api/v1/roles
      * Punto 34: Listar roles
@@ -41,6 +44,11 @@ class RoleController extends Controller
         $role = Role::findOrFail($id);
         Gate::authorize('updatePermissions', $role);
 
+        $reauthResult = $this->requireMfaReauth($request);
+        if ($reauthResult !== true) {
+            return $reauthResult;
+        }
+
         $request->validate([
             'permissions' => 'required|array',
             'permissions.*' => 'uuid|exists:permissions,id',
@@ -50,7 +58,7 @@ class RoleController extends Controller
 
         return response()->json([
             'message' => 'Permisos sincronizados exitosamente.',
-            'role' => $role->load('permissions')
+            'role' => $role->load('permissions'),
         ]);
     }
 }

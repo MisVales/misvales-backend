@@ -16,10 +16,10 @@ class RequireMfaCompleted
         // En TrackSessionActivity se adjunta la sesión al request attributes
         $session = $request->attributes->get('auth_session');
 
-        if (!$session || !$session->mfa_verified_at) {
+        if (! $session || ! $session->mfa_verified_at) {
             return response()->json([
                 'error' => 'INVALID_MFA',
-                'message' => 'Requiere autenticación multifactor.'
+                'message' => 'Requiere autenticación multifactor.',
             ], 403);
         }
 

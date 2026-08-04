@@ -2,9 +2,11 @@
 
 namespace App\Providers;
 
-use Illuminate\Support\ServiceProvider;
-
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\ServiceProvider;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,29 +31,29 @@ class AppServiceProvider extends ServiceProvider
             }
         });
         // Límites de intentos (respaldados por Redis Cache)
-        
-        \Illuminate\Support\Facades\RateLimiter::for('login', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by($request->input('email', $request->ip()));
+
+        RateLimiter::for('login', function (Request $request) {
+            return Limit::perMinute(5)->by($request->input('email', $request->ip()));
         });
 
-        \Illuminate\Support\Facades\RateLimiter::for('totp', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(5)->by($request->user()?->id ?: $request->ip());
+        RateLimiter::for('totp', function (Request $request) {
+            return Limit::perMinute(5)->by($request->user()?->id ?: $request->ip());
         });
 
-        \Illuminate\Support\Facades\RateLimiter::for('recovery_code', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(3)->by($request->user()?->id ?: $request->ip());
+        RateLimiter::for('recovery_code', function (Request $request) {
+            return Limit::perMinute(3)->by($request->user()?->id ?: $request->ip());
         });
 
-        \Illuminate\Support\Facades\RateLimiter::for('inspect_invitation', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(10)->by($request->ip());
+        RateLimiter::for('inspect_invitation', function (Request $request) {
+            return Limit::perMinute(10)->by($request->ip());
         });
 
-        \Illuminate\Support\Facades\RateLimiter::for('forgot_password', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(3)->by($request->ip());
+        RateLimiter::for('forgot_password', function (Request $request) {
+            return Limit::perMinute(3)->by($request->ip());
         });
-        
-        \Illuminate\Support\Facades\RateLimiter::for('resend_invitation', function (\Illuminate\Http\Request $request) {
-            return \Illuminate\Cache\RateLimiting\Limit::perMinute(3)->by($request->ip());
+
+        RateLimiter::for('resend_invitation', function (Request $request) {
+            return Limit::perMinute(3)->by($request->ip());
         });
     }
 }

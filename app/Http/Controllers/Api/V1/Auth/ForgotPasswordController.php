@@ -3,8 +3,9 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
-use App\Mail\ForgotPasswordMail;
+use App\Mail\Security\PasswordRecoveryMail;
 use App\Models\User;
+use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -20,7 +21,7 @@ class ForgotPasswordController extends Controller
     {
         // 1. Validación estricta del formato
         $request->validate([
-            'email' => 'required|email'
+            'email' => 'required|email',
         ]);
 
         $email = trim(strtolower($request->email));
@@ -40,16 +41,16 @@ class ForgotPasswordController extends Controller
                 'user_id' => $user->id,
                 'token_hash' => $hashedToken,
                 'expires_at' => now()->addMinutes(60),
-                'created_at' => now()
+                'created_at' => now(),
             ]);
 
             // 5. Enviar el correo electrónico con el token en texto plano
-            \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\Security\PasswordRecoveryMail(
-                $user, 
+            Mail::to($user->email)->queue(new PasswordRecoveryMail(
+                $user,
                 $plainToken,
                 [
                     'ip' => $request->ip(),
-                    'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                    'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                     'time' => now()->toDateTimeString(),
                 ]
             ));
@@ -58,7 +59,7 @@ class ForgotPasswordController extends Controller
         // 6. Respuesta no enumerativa (Punto 27 y 28)
         // El atacante SIEMPRE recibirá este mensaje exitoso (200 OK) sin importar si el correo existe
         return response()->json([
-            'message' => 'Si el correo electrónico existe y la cuenta está activa, recibirás un mensaje con las instrucciones para recuperar tu contraseña.'
+            'message' => 'Si el correo electrónico existe y la cuenta está activa, recibirás un mensaje con las instrucciones para recuperar tu contraseña.',
         ]);
     }
 }

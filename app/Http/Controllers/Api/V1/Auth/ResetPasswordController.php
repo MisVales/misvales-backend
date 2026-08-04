@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\Security\SecurityAlertMail;
+use App\Models\AuthSession;
 use App\Models\User;
+use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Validation\Rules\Password;
 
 class ResetPasswordController extends Controller
 {
@@ -20,7 +24,7 @@ class ResetPasswordController extends Controller
         $request->validate([
             'email' => 'required|email',
             'token' => 'required|string',
-            'password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
+            'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->symbols()],
         ]);
 
         $email = trim(strtolower($request->email));
@@ -32,12 +36,12 @@ class ResetPasswordController extends Controller
             ->first();
 
         // 1. Validar Token y Expiración (60 minutos)
-        if (!$resetRecord || $resetRecord->token !== $hashedToken || now()->diffInMinutes($resetRecord->created_at) > 60) {
+        if (! $resetRecord || $resetRecord->token !== $hashedToken || now()->diffInMinutes($resetRecord->created_at) > 60) {
             return response()->json(['message' => 'El token de recuperación es inválido o ha expirado.'], 400);
         }
 
         $user = User::where('normalized_email', $email)->first();
-        if (!$user || $user->state !== 'ACTIVE') {
+        if (! $user || $user->state !== 'ACTIVE') {
             return response()->json(['message' => 'Usuario no encontrado o inactivo.'], 404);
         }
 
@@ -50,7 +54,7 @@ class ResetPasswordController extends Controller
         DB::table('password_reset_tokens')->where('email', $email)->delete();
 
         // 4. Revocar todas las sesiones activas (Punto 29)
-        $activeSessions = \App\Models\AuthSession::where('user_id', $user->id)
+        $activeSessions = AuthSession::where('user_id', $user->id)
             ->whereNull('revoked_at')
             ->get();
 
@@ -73,22 +77,22 @@ class ResetPasswordController extends Controller
         // cuando intenten hacer refresh fallará la validación de `AuthSession`.
 
         // 5. Registrar el Evento de Seguridad centralizado (Punto 29)
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'PASSWORD_RESET',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',
             'user_id' => $user->id,
         ]);
-        
+
         // 6. Enviar Alerta de Seguridad por Correo (Punto 45)
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Contraseña Modificada',
                 'La contraseña de tu cuenta ha sido modificada con éxito.',
                 [
                     'ip' => $request->ip(),
-                    'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                    'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                     'time' => now()->toDateTimeString(),
                 ]
             )

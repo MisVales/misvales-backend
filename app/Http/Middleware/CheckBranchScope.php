@@ -2,10 +2,10 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\UserRoleScope;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Models\UserRoleScope;
 
 class CheckBranchScope
 {
@@ -23,13 +23,13 @@ class CheckBranchScope
                 ->whereNull('revoked_at')
                 ->where(function ($query) use ($branchId) {
                     $query->whereNull('branch_id') // Acceso Global
-                          ->orWhere('branch_id', $branchId); // Acceso Específico
+                        ->orWhere('branch_id', $branchId); // Acceso Específico
                 })->exists();
 
-            if (!$hasScope) {
+            if (! $hasScope) {
                 return response()->json([
                     'error' => 'SCOPE_DENIED',
-                    'message' => 'La sucursal solicitada no está dentro de su alcance autorizado.'
+                    'message' => 'La sucursal solicitada no está dentro de su alcance autorizado.',
                 ], 403);
             }
         }

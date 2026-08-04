@@ -28,10 +28,12 @@ class MeController extends Controller
         $effectivePermissions = [];
 
         foreach ($user->roleScopes as $scope) {
-            if (!$scope->role) continue;
+            if (! $scope->role) {
+                continue;
+            }
 
             $rolePermissions = $scope->role->permissions->pluck('code')->toArray();
-            
+
             $scopes[] = [
                 'role' => $scope->role->code,
                 'role_name' => $scope->role->name,

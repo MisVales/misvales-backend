@@ -13,10 +13,10 @@ class RequireActiveUser
      */
     public function handle(Request $request, Closure $next): Response
     {
-        if (!$request->user() || $request->user()->state !== 'ACTIVE') {
+        if (! $request->user() || $request->user()->state !== 'ACTIVE') {
             return response()->json([
                 'error' => 'ACCOUNT_INACTIVE',
-                'message' => 'Usuario no encontrado o inactivo.'
+                'message' => 'Usuario no encontrado o inactivo.',
             ], 401);
         }
 

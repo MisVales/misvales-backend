@@ -5,6 +5,7 @@ namespace App\Mail;
 use App\Models\User;
 use Illuminate\Bus\Queueable;
 use Illuminate\Mail\Mailable;
+use Illuminate\Mail\Mailables\Attachment;
 use Illuminate\Mail\Mailables\Content;
 use Illuminate\Mail\Mailables\Envelope;
 use Illuminate\Queue\SerializesModels;
@@ -14,7 +15,9 @@ class ActivationInvitationMail extends Mailable
     use Queueable, SerializesModels;
 
     public $user;
+
     public $rawToken;
+
     public $activationUrl;
 
     /**
@@ -24,9 +27,9 @@ class ActivationInvitationMail extends Mailable
     {
         $this->user = $user;
         $this->rawToken = $rawToken;
-        
+
         $frontendUrl = env('FRONTEND_URL', 'http://localhost:4200');
-        $this->activationUrl = rtrim($frontendUrl, '/') . '/activar-cuenta?token=' . urlencode($rawToken);
+        $this->activationUrl = rtrim($frontendUrl, '/').'/activar-cuenta?token='.urlencode($rawToken);
     }
 
     /**
@@ -47,17 +50,17 @@ class ActivationInvitationMail extends Mailable
         return new Content(
             htmlString: '
             <div style="font-family: sans-serif; padding: 20px;">
-                <h2>Hola, ' . htmlspecialchars($this->user->name) . '</h2>
+                <h2>Hola, '.htmlspecialchars($this->user->name).'</h2>
                 <p>Has sido invitado a unirte a <strong>MisVales</strong>.</p>
                 <p>Para activar tu cuenta y configurar tu seguridad (Contraseña y Autenticador), haz clic en el siguiente enlace:</p>
                 <p>
-                    <a href="' . htmlspecialchars($this->activationUrl) . '" 
+                    <a href="'.htmlspecialchars($this->activationUrl).'" 
                        style="display: inline-block; padding: 10px 20px; background-color: #007bff; color: #fff; text-decoration: none; border-radius: 5px;">
                         Activar mi cuenta
                     </a>
                 </p>
                 <p>Si el botón no funciona, copia y pega este enlace en tu navegador:</p>
-                <p><small>' . htmlspecialchars($this->activationUrl) . '</small></p>
+                <p><small>'.htmlspecialchars($this->activationUrl).'</small></p>
                 <p><em>Este enlace es de un solo uso y expirará pronto.</em></p>
             </div>
             '
@@ -67,7 +70,7 @@ class ActivationInvitationMail extends Mailable
     /**
      * Get the attachments for the message.
      *
-     * @return array<int, \Illuminate\Mail\Mailables\Attachment>
+     * @return array<int, Attachment>
      */
     public function attachments(): array
     {

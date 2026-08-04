@@ -14,11 +14,11 @@ class RoleAssignmentPolicyService
      */
     private $ranks = [
         'general_manager' => 100,
-        'admin'           => 90,
-        'branch_manager'  => 80,
-        'coordinator'     => 60,
-        'verifier'        => 40,
-        'cashier'         => 20,
+        'admin' => 90,
+        'branch_manager' => 80,
+        'coordinator' => 60,
+        'verifier' => 40,
+        'cashier' => 20,
     ];
 
     /**
@@ -28,20 +28,20 @@ class RoleAssignmentPolicyService
     public function validateAssignment(User $actor, User $targetUser, Role $roleToAssign, ?string $branchId)
     {
         // 1. Estado del usuario receptor
-        if ($targetUser->state !== 'ACTIVE') {
-            return 'El usuario receptor debe estar en estado ACTIVO.';
+        if (!in_array($targetUser->state, ['ACTIVE', 'INVITED', 'PENDING_ACTIVATION'])) {
+            return 'El usuario receptor no está en un estado válido para recibir asignaciones.';
         }
 
         // 2. Jerarquía
         $actorMaxRank = $this->getActorMaxRank($actor);
         $roleRank = $this->ranks[$roleToAssign->code] ?? 10; // Roles no listados tienen rango bajo
-        
+
         if ($roleRank >= $actorMaxRank) {
             return "No tienes el nivel jerárquico suficiente para asignar el rol de '{$roleToAssign->name}'.";
         }
 
         // 3. Alcance del Actor
-        if (!$this->actorHasScopeOverBranch($actor, $branchId)) {
+        if (! $this->actorHasScopeOverBranch($actor, $branchId)) {
             return 'No tienes jurisdicción sobre la sucursal seleccionada para realizar asignaciones.';
         }
 
@@ -62,7 +62,8 @@ class RoleAssignmentPolicyService
         $maxRank = 0;
         $scopes = UserRoleScope::with('role')
             ->where('user_id', $actor->id)
-            ->whereNull('revoked_at')
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
             ->get();
 
         foreach ($scopes as $scope) {
@@ -71,6 +72,7 @@ class RoleAssignmentPolicyService
                 $maxRank = $rank;
             }
         }
+
         return $maxRank;
     }
 
@@ -82,14 +84,19 @@ class RoleAssignmentPolicyService
     private function actorHasScopeOverBranch(User $actor, ?string $targetBranchId): bool
     {
         $scopes = UserRoleScope::where('user_id', $actor->id)
-            ->whereNull('revoked_at')
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
             ->get();
 
         foreach ($scopes as $scope) {
             // Si el actor tiene un rol global, puede asignar donde sea.
-            if ($scope->branch_id === null) return true;
+            if ($scope->branch_id === null) {
+                return true;
+            }
             // Si coincide la sucursal, puede asignar ahí.
-            if ($scope->branch_id === $targetBranchId) return true;
+            if ($scope->branch_id === $targetBranchId) {
+                return true;
+            }
         }
 
         return false;
@@ -103,7 +110,8 @@ class RoleAssignmentPolicyService
         $activeRolesInBranch = UserRoleScope::with('role')
             ->where('user_id', $targetUser->id)
             ->where('branch_id', $branchId)
-            ->whereNull('revoked_at')
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
             ->get()
             ->pluck('role.code')
             ->toArray();

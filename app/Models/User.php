@@ -18,7 +18,7 @@ use Laravel\Sanctum\HasApiTokens;
 class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
-    use HasApiTokens, HasFactory, Notifiable, HasUuids;
+    use HasApiTokens, HasFactory, HasUuids, Notifiable;
 
     /**
      * Get the attributes that should be cast.
@@ -48,9 +48,6 @@ class User extends Authenticatable
 
     /**
      * Check if the user has a specific permission via their active roles.
-     *
-     * @param string $permissionKey
-     * @return bool
      */
     public function hasPermissionTo(string $permissionKey): bool
     {
@@ -60,7 +57,8 @@ class User extends Authenticatable
         }
 
         return $this->roleScopes()
-            ->whereNull('revoked_at')
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
             ->whereHas('role.permissions', function ($query) use ($permissionKey) {
                 $query->where('code', $permissionKey);
             })

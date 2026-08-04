@@ -13,10 +13,10 @@ class RequirePermission
      */
     public function handle(Request $request, Closure $next, string $permission): Response
     {
-        if (!$request->user() || !$request->user()->hasPermissionTo($permission)) {
+        if (! $request->user() || ! $request->user()->hasPermissionTo($permission)) {
             return response()->json([
                 'error' => 'PERMISSION_DENIED',
-                'message' => 'No tiene el permiso requerido para realizar esta acción.'
+                'message' => 'No tiene el permiso requerido para realizar esta acción.',
             ], 403);
         }
 

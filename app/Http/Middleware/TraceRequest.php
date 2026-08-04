@@ -16,12 +16,12 @@ class TraceRequest
     public function handle(Request $request, Closure $next): Response
     {
         $requestId = $request->header('X-Request-Id', (string) Str::uuid());
-        
+
         // Guardamos en la petición por si un log interno necesita anexarlo
         $request->attributes->set('request_id', $requestId);
 
         $response = $next($request);
-        
+
         // Añadimos la cabecera a la respuesta para que el frontend lo pueda reportar en caso de error
         $response->headers->set('X-Request-Id', $requestId);
 

@@ -3,9 +3,13 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\ActivationInvitationMail;
 use App\Models\AccountInvitation;
 use App\Models\MfaCredential;
 use App\Models\MfaRecoveryCode;
+use App\Services\Audit\SecurityAuditService;
+use App\Services\Auth\MfaService;
+use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
@@ -15,7 +19,6 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
 use PragmaRX\Google2FA\Google2FA;
-use App\Mail\ActivationInvitationMail;
 
 class InvitationController extends Controller
 {
@@ -33,11 +36,11 @@ class InvitationController extends Controller
 
         $invitation = AccountInvitation::where('token_hash', $tokenHash)->first();
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Invitación inválida o no encontrada.'], 404);
         }
 
-        if (!in_array($invitation->state, ['ACTIVE', 'PREPARED'])) {
+        if (! in_array($invitation->state, ['ACTIVE', 'PREPARED'])) {
             return response()->json(['error' => 'USED_INVITATION', 'message' => 'La invitación ya fue usada o revocada.'], 400);
         }
 
@@ -49,7 +52,7 @@ class InvitationController extends Controller
         $rawExchangeToken = Str::random(64);
         $exchangeTokenHash = hash('sha256', $rawExchangeToken);
 
-        $isResuming = $invitation->state === 'PREPARED' && !is_null($invitation->mfa_setup_completed_at);
+        $isResuming = $invitation->state === 'PREPARED' && ! is_null($invitation->mfa_setup_completed_at);
 
         // Actualizar la invitación a estado PREPARED
         $invitation->update([
@@ -61,7 +64,7 @@ class InvitationController extends Controller
             'last_attempt_at' => now(),
         ]);
 
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => $isResuming ? 'INVITATION_RESUMED' : 'INVITATION_INSPECTED',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -79,14 +82,14 @@ class InvitationController extends Controller
                 'email' => $invitation->user->email,
                 'name' => $invitation->user->name,
                 'roles' => $invitation->user->roleScopes()->with('role')->get()->pluck('role.code')->toArray(),
-            ]
+            ],
         ];
 
-        if (!$isResuming) {
+        if (! $isResuming) {
             // Generar la configuración de TOTP solo si es la primera vez
-            $google2fa = new Google2FA();
+            $google2fa = new Google2FA;
             $totpSecret = $google2fa->generateSecretKey();
-            
+
             $qrCodeUrl = $google2fa->getQRCodeUrl(
                 config('app.name', 'MisVales'),
                 $invitation->user->email,
@@ -95,7 +98,7 @@ class InvitationController extends Controller
 
             // Guardar el secreto TOTP temporalmente en caché
             Cache::put("totp_setup_{$exchangeTokenHash}", $totpSecret, now()->addMinutes(15));
-            
+
             $responsePayload['totp_setup'] = [
                 'secret' => $totpSecret,
                 'qr_code_url' => $qrCodeUrl,
@@ -116,11 +119,11 @@ class InvitationController extends Controller
         ]);
 
         $tokenHash = hash('sha256', $request->token);
-        
+
         // Buscar la invitación por token hash (incluso si está expirada o no en pending, para identificar al usuario)
         $invitation = AccountInvitation::where('token_hash', $tokenHash)->first();
 
-        if (!$invitation) {
+        if (! $invitation) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token proporcionado no existe.'], 404);
         }
 
@@ -149,8 +152,8 @@ class InvitationController extends Controller
 
         // Enviar el correo con la nueva invitación
         Mail::to($user->email)->queue(new ActivationInvitationMail($user, $plainToken));
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'INVITATION_RESENT',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -160,7 +163,7 @@ class InvitationController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Se ha enviado una nueva invitación de activación a su correo electrónico.'
+            'message' => 'Se ha enviado una nueva invitación de activación a su correo electrónico.',
         ]);
     }
 
@@ -183,7 +186,7 @@ class InvitationController extends Controller
             ->where('state', 'PREPARED')
             ->first();
 
-        if (!$invitation || $invitation->exchange_expires_at->isPast()) {
+        if (! $invitation || $invitation->exchange_expires_at->isPast()) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token de intercambio es inválido o ha expirado.'], 400);
         }
 
@@ -194,25 +197,26 @@ class InvitationController extends Controller
 
         // Recuperar secreto TOTP de la caché
         $totpSecret = Cache::get("totp_setup_{$exchangeTokenHash}");
-        
-        if (!$totpSecret) {
+
+        if (! $totpSecret) {
             return response()->json(['error' => 'EXPIRED_INVITATION', 'message' => 'La sesión de configuración MFA ha expirado. Vuelva a inspeccionar la invitación.'], 400);
         }
 
         // Validar el código TOTP protegiendo contra Replay Attacks
-        $mfaService = new \App\Services\Auth\MfaService();
+        $mfaService = new MfaService;
         $isValidTotp = $mfaService->verifyTotp($totpSecret, $request->totp_code, $invitation->user_id);
 
-        if (!$isValidTotp) {
+        if (! $isValidTotp) {
             // Aumentar contador de intentos en la invitación
             $invitation->increment('attempt_count');
             $invitation->update(['last_attempt_at' => now()]);
+
             return response()->json(['error' => 'INVALID_MFA', 'message' => 'El código de autenticador es incorrecto.'], 401);
         }
 
         // Generar 10 códigos de recuperación en texto plano (xxxx-xxxx)
         $rawRecoveryCodes = collect(range(1, 10))->map(function () {
-            return strtolower(Str::random(4) . '-' . Str::random(4));
+            return strtolower(Str::random(4).'-'.Str::random(4));
         });
 
         DB::transaction(function () use ($invitation, $request, $totpSecret, $rawRecoveryCodes) {
@@ -236,7 +240,7 @@ class InvitationController extends Controller
             // 3. Registrar Códigos de Recuperación (Solo el Hash SHA-256)
             $batchId = Str::uuid();
             $now = now();
-            
+
             $recoveryCodesData = $rawRecoveryCodes->map(function ($code, $index) use ($user, $batchId, $now) {
                 return [
                     'id' => Str::uuid(),
@@ -262,7 +266,7 @@ class InvitationController extends Controller
         return response()->json([
             'message' => 'Configuración de seguridad guardada exitosamente.',
             'recovery_codes' => $rawRecoveryCodes,
-            'note' => 'GUARDE ESTOS CÓDIGOS EN UN LUGAR SEGURO. Solo se mostrarán esta vez. Llame a /complete para finalizar la activación.'
+            'note' => 'GUARDE ESTOS CÓDIGOS EN UN LUGAR SEGURO. Solo se mostrarán esta vez. Llame a /complete para finalizar la activación.',
         ]);
     }
 
@@ -270,7 +274,7 @@ class InvitationController extends Controller
      * POST /api/v1/auth/invitations/passkey/setup
      * (Opcional) Fase 1.5: Generar opciones de Passkey
      */
-    public function passkeySetup(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService)
+    public function passkeySetup(Request $request, WebAuthnService $webAuthnService)
     {
         $request->validate([
             'exchange_token' => 'required|string',
@@ -282,12 +286,12 @@ class InvitationController extends Controller
             ->whereNotNull('mfa_setup_completed_at')
             ->first();
 
-        if (!$invitation || $invitation->exchange_expires_at->isPast()) {
+        if (! $invitation || $invitation->exchange_expires_at->isPast()) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Token inválido o expirado.'], 400);
         }
 
         $options = $webAuthnService->generateRegistrationOptions($invitation->user);
-        
+
         Cache::put("passkey_setup_{$exchangeTokenHash}", serialize($options), now()->addMinutes(10));
 
         return response($webAuthnService->serializeOptions($options))->header('Content-Type', 'application/json');
@@ -297,7 +301,7 @@ class InvitationController extends Controller
      * POST /api/v1/auth/invitations/passkey/register
      * (Opcional) Fase 1.6: Registrar Passkey
      */
-    public function passkeyRegister(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService)
+    public function passkeyRegister(Request $request, WebAuthnService $webAuthnService)
     {
         $request->validate([
             'exchange_token' => 'required|string',
@@ -311,12 +315,12 @@ class InvitationController extends Controller
             ->whereNotNull('mfa_setup_completed_at')
             ->first();
 
-        if (!$invitation || $invitation->exchange_expires_at->isPast()) {
+        if (! $invitation || $invitation->exchange_expires_at->isPast()) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Token inválido o expirado.'], 400);
         }
 
         $cachedOptions = Cache::get("passkey_setup_{$exchangeTokenHash}");
-        if (!$cachedOptions) {
+        if (! $cachedOptions) {
             return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
         }
 
@@ -344,7 +348,7 @@ class InvitationController extends Controller
 
             return response()->json(['message' => 'Passkey registrado correctamente.']);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: ' . $e->getMessage()], 400);
+            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: '.$e->getMessage()], 400);
         }
     }
 
@@ -366,17 +370,17 @@ class InvitationController extends Controller
             ->whereNotNull('mfa_setup_completed_at')
             ->first();
 
-        if (!$invitation || $invitation->exchange_expires_at->isPast()) {
+        if (! $invitation || $invitation->exchange_expires_at->isPast()) {
             return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token de intercambio es inválido, ha expirado, o no se ha completado el setup.'], 400);
         }
 
         $userRoles = $invitation->user->roleScopes()->with('role')->get()->pluck('role.code')->toArray();
         if (in_array('general_manager', $userRoles)) {
             $hasPasskey = MfaCredential::where('user_id', $invitation->user_id)->where('type', 'PASSKEY')->exists();
-            if (!$hasPasskey) {
+            if (! $hasPasskey) {
                 return response()->json([
-                    'error' => 'PASSKEY_REQUIRED', 
-                    'message' => 'Por política de seguridad corporativa, los Gerentes Generales deben registrar un Passkey de forma obligatoria para finalizar la activación.'
+                    'error' => 'PASSKEY_REQUIRED',
+                    'message' => 'Por política de seguridad corporativa, los Gerentes Generales deben registrar un Passkey de forma obligatoria para finalizar la activación.',
                 ], 403);
             }
         }
@@ -397,8 +401,8 @@ class InvitationController extends Controller
                 'exchange_token_hash' => null, // Invalidar explícitamente
             ]);
         });
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'INVITATION_USED',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -407,7 +411,7 @@ class InvitationController extends Controller
             'user_id' => $invitation->user_id,
         ]);
 
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ACCOUNT_ACTIVATED',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -417,7 +421,7 @@ class InvitationController extends Controller
         ]);
 
         return response()->json([
-            'message' => 'Su cuenta ha sido activada exitosamente. Ahora puede iniciar sesión.'
+            'message' => 'Su cuenta ha sido activada exitosamente. Ahora puede iniciar sesión.',
         ]);
     }
 }

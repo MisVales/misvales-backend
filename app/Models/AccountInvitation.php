@@ -63,7 +63,7 @@ class AccountInvitation extends Model
      */
     public function isValid(): bool
     {
-        return in_array($this->state, ['ACTIVE', 'PREPARED']) 
+        return in_array($this->state, ['ACTIVE', 'PREPARED'])
             && $this->expires_at->isFuture();
     }
 }

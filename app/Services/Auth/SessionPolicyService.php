@@ -3,7 +3,6 @@
 namespace App\Services\Auth;
 
 use App\Models\User;
-use Carbon\CarbonInterval;
 
 class SessionPolicyService
 {
@@ -81,7 +80,7 @@ class SessionPolicyService
     public function getPolicyForUser(User $user): array
     {
         $userRoles = $user->roleScopes()->with('role')->get()->pluck('role.code')->toArray();
-        
+
         if (empty($userRoles)) {
             return self::DEFAULT_POLICY;
         }
@@ -91,13 +90,14 @@ class SessionPolicyService
         foreach ($userRoles as $roleCode) {
             $policy = self::POLICIES[$roleCode] ?? self::DEFAULT_POLICY;
 
-            if (!$mostRestrictivePolicy) {
+            if (! $mostRestrictivePolicy) {
                 $mostRestrictivePolicy = $policy;
+
                 continue;
             }
 
             // Para ser seguros, el más restrictivo es el que tiene los tiempos MENORES
-            if ($policy['absolute'] < $mostRestrictivePolicy['absolute'] || 
+            if ($policy['absolute'] < $mostRestrictivePolicy['absolute'] ||
                 ($policy['absolute'] === $mostRestrictivePolicy['absolute'] && $policy['inactivity'] < $mostRestrictivePolicy['inactivity'])) {
                 $mostRestrictivePolicy = $policy;
             }

@@ -9,7 +9,9 @@ class UserRoleScopePolicy
 {
     public function before(User $user, string $ability)
     {
-        if ($user->state !== 'ACTIVE') return false;
+        if ($user->state !== 'ACTIVE') {
+            return false;
+        }
     }
 
     public function viewAny(User $user): bool

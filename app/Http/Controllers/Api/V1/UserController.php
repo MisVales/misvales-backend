@@ -3,10 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\ReauthenticatesMfa;
 use App\Mail\ActivationInvitationMail;
+use App\Mail\Security\SecurityAlertMail;
 use App\Models\AccountInvitation;
 use App\Models\AuthSession;
+use App\Models\MfaCredential;
 use App\Models\User;
+use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -15,6 +19,8 @@ use Illuminate\Support\Str;
 
 class UserController extends Controller
 {
+    use ReauthenticatesMfa;
+
     /**
      * GET /api/v1/users
      */
@@ -22,13 +28,13 @@ class UserController extends Controller
     {
         Gate::authorize('viewAny', User::class);
 
-        $query = User::query();
+        $query = User::with('roleScopes.role');
 
         if ($request->has('search')) {
             $search = strtolower(trim($request->search));
             $query->where(function ($q) use ($search) {
                 $q->where('normalized_email', 'like', "%{$search}%")
-                  ->orWhere('name', 'like', "%{$search}%");
+                    ->orWhere('name', 'like', "%{$search}%");
             });
         }
 
@@ -36,42 +42,127 @@ class UserController extends Controller
             $query->where('state', $request->state);
         }
 
+        if ($request->has('role_id')) {
+            $query->whereHas('roleScopes', function ($q) use ($request) {
+                $q->where('role_id', $request->role_id)->where('status', 'ACTIVE');
+            });
+        }
+
+        if ($request->has('branch_id')) {
+            $query->whereHas('roleScopes', function ($q) use ($request) {
+                $q->where('branch_id', $request->branch_id)->where('status', 'ACTIVE');
+            });
+        }
+
         return response()->json($query->paginate(15));
     }
 
     /**
      * POST /api/v1/users
+     * Crea el usuario y opcionalmente le asigna un rol y envía la invitación.
      */
-    public function store(Request $request)
+    public function store(Request $request, \App\Services\Auth\RoleAssignmentPolicyService $policyService)
     {
         Gate::authorize('create', User::class);
 
         $request->validate([
             'name' => 'required|string|max:255',
             'email' => 'required|email|unique:users,email',
+            'role_id' => 'nullable|string',
+            'branch_id' => 'nullable|uuid',
+            'send_invitation' => 'nullable|boolean',
         ]);
 
-        $email = trim(strtolower($request->email));
+        return DB::transaction(function () use ($request, $policyService) {
+            $email = trim(strtolower($request->email));
 
-        $user = User::create([
-            'id' => Str::uuid(),
-            'name' => $request->name,
-            'email' => $request->email, // Conservar capitalización original para UI
-            'normalized_email' => $email,
-            'password' => '', // Nace sin contraseña, la crea en la activación
-            'state' => 'PENDING_ACTIVATION',
-        ]);
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
-            'event_type' => 'INVITATION_CREATED',
-            'severity' => 'INFO',
-            'outcome' => 'SUCCESS',
-            'entity_type' => 'User',
-            'entity_id' => $user->id,
-            'metadata' => ['email' => $email],
-        ]);
+            $user = User::create([
+                'id' => Str::uuid(),
+                'name' => $request->name,
+                'email' => $request->email,
+                'normalized_email' => $email,
+                'password' => '',
+                'state' => 'INVITED',
+            ]);
 
-        return response()->json(['message' => 'Usuario creado exitosamente.', 'user' => $user], 201);
+            app(SecurityAuditService::class)->log($request, [
+                'event_type' => 'INVITATION_CREATED',
+                'severity' => 'INFO',
+                'outcome' => 'SUCCESS',
+                'entity_type' => 'User',
+                'entity_id' => $user->id,
+                'metadata' => ['email' => $email],
+            ]);
+
+            // 2. Asignar rol si se proporcionó
+            if ($request->filled('role_id')) {
+                $roleInput = $request->role_id;
+                $role = Str::isUuid($roleInput)
+                    ? \App\Models\Role::where('id', $roleInput)->firstOrFail()
+                    : \App\Models\Role::where('code', $roleInput)->firstOrFail();
+
+                $validationResult = $policyService->validateAssignment(
+                    $request->user(),
+                    $user,
+                    $role,
+                    $request->branch_id
+                );
+
+                if ($validationResult !== true) {
+                    abort(403, 'Error al asignar rol: ' . $validationResult);
+                }
+
+                $assignment = \App\Models\UserRoleScope::create([
+                    'id' => Str::uuid(),
+                    'user_id' => $user->id,
+                    'role_id' => $role->id,
+                    'branch_id' => $request->branch_id,
+                    'assigned_by' => $request->user()->id,
+                    'valid_from' => now(),
+                    'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
+                    'status' => 'ACTIVE',
+                ]);
+
+                app(SecurityAuditService::class)->log($request, [
+                    'event_type' => 'ROLE_ASSIGNED',
+                    'severity' => 'INFO',
+                    'outcome' => 'SUCCESS',
+                    'entity_type' => 'UserRoleScope',
+                    'entity_id' => $assignment->id,
+                    'user_id' => $user->id,
+                    'branch_id' => $request->branch_id,
+                    'metadata' => ['role_id' => $role->id],
+                ]);
+            }
+
+            // 3. Enviar invitación si se solicitó
+            if ($request->boolean('send_invitation')) {
+                $user->state = 'PENDING_ACTIVATION';
+                $user->save();
+
+                $plainToken = Str::random(60);
+                $tokenHash = hash('sha256', $plainToken);
+
+                AccountInvitation::create([
+                    'id' => Str::uuid(),
+                    'user_id' => $user->id,
+                    'token_hash' => $tokenHash,
+                    'expires_at' => now()->addHours(48),
+                ]);
+
+                Mail::to($user->email)->queue(new ActivationInvitationMail($user, $plainToken));
+
+                app(SecurityAuditService::class)->log($request, [
+                    'event_type' => 'INVITATION_SENT',
+                    'severity' => 'INFO',
+                    'outcome' => 'SUCCESS',
+                    'entity_type' => 'User',
+                    'entity_id' => $user->id,
+                ]);
+            }
+
+            return response()->json(['message' => 'Usuario procesado exitosamente.', 'user' => $user->load('roleScopes.role')], 201);
+        });
     }
 
     /**
@@ -81,6 +172,11 @@ class UserController extends Controller
     {
         $user = User::with(['roleScopes.role'])->findOrFail($id);
         Gate::authorize('view', $user);
+
+        $user->mfa_status = MfaCredential::where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->whereNotNull('confirmed_at')
+            ->exists();
 
         return response()->json($user);
     }
@@ -115,9 +211,12 @@ class UserController extends Controller
         $user = User::findOrFail($id);
         Gate::authorize('manage', User::class);
 
-        if ($user->state !== 'PENDING_ACTIVATION') {
-            return response()->json(['message' => 'El usuario ya no está pendiente de activación.'], 400);
+        if (! in_array($user->state, ['INVITED', 'PENDING_ACTIVATION'])) {
+            return response()->json(['message' => 'El usuario ya no está pendiente de activación ni invitado.'], 400);
         }
+
+        $user->state = 'PENDING_ACTIVATION';
+        $user->save();
 
         $plainToken = Str::random(60);
         $tokenHash = hash('sha256', $plainToken);
@@ -134,8 +233,8 @@ class UserController extends Controller
 
         // Enviar correo (Mailable ya existente)
         Mail::to($user->email)->queue(new ActivationInvitationMail($user, $plainToken));
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'INVITATION_SENT',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -162,17 +261,17 @@ class UserController extends Controller
         $user->save();
 
         $this->revokeUserSessions($user->id, 'USER_BLOCKED_BY_ADMIN', $request->user()->id);
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ACCOUNT_BLOCKED',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',
             'entity_type' => 'User',
             'entity_id' => $user->id,
         ]);
-        
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Cuenta Bloqueada',
                 'Tu cuenta ha sido suspendida temporalmente por un administrador del sistema por motivos de seguridad.',
@@ -202,8 +301,8 @@ class UserController extends Controller
         $user->locked_until = null;
         $user->failed_login_attempts = 0;
         $user->save();
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ACCOUNT_UNBLOCKED',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -222,22 +321,27 @@ class UserController extends Controller
         $user = User::findOrFail($id);
         Gate::authorize('manage', User::class);
 
+        $reauthResult = $this->requireMfaReauth($request);
+        if ($reauthResult !== true) {
+            return $reauthResult;
+        }
+
         $user->state = 'DISABLED';
         $user->disabled_at = now();
         $user->save();
 
         $this->revokeUserSessions($user->id, 'USER_DISABLED_BY_ADMIN', $request->user()->id);
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ACCOUNT_DISABLED',
             'severity' => 'CRITICAL',
             'outcome' => 'SUCCESS',
             'entity_type' => 'User',
             'entity_id' => $user->id,
         ]);
-        
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Cuenta Inhabilitada Permanentemente',
                 'Lamentamos informarte que tu cuenta ha sido inhabilitada de forma permanente y ya no tendrás acceso a la plataforma.',
@@ -247,7 +351,51 @@ class UserController extends Controller
             )
         );
 
-        return response()->json(['message' => 'Usuario inhabilitado permanentemente. Se cerraron sus sesiones.']);
+        return response()->json(['message' => 'Usuario inhabilitado. Se cerraron sus sesiones.']);
+    }
+
+    /**
+     * POST /api/v1/users/{id}/enable
+     */
+    public function enable(Request $request, string $id)
+    {
+        $user = User::findOrFail($id);
+        Gate::authorize('manage', User::class);
+
+        if ($user->state !== 'DISABLED') {
+            return response()->json(['message' => 'El usuario no está inhabilitado.'], 400);
+        }
+
+        $reauthResult = $this->requireMfaReauth($request);
+        if ($reauthResult !== true) {
+            return $reauthResult;
+        }
+
+        $user->state = 'ACTIVE';
+        $user->disabled_at = null;
+        $user->disabled_reason = null;
+        $user->save();
+
+        app(SecurityAuditService::class)->log($request, [
+            'event_type' => 'ACCOUNT_ENABLED',
+            'severity' => 'WARNING',
+            'outcome' => 'SUCCESS',
+            'entity_type' => 'User',
+            'entity_id' => $user->id,
+        ]);
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
+                $user,
+                'Cuenta Reactivada',
+                'Tu cuenta ha sido reactivada por un administrador del sistema. Ya puedes acceder nuevamente a la plataforma.',
+                [
+                    'time' => now()->toDateTimeString(),
+                ]
+            )
+        );
+
+        return response()->json(['message' => 'Usuario habilitado exitosamente.']);
     }
 
     /**
@@ -270,5 +418,27 @@ class UserController extends Controller
                 ->where('token', $session->getRawOriginal('session_identifier_hash'))
                 ->delete();
         }
+    }
+
+    /**
+     * POST /api/v1/users/{id}/require-password-change
+     */
+    public function requirePasswordChange(Request $request, string $id)
+    {
+        $user = User::findOrFail($id);
+        Gate::authorize('manage', User::class);
+
+        $user->require_password_change = true;
+        $user->save();
+
+        app(SecurityAuditService::class)->log($request, [
+            'event_type' => 'PASSWORD_CHANGE_REQUIRED',
+            'severity' => 'WARNING',
+            'outcome' => 'SUCCESS',
+            'entity_type' => 'User',
+            'entity_id' => $user->id,
+        ]);
+
+        return response()->json(['message' => 'Se requerirá que el usuario cambie su contraseña en el próximo inicio de sesión.']);
     }
 }

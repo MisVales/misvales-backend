@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -89,7 +89,7 @@ return new class extends Migration
             (scope_type = 'GLOBAL') OR 
             (scope_type = 'BRANCH' AND branch_id IS NOT NULL)
         );");
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);");
+        DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);');
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
             (status = 'ACTIVE' AND valid_to IS NULL AND ended_by IS NULL) OR 
             (status IN ('ENDED', 'REVOKED') AND valid_to IS NOT NULL)
@@ -104,11 +104,11 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql;
         ");
-        DB::statement("
+        DB::statement('
             CREATE TRIGGER trg_prevent_urs_deletion
             BEFORE DELETE ON user_role_scopes
             FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
-        ");
+        ');
     }
 
     /**
@@ -116,18 +116,18 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;");
-        DB::statement("DROP FUNCTION IF EXISTS prevent_urs_deletion();");
+        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
+        DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
-            DB::statement("ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;");
-            DB::statement("ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;");
-            DB::statement("ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;");
-            DB::statement("ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;");
-            DB::statement("ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;");
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;');
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;');
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;');
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;');
 
-            DB::statement("DROP INDEX IF EXISTS user_role_scopes_active_global_unique;");
-            DB::statement("DROP INDEX IF EXISTS user_role_scopes_active_branch_unique;");
+            DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_global_unique;');
+            DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_branch_unique;');
         });
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
@@ -149,7 +149,7 @@ return new class extends Migration
             $table->renameColumn('ended_by', 'revoked_by_user_id');
             $table->renameColumn('valid_to', 'revoked_at');
             $table->renameColumn('reason', 'revocation_reason');
-            
+
             $table->dropColumn(['scope_type', 'status', 'created_at', 'updated_at']);
         });
 

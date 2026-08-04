@@ -3,13 +3,21 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Http\Controllers\Controller;
+use App\Mail\Security\SecurityAlertMail;
 use App\Models\AuthSession;
+use App\Models\MfaCredential;
+use App\Models\MfaRecoveryCode;
 use App\Models\User;
+use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
+use App\Services\Auth\ProgressiveLockoutService;
 use App\Services\Auth\SessionPolicyService;
+use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\Str;
 
@@ -18,7 +26,7 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/login
      */
-    public function login(Request $request, \App\Services\Auth\ProgressiveLockoutService $lockoutService)
+    public function login(Request $request, ProgressiveLockoutService $lockoutService)
     {
         $request->validate([
             'email' => 'required|email',
@@ -38,17 +46,18 @@ class AuthController extends Controller
         // 2. Rate Limiting General (Punto 41)
         if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
+
             return response()->json(['error' => 'RATE_LIMIT_EXCEEDED', 'message' => "Demasiados intentos. Intente nuevamente en {$seconds} segundos."], 429);
         }
 
         $user = User::where('normalized_email', $email)->first();
 
         // 3. Verificación de existencia y estado ciego
-        if (!$user || $user->state !== 'ACTIVE') {
+        if (! $user || $user->state !== 'ACTIVE') {
             RateLimiter::hit($throttleKey);
             $lockoutService->recordFailedAttempt($ip, $email);
-            
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'LOGIN_FAILED',
                 'severity' => 'WARNING',
                 'outcome' => 'FAILURE',
@@ -60,18 +69,18 @@ class AuthController extends Controller
         }
 
         // 4. Verificación de contraseña
-        if (!Hash::check($request->password, $user->password)) {
+        if (! Hash::check($request->password, $user->password)) {
             RateLimiter::hit($throttleKey);
             $lockoutService->recordFailedAttempt($ip, $email);
-            
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'LOGIN_FAILED',
                 'severity' => 'WARNING',
                 'outcome' => 'FAILURE',
                 'user_id' => $user->id,
                 'metadata' => ['email' => $email, 'reason' => 'invalid_password'],
             ]);
-            
+
             return response()->json(['error' => 'INVALID_CREDENTIALS', 'message' => 'Credenciales inválidas.'], 401);
         }
 
@@ -87,7 +96,7 @@ class AuthController extends Controller
             'totp_verified' => false,
         ], now()->addMinutes(5));
 
-        $availableMfa = \App\Models\MfaCredential::where('user_id', $user->id)
+        $availableMfa = MfaCredential::where('user_id', $user->id)
             ->whereNull('revoked_at')
             ->pluck('type')
             ->unique()
@@ -120,20 +129,24 @@ class AuthController extends Controller
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$sessionState || !is_array($sessionState)) {
+        if (! $sessionState || ! is_array($sessionState)) {
             return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
-        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        if (! $user) {
+            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        }
 
-        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
-        if (!$mfaCredential) return response()->json(['error' => 'INVALID_MFA', 'message' => 'No hay configuración MFA activa para este usuario.'], 403);
+        $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
+        if (! $mfaCredential) {
+            return response()->json(['error' => 'INVALID_MFA', 'message' => 'No hay configuración MFA activa para este usuario.'], 403);
+        }
 
-        $secret = \Illuminate\Support\Facades\Crypt::decryptString($mfaCredential->secret_ciphertext);
+        $secret = Crypt::decryptString($mfaCredential->secret_ciphertext);
 
-        if (!$mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
+        if (! $mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
             $user->failed_login_attempts += 1;
             if ($user->failed_login_attempts >= 5) {
                 $user->locked_until = now()->addMinutes(15);
@@ -141,7 +154,7 @@ class AuthController extends Controller
             }
             $user->save();
 
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'MFA_FAILED',
                 'severity' => 'WARNING',
                 'outcome' => 'FAILURE',
@@ -152,7 +165,7 @@ class AuthController extends Controller
             return response()->json(['error' => 'INVALID_MFA', 'message' => 'El código de autenticador es incorrecto o ya fue utilizado.'], 401);
         }
 
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'MFA_SUCCESS',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -164,14 +177,14 @@ class AuthController extends Controller
         $user->last_login_at = now();
         $previousLoginIp = $user->last_login_ip;
         if ($previousLoginIp && $previousLoginIp !== $request->ip()) {
-            \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-                new \App\Mail\Security\SecurityAlertMail(
+            Mail::to($user->email)->queue(
+                new SecurityAlertMail(
                     $user,
                     'Nuevo inicio de sesión detectado',
                     'Hemos detectado un inicio de sesión en tu cuenta desde una dirección IP o ubicación no habitual.',
                     [
                         'ip' => $request->ip(),
-                        'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                        'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                         'time' => now()->toDateTimeString(),
                     ]
                 )
@@ -186,7 +199,7 @@ class AuthController extends Controller
         $mfaCredential->save();
 
         // Verificar si el usuario requiere también Passkey
-        $hasPasskey = \App\Models\MfaCredential::where('user_id', $user->id)
+        $hasPasskey = MfaCredential::where('user_id', $user->id)
             ->where('type', 'PASSKEY')
             ->whereNull('revoked_at')
             ->exists();
@@ -211,7 +224,7 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/mfa/passkey/options
      */
-    public function passkeyOptions(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService)
+    public function passkeyOptions(Request $request, WebAuthnService $webAuthnService)
     {
         $request->validate([
             'mfa_challenge_token' => 'required|string',
@@ -220,20 +233,22 @@ class AuthController extends Controller
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$sessionState || !is_array($sessionState)) {
+        if (! $sessionState || ! is_array($sessionState)) {
             return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
         }
 
-        if (!$sessionState['totp_verified']) {
+        if (! $sessionState['totp_verified']) {
             return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
-        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        if (! $user) {
+            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        }
 
         // Check if user has a passkey
-        $credentials = \App\Models\MfaCredential::where('user_id', $user->id)
+        $credentials = MfaCredential::where('user_id', $user->id)
             ->where('type', 'PASSKEY')
             ->whereNull('revoked_at')
             ->get();
@@ -255,7 +270,7 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/mfa/passkey/verify
      */
-    public function passkeyVerify(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService, SessionPolicyService $policyService)
+    public function passkeyVerify(Request $request, WebAuthnService $webAuthnService, SessionPolicyService $policyService)
     {
         $request->validate([
             'mfa_challenge_token' => 'required|string',
@@ -268,16 +283,16 @@ class AuthController extends Controller
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$sessionState || !is_array($sessionState)) {
+        if (! $sessionState || ! is_array($sessionState)) {
             return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
         }
 
-        if (!$sessionState['totp_verified']) {
+        if (! $sessionState['totp_verified']) {
             return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
         }
 
         $cachedOptions = Cache::get("passkey_login_{$challengeHash}");
-        if (!$cachedOptions) {
+        if (! $cachedOptions) {
             return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
         }
 
@@ -285,7 +300,9 @@ class AuthController extends Controller
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
-        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        if (! $user) {
+            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        }
 
         // Convert base64url (from frontend) to standard base64
         $normalizedBase64Id = str_replace(['-', '_'], ['+', '/'], $request->id);
@@ -295,21 +312,21 @@ class AuthController extends Controller
             $normalizedBase64Id .= str_repeat('=', 4 - $mod4);
         }
 
-        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)
+        $mfaCredential = MfaCredential::where('user_id', $user->id)
             ->where('type', 'PASSKEY')
             ->where('credential_identifier', base64_encode(base64_decode($normalizedBase64Id))) // Ensure normalization
             ->whereNull('revoked_at')
             ->first();
 
-        if (!$mfaCredential) {
+        if (! $mfaCredential) {
             // Also try matching the exact raw string if base64 padding issues occur
-            $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)
+            $mfaCredential = MfaCredential::where('user_id', $user->id)
                 ->where('type', 'PASSKEY')
                 ->where('credential_identifier', $request->id)
                 ->whereNull('revoked_at')
                 ->first();
-                
-            if (!$mfaCredential) {
+
+            if (! $mfaCredential) {
                 return response()->json(['error' => 'INVALID_MFA', 'message' => 'Credencial no encontrada.'], 403);
             }
         }
@@ -333,13 +350,13 @@ class AuthController extends Controller
 
             Cache::forget("mfa_challenge_{$challengeHash}");
             Cache::forget("passkey_login_{$challengeHash}");
-            
+
             $user->last_login_at = now();
             $user->last_login_ip = $request->ip();
             $user->failed_login_attempts = 0;
             $user->save();
 
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'MFA_SUCCESS',
                 'severity' => 'INFO',
                 'outcome' => 'SUCCESS',
@@ -357,7 +374,7 @@ class AuthController extends Controller
             }
             $user->save();
 
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'MFA_FAILED',
                 'severity' => 'WARNING',
                 'outcome' => 'FAILURE',
@@ -368,7 +385,6 @@ class AuthController extends Controller
             return response()->json(['error' => 'INVALID_MFA', 'message' => 'Autenticación con Passkey fallida.'], 401);
         }
     }
-
 
     /**
      * POST /api/v1/auth/mfa/recovery-code/verify
@@ -383,30 +399,32 @@ class AuthController extends Controller
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$sessionState || !is_array($sessionState)) {
+        if (! $sessionState || ! is_array($sessionState)) {
             return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
-        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        if (! $user) {
+            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+        }
 
         $codeHash = hash('sha256', $request->recovery_code);
-        $recoveryCode = \App\Models\MfaRecoveryCode::where('user_id', $user->id)
+        $recoveryCode = MfaRecoveryCode::where('user_id', $user->id)
             ->where('code_hash', $codeHash)
             ->whereNull('used_at')
             ->whereNull('revoked_at')
             ->first();
 
-        if (!$recoveryCode) {
+        if (! $recoveryCode) {
             $user->failed_login_attempts += 1;
             if ($user->failed_login_attempts >= 5) {
                 $user->locked_until = now()->addMinutes(15);
                 Cache::forget("mfa_challenge_{$challengeHash}");
             }
             $user->save();
-            
-            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+            app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'MFA_FAILED',
                 'severity' => 'WARNING',
                 'outcome' => 'FAILURE',
@@ -417,7 +435,7 @@ class AuthController extends Controller
             return response()->json(['error' => 'RECOVERY_CODE_USED', 'message' => 'El código de rescate es incorrecto o ya fue utilizado.'], 401);
         }
 
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'RECOVERY_CODE_USED',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',
@@ -431,20 +449,20 @@ class AuthController extends Controller
         $user->last_login_at = now();
         $previousLoginIp = $user->last_login_ip;
         if ($previousLoginIp && $previousLoginIp !== $request->ip()) {
-            \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-                new \App\Mail\Security\SecurityAlertMail(
+            Mail::to($user->email)->queue(
+                new SecurityAlertMail(
                     $user,
                     'Nuevo inicio de sesión detectado',
                     'Hemos detectado un inicio de sesión en tu cuenta desde una dirección IP o ubicación no habitual.',
                     [
                         'ip' => $request->ip(),
-                        'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                        'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                         'time' => now()->toDateTimeString(),
                     ]
                 )
             );
         }
-        
+
         $user->last_login_ip = $request->ip();
         $user->failed_login_attempts = 0;
         $user->save();
@@ -463,19 +481,20 @@ class AuthController extends Controller
         $hash = hash('sha256', $request->refresh_token);
         $data = Cache::get("auth_refresh_{$hash}");
 
-        if (!$data) {
+        if (! $data) {
             return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Refresh token inválido o expirado.'], 401);
         }
 
         $user = User::find($data['user_id']);
-        if (!$user || $user->state !== 'ACTIVE') {
+        if (! $user || $user->state !== 'ACTIVE') {
             return response()->json(['error' => 'ACCOUNT_INACTIVE', 'message' => 'Usuario inactivo.'], 401);
         }
 
         // Buscar la sesión original
         $session = AuthSession::find($data['session_id']);
-        if (!$session || $session->revoked_at || ($session->expires_at && $session->expires_at->isPast())) {
+        if (! $session || $session->revoked_at || ($session->expires_at && $session->expires_at->isPast())) {
             Cache::forget("auth_refresh_{$hash}");
+
             return response()->json(['error' => 'INVALID_SESSION', 'message' => 'La sesión maestra ha expirado o fue revocada.'], 401);
         }
 
@@ -484,6 +503,7 @@ class AuthController extends Controller
         if ($session->last_activity_at && $session->last_activity_at->diffInMinutes(now()) > $policy['inactivity']) {
             $session->update(['revoked_at' => now(), 'revocation_reason' => 'INACTIVITY_TIMEOUT_ON_REFRESH']);
             Cache::forget("auth_refresh_{$hash}");
+
             return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Sesión cerrada por inactividad.'], 401);
         }
 
@@ -491,7 +511,7 @@ class AuthController extends Controller
         $user->tokens()->where('id', $data['access_token_id'])->delete();
 
         // Emitir nuevo Access Token
-        $token = $user->createToken('auth_token_' . Str::random(10));
+        $token = $user->createToken('auth_token_'.Str::random(10));
         $token->accessToken->expires_at = now()->addMinutes($policy['access_token']);
         $token->accessToken->save();
 
@@ -521,13 +541,13 @@ class AuthController extends Controller
 
         if ($currentAccessToken) {
             $tokenHash = hash('sha256', $request->bearerToken());
-            
+
             AuthSession::where('session_identifier_hash', $tokenHash)
                 ->whereNull('revoked_at')
                 ->update([
                     'revoked_at' => now(),
                     'revoked_by_user_id' => $user->id,
-                    'revocation_reason' => 'USER_LOGOUT'
+                    'revocation_reason' => 'USER_LOGOUT',
                 ]);
 
             $currentAccessToken->delete();
@@ -544,7 +564,7 @@ class AuthController extends Controller
         $policy = $policyService->getPolicyForUser($user);
 
         // 1. Access Token (Corto)
-        $token = $user->createToken('auth_token_' . Str::random(10));
+        $token = $user->createToken('auth_token_'.Str::random(10));
         $token->accessToken->expires_at = now()->addMinutes($policy['access_token']);
         $token->accessToken->save();
 
@@ -562,7 +582,7 @@ class AuthController extends Controller
             'expires_at' => now()->addMinutes($policy['absolute']),
         ]);
 
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'user_id' => $user->id,
             'actor_user_id' => $user->id,
             'auth_session_id' => $session->id,
@@ -591,18 +611,31 @@ class AuthController extends Controller
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
-            ]
+            ],
         ]);
     }
 
     private function parseDeviceName(?string $userAgent): string
     {
-        if (!$userAgent) return 'Unknown Device';
-        if (str_contains($userAgent, 'Windows')) return 'Windows PC';
-        if (str_contains($userAgent, 'Mac OS')) return 'Mac';
-        if (str_contains($userAgent, 'Linux')) return 'Linux PC';
-        if (str_contains($userAgent, 'iPhone')) return 'iPhone';
-        if (str_contains($userAgent, 'Android')) return 'Android Device';
+        if (! $userAgent) {
+            return 'Unknown Device';
+        }
+        if (str_contains($userAgent, 'Windows')) {
+            return 'Windows PC';
+        }
+        if (str_contains($userAgent, 'Mac OS')) {
+            return 'Mac';
+        }
+        if (str_contains($userAgent, 'Linux')) {
+            return 'Linux PC';
+        }
+        if (str_contains($userAgent, 'iPhone')) {
+            return 'iPhone';
+        }
+        if (str_contains($userAgent, 'Android')) {
+            return 'Android Device';
+        }
+
         return 'Other Device';
     }
 }
