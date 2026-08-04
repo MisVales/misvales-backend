@@ -6,6 +6,7 @@ use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\TraceRequest;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\SolicitudDistribuidora;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
 use App\Modules\Organization\Domain\Assignments\Exceptions\AssignmentAlreadyClosed;
@@ -24,15 +25,20 @@ use App\Modules\Organization\Domain\Branches\Exceptions\HeadquartersBranchProtec
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
 use App\Services\Audit\SecurityAuditService;
+use App\Services\SolicitudDistribuidora\AuditorSolicitudDistribuidora;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
+use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -56,6 +62,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(TraceRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $distributorError = fn (Request $request, string $code, string $message, int $status, array $fields = [], array $details = []) => response()->json([
+            'error' => [
+                'code' => $code,
+                'message' => $message,
+                'fields' => $fields === [] ? (object) [] : $fields,
+                'details' => $details === [] ? (object) [] : $details,
+                'request_id' => $request->attributes->get('request_id'),
+            ],
+        ], $status);
+
         $exceptions->dontFlash([
             'password',
             'password_confirmation',
@@ -86,7 +102,138 @@ return Application::configure(basePath: dirname(__DIR__))
                 'metadata' => ['message' => $e->getMessage(), 'path' => $request->path()],
             ]);
 
+            if ($request->is('api/v1/distributor-applications*')) {
+                try {
+                    $solicitud = $request->route('application');
+
+                    if ($solicitud instanceof SolicitudDistribuidora && $request->user() !== null) {
+                        app(AuditorSolicitudDistribuidora::class)->registrar(
+                            $request->user(),
+                            $solicitud,
+                            'DISTRIBUTOR_APPLICATION_ACCESS_DENIED',
+                            [],
+                            [],
+                            $e->getMessage(),
+                            'DENIED',
+                        );
+                    } else {
+                        app(SecurityAuditService::class)->log($request, [
+                            'event_type' => 'DISTRIBUTOR_APPLICATION_ACCESS_DENIED',
+                            'severity' => 'WARNING',
+                            'outcome' => 'DENIED',
+                            'entity_type' => 'distributor_application',
+                            'entity_id' => is_string($solicitud) ? $solicitud : null,
+                            'metadata' => [
+                                'application_id' => is_string($solicitud) ? $solicitud : null,
+                                'application_number' => null,
+                                'action' => $request->method(),
+                                'previous_values' => [],
+                                'new_values' => [],
+                                'reason' => $e->getMessage(),
+                                'path' => $request->path(),
+                                'result' => 'DENIED',
+                            ],
+                        ]);
+                    }
+                } catch (Throwable) {
+                    // La auditoría nunca debe ocultar la respuesta de autorización.
+                }
+
+                return response()->json(['error' => [
+                    'code' => 'AUTH_SCOPE_DENIED',
+                    'message' => 'El recurso no está dentro del alcance autorizado.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 403);
+            }
+
             return response()->json(['error' => 'PERMISSION_DENIED', 'message' => 'Acceso denegado.'], 403);
+        });
+
+        $exceptions->renderable(function (ValidationException $e, Request $request) use ($distributorError) {
+            if (! $request->is('api/v1/distributor-applications*')) {
+                return null;
+            }
+
+            $campos = $e->errors();
+            $claves = array_keys($campos);
+            $mensajes = mb_strtolower(json_encode($campos, JSON_UNESCAPED_UNICODE) ?: '');
+            $code = match (true) {
+                isset($campos['sections']) => 'DISTRIBUTOR_APPLICATION_INCOMPLETE',
+                isset($campos['branch_id']) => 'DISTRIBUTOR_APPLICATION_BRANCH_INVALID',
+                isset($campos['coordinator_id']) => 'DISTRIBUTOR_APPLICATION_COORDINATOR_INVALID',
+                isset($campos['is_current']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_DUPLICATE',
+                isset($campos['residence']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_REQUIRED',
+                collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) && str_contains($mensajes, 'no aplicable') => 'DISTRIBUTOR_APPLICATION_SECTION_NOT_APPLICABLE',
+                collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
+                collect($claves)->contains(fn (string $key): bool => in_array($key, ['curp', 'rfc', 'official_id_number'], true)) => 'DISTRIBUTOR_APPLICATION_SENSITIVE_DATA_INVALID',
+                default => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
+            };
+
+            return $distributorError($request, $code, 'Los datos enviados no cumplen las reglas de la solicitud.', 422, $campos);
+        });
+
+        $exceptions->renderable(function (ConflictHttpException $e, Request $request) use ($distributorError) {
+            if (! $request->is('api/v1/distributor-applications*')) {
+                return null;
+            }
+
+            try {
+                $solicitud = $request->route('application');
+
+                if ($solicitud instanceof SolicitudDistribuidora && $request->user() !== null) {
+                    app(AuditorSolicitudDistribuidora::class)->registrar(
+                        $request->user(),
+                        $solicitud,
+                        'DISTRIBUTOR_APPLICATION_ACCESS_DENIED',
+                        ['status' => $solicitud->status->value],
+                        [],
+                        $e->getMessage(),
+                        'DENIED',
+                    );
+                }
+            } catch (Throwable) {
+                // La auditoría nunca debe ocultar la respuesta de conflicto.
+            }
+
+            $version = str_contains(mb_strtolower($e->getMessage()), 'versión');
+            $yaEnviada = str_contains(mb_strtolower($e->getMessage()), 'ya fue enviada');
+
+            return $distributorError(
+                $request,
+                $version ? 'RESOURCE_VERSION_CONFLICT' : ($yaEnviada ? 'DISTRIBUTOR_APPLICATION_ALREADY_SUBMITTED' : 'DISTRIBUTOR_APPLICATION_NOT_EDITABLE'),
+                $e->getMessage(),
+                409,
+            );
+        });
+
+        $exceptions->renderable(function (ModelNotFoundException $e, Request $request) use ($distributorError) {
+            if (! $request->is('api/v1/distributor-applications*')) {
+                return null;
+            }
+
+            $esSolicitud = $request->route('application') === null || is_string($request->route('application'));
+
+            return $distributorError(
+                $request,
+                $esSolicitud ? 'DISTRIBUTOR_APPLICATION_NOT_FOUND' : 'DISTRIBUTOR_APPLICATION_CHILD_NOT_FOUND',
+                'El recurso solicitado no existe.',
+                404,
+            );
+        });
+
+        $exceptions->renderable(function (NotFoundHttpException $e, Request $request) use ($distributorError) {
+            if (! $request->is('api/v1/distributor-applications*') || $request->route() === null || $request->route('application') === null) {
+                return null;
+            }
+
+            return $distributorError(
+                $request,
+                'DISTRIBUTOR_APPLICATION_NOT_FOUND',
+                'La solicitud no existe o no está dentro del alcance autorizado.',
+                404,
+            );
         });
 
         $exceptions->renderable(function (AuthenticationException $e, Request $request) {

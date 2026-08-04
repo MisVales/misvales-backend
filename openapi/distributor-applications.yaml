@@ -1,0 +1,357 @@
+openapi: 3.1.0
+info:
+  title: MisVales — Solicitudes de distribuidoras
+  version: 4.0.0
+  description: Contrato del Módulo 04. Requiere Sanctum, usuario activo, MFA y permiso explícito.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: DistributorApplications
+paths:
+  /distributor-applications:
+    get:
+      tags: [DistributorApplications]
+      summary: Lista solicitudes dentro del alcance efectivo
+      x-permission: distributor_applications.view
+      parameters:
+        - { $ref: '#/components/parameters/Page' }
+        - { $ref: '#/components/parameters/PerPage' }
+        - { name: application_number, in: query, schema: { type: string } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/ApplicationStatus' } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: coordinator_id, in: query, schema: { type: string, format: uuid } }
+        - { name: sort, in: query, schema: { type: string, enum: [application_number, status, created_at, updated_at, submitted_at] } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc] } }
+      responses:
+        '200': { description: Página de solicitudes }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [DistributorApplications]
+      summary: Crea una solicitud en DRAFT
+      x-permission: distributor_applications.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateApplication' }
+      responses:
+        '201': { $ref: '#/components/responses/ApplicationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /distributor-applications/{application}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get:
+      tags: [DistributorApplications]
+      summary: Obtiene el expediente completo
+      x-permission: distributor_applications.view
+      responses:
+        '200': { $ref: '#/components/responses/ApplicationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [DistributorApplications]
+      summary: Actualiza asignación o declaraciones del borrador
+      x-permission: distributor_applications.update
+      requestBody: { $ref: '#/components/requestBodies/UpdateApplication' }
+      responses:
+        '200': { $ref: '#/components/responses/ApplicationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /distributor-applications/{application}/submit:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    post:
+      tags: [DistributorApplications]
+      summary: Transiciona un expediente completo a COORDINATOR_REVIEW
+      x-permission: distributor_applications.submit
+      requestBody: { $ref: '#/components/requestBodies/Version' }
+      responses:
+        '200': { $ref: '#/components/responses/ApplicationResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /distributor-applications/{application}/personal-data:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    put:
+      tags: [DistributorApplications]
+      summary: Crea o reemplaza datos personales cifrados
+      x-permission: distributor_applications.update
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/PersonalDataInput' } } }
+      responses:
+        '200': { description: Datos personales enmascarados }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /distributor-applications/{application}/family-members:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/family-members/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+  /distributor-applications/{application}/residences:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/residences/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+  /distributor-applications/{application}/vehicles:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/vehicles/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+  /distributor-applications/{application}/assets-liabilities:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/assets-liabilities/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+  /distributor-applications/{application}/employments:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/employments/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+  /distributor-applications/{application}/commercial-credits:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }]
+    get: { $ref: '#/components/pathItems/CollectionGet' }
+    post: { $ref: '#/components/pathItems/CollectionPost' }
+  /distributor-applications/{application}/commercial-credits/{record}:
+    parameters: [{ $ref: '#/components/parameters/ApplicationId' }, { $ref: '#/components/parameters/RecordId' }]
+    patch: { $ref: '#/components/pathItems/RecordPatch' }
+    delete: { $ref: '#/components/pathItems/RecordDelete' }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer, bearerFormat: Sanctum }
+  parameters:
+    ApplicationId: { name: application, in: path, required: true, schema: { type: string, format: uuid } }
+    RecordId: { name: record, in: path, required: true, schema: { type: string, format: uuid } }
+    Page: { name: page, in: query, schema: { type: integer, minimum: 1, default: 1 } }
+    PerPage: { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100, default: 15 } }
+  pathItems:
+    CollectionGet:
+      tags: [DistributorApplications]
+      summary: Lista registros de la sección
+      x-permission: distributor_applications.view
+      responses:
+        '200': { description: Colección autorizada }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    CollectionPost:
+      tags: [DistributorApplications]
+      summary: Agrega un registro al borrador
+      x-permission: distributor_applications.update
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SectionRecordInput' } } }
+      responses:
+        '201': { description: Registro creado }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    RecordPatch:
+      tags: [DistributorApplications]
+      summary: Modifica un registro del borrador
+      x-permission: distributor_applications.update
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/SectionRecordInput' } } }
+      responses:
+        '200': { description: Registro actualizado }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+    RecordDelete:
+      tags: [DistributorApplications]
+      summary: Elimina un registro del borrador
+      x-permission: distributor_applications.update
+      requestBody: { $ref: '#/components/requestBodies/Version' }
+      responses:
+        '204': { description: Registro eliminado }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  requestBodies:
+    Version:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/VersionInput' } } }
+    UpdateApplication:
+      required: true
+      content: { application/json: { schema: { $ref: '#/components/schemas/UpdateApplication' } } }
+  schemas:
+    ApplicationStatus:
+      type: string
+      enum: [DRAFT, COORDINATOR_REVIEW, VERIFIER_ASSIGNED, PHYSICAL_VERIFICATION, COORDINATOR_CORRECTION, COORDINATOR_EVALUATION, MANAGER_AUTHORIZATION, TERMINATED_UNFAVORABLE, REJECTED, ACTIVE]
+    SectionStatus: { type: string, enum: [PENDING, COMPLETED, NOT_APPLICABLE] }
+    VersionInput:
+      type: object
+      required: [lock_version]
+      additionalProperties: false
+      properties: { lock_version: { type: integer, minimum: 1 } }
+    CreateApplication:
+      type: object
+      required: [branch_id, coordinator_id]
+      additionalProperties: false
+      properties:
+        branch_id: { type: string, format: uuid }
+        coordinator_id: { type: string, format: uuid }
+    UpdateApplication:
+      allOf:
+        - { $ref: '#/components/schemas/VersionInput' }
+        - type: object
+          properties:
+            branch_id: { type: string, format: uuid }
+            coordinator_id: { type: string, format: uuid }
+            section_declarations:
+              type: object
+              additionalProperties: { $ref: '#/components/schemas/SectionStatus' }
+    PersonalDataInput:
+      type: object
+      required: [lock_version, first_name, first_last_name, curp, birth_date, birth_place, birth_state, birth_city, email, phone_number, official_id_type, official_id_number]
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        first_name: { type: string }
+        first_last_name: { type: string }
+        curp: { type: string, writeOnly: true }
+        rfc: { type: [string, 'null'], writeOnly: true }
+        birth_date: { type: string, format: date }
+        birth_place: { type: string }
+        birth_state: { type: string }
+        birth_city: { type: string }
+        email: { type: string, format: email }
+        phone_number: { type: string }
+        official_id_type: { type: string, enum: [INE, PASSPORT, PROFESSIONAL_LICENSE, OTHER] }
+        official_id_number: { type: string, writeOnly: true }
+    SectionRecordInput:
+      oneOf:
+        - { $ref: '#/components/schemas/FamilyMemberInput' }
+        - { $ref: '#/components/schemas/ResidenceInput' }
+        - { $ref: '#/components/schemas/VehicleInput' }
+        - { $ref: '#/components/schemas/AssetLiabilityInput' }
+        - { $ref: '#/components/schemas/EmploymentInput' }
+        - { $ref: '#/components/schemas/CommercialCreditInput' }
+    FamilyMemberInput:
+      type: object
+      required: [lock_version, relationship, first_name, first_last_name]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        relationship: { type: string, enum: [SPOUSE, PARTNER, CHILD, FATHER, MOTHER, SIBLING, OTHER] }
+        first_name: { type: string }
+        first_last_name: { type: string }
+        second_last_name: { type: [string, 'null'] }
+        birth_date: { type: [string, 'null'], format: date }
+        declared_age: { type: [integer, 'null'], minimum: 0, maximum: 130 }
+        school_name: { type: [string, 'null'] }
+        is_family_reference: { type: boolean }
+    ResidenceInput:
+      type: object
+      required: [lock_version, is_current, street, exterior_number, neighborhood, postal_code, municipality, city, state, housing_tenure]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        is_current: { type: boolean }
+        street: { type: string }
+        exterior_number: { type: string }
+        interior_number: { type: [string, 'null'] }
+        neighborhood: { type: string }
+        postal_code: { type: string, pattern: '^\d{5}$' }
+        municipality: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string, minLength: 2, maxLength: 2, default: MX }
+        housing_tenure: { type: string, enum: [OWNED, RENTED, BORROWED, OTHER] }
+        financing_status: { type: [string, 'null'], enum: [PAID, MORTGAGE, LOAN, INFONAVIT, OTHER, NOT_APPLICABLE, null] }
+    VehicleInput:
+      type: object
+      required: [lock_version, vehicle_type]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        vehicle_type: { type: string }
+        brand: { type: [string, 'null'] }
+        model: { type: [string, 'null'] }
+        model_year: { type: [integer, 'null'], minimum: 1886 }
+        ownership_status: { type: [string, 'null'] }
+    AssetLiabilityInput:
+      type: object
+      required: [lock_version, entry_type, name]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        entry_type: { type: string, enum: [ASSET, LIABILITY, ACTIVE_COMMITMENT] }
+        name: { type: string }
+        amount: { type: [string, 'null'], pattern: '^\d{1,15}(\.\d{1,4})?$' }
+        outstanding_balance: { type: [string, 'null'], pattern: '^\d{1,15}(\.\d{1,4})?$' }
+        monthly_payment: { type: [string, 'null'], pattern: '^\d{1,15}(\.\d{1,4})?$' }
+        is_active: { type: boolean }
+    EmploymentInput:
+      type: object
+      required: [lock_version, employer_name]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        employer_name: { type: string }
+        job_title: { type: [string, 'null'] }
+        started_at: { type: [string, 'null'], format: date }
+        ended_at: { type: [string, 'null'], format: date }
+        is_current: { type: boolean }
+        reference_payload: { type: [object, 'null'] }
+    CommercialCreditInput:
+      type: object
+      required: [lock_version, company_name, credit_limit]
+      additionalProperties: false
+      properties:
+        lock_version: { type: integer, minimum: 1 }
+        company_name: { type: string }
+        credit_limit: { type: string, pattern: '^\d{1,15}(\.\d{1,4})?$' }
+        is_current: { type: boolean }
+        proof_reference: { type: [string, 'null'], format: uuid }
+    Application:
+      type: object
+      required: [id, application_number, status, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        application_number: { type: string, pattern: '^SOL-[0-9]{4}-[0-9]{6,}$' }
+        status: { $ref: '#/components/schemas/ApplicationStatus' }
+        section_declarations: { type: object, additionalProperties: { $ref: '#/components/schemas/SectionStatus' } }
+        lock_version: { type: integer, minimum: 1 }
+        submitted_at: { type: [string, 'null'], format: date-time }
+    Error:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, fields, details, request_id]
+          properties:
+            code: { type: string }
+            message: { type: string }
+            fields: { type: object }
+            details: { type: object }
+            request_id: { type: [string, 'null'] }
+  responses:
+    ApplicationResponse:
+      description: Solicitud
+      content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Application' } } } } }
+    Forbidden:
+      description: Fuera de alcance
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Recurso inexistente u oculto por alcance
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Estado o versión en conflicto
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationError:
+      description: Datos inválidos o expediente incompleto
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

@@ -42,6 +42,13 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'organization', 'action' => 'update_branches', 'code' => 'branches.update', 'description' => 'Modificar sucursales'],
             ['module' => 'organization', 'action' => 'activate_branches', 'code' => 'branches.activate', 'description' => 'Activar sucursales'],
             ['module' => 'organization', 'action' => 'deactivate_branches', 'code' => 'branches.deactivate', 'description' => 'Desactivar sucursales'],
+
+            // Distributor Applications Module
+            ['module' => 'distributor_applications', 'action' => 'view', 'code' => 'distributor_applications.view', 'description' => 'Consultar solicitudes de distribuidoras dentro del alcance autorizado'],
+            ['module' => 'distributor_applications', 'action' => 'create', 'code' => 'distributor_applications.create', 'description' => 'Crear solicitudes de distribuidoras'],
+            ['module' => 'distributor_applications', 'action' => 'update', 'code' => 'distributor_applications.update', 'description' => 'Modificar solicitudes de distribuidoras en borrador'],
+            ['module' => 'distributor_applications', 'action' => 'submit', 'code' => 'distributor_applications.submit', 'description' => 'Enviar solicitudes de distribuidoras a revisión'],
+            ['module' => 'distributor_applications', 'action' => 'view_sensitive', 'code' => 'distributor_applications.view_sensitive', 'description' => 'Consultar datos sensibles completos de solicitudes de distribuidoras'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -85,9 +92,28 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
                 $permissionCodes = $roleData['code'] === 'branch_manager'
-                    ? ['branches.view', 'roles.assign']
-                    : ['branches.view'];
+                    ? ['branches.view', 'roles.assign', 'distributor_applications.view', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
+                    : ['branches.view', 'distributor_applications.view'];
                 $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
+                $syncData = [];
+
+                foreach ($permissions as $permission) {
+                    $syncData[$permission->id] = [
+                        'id' => Str::uuid()->toString(),
+                        'granted_at' => now(),
+                    ];
+                }
+
+                $role->permissions()->syncWithoutDetaching($syncData);
+            }
+
+            if ($roleData['code'] === 'coordinator') {
+                $permissions = Permission::query()->whereIn('code', [
+                    'distributor_applications.view',
+                    'distributor_applications.create',
+                    'distributor_applications.update',
+                    'distributor_applications.submit',
+                ])->get();
                 $syncData = [];
 
                 foreach ($permissions as $permission) {

@@ -9,6 +9,7 @@ use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SessionController;
+use App\Http\Controllers\Api\V1\SolicitudDistribuidoraController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchAssignmentController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchController;
@@ -86,5 +87,54 @@ Route::prefix('v1')->group(function () {
         Route::get('branches/{id}/personnel', [BranchPersonnelController::class, 'index']);
         Route::get('branches/{id}/assignments', [BranchAssignmentController::class, 'index']);
         Route::get('personnel', [PersonnelController::class, 'index']);
+
+        // Solicitudes de distribuidoras
+        Route::middleware('branch.scope')->group(function (): void {
+            Route::get('distributor-applications', [SolicitudDistribuidoraController::class, 'index'])
+                ->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications', [SolicitudDistribuidoraController::class, 'store'])
+                ->middleware('permission:distributor_applications.create');
+            Route::get('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'show'])
+                ->middleware('permission:distributor_applications.view');
+            Route::patch('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'update'])
+                ->middleware('permission:distributor_applications.update');
+            Route::post('distributor-applications/{application}/submit', [SolicitudDistribuidoraController::class, 'enviarARevision'])
+                ->middleware('permission:distributor_applications.submit');
+            Route::put('distributor-applications/{application}/personal-data', [SolicitudDistribuidoraController::class, 'guardarDatosPersonales'])
+                ->middleware('permission:distributor_applications.update');
+            Route::get('distributor-applications/{application}/residences', [SolicitudDistribuidoraController::class, 'listarDomicilios'])
+                ->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/residences', [SolicitudDistribuidoraController::class, 'crearDomicilio'])
+                ->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/residences/{residence}', [SolicitudDistribuidoraController::class, 'actualizarDomicilio'])
+                ->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/residences/{residence}', [SolicitudDistribuidoraController::class, 'eliminarDomicilio'])
+                ->middleware('permission:distributor_applications.update');
+
+            Route::get('distributor-applications/{application}/family-members', [SolicitudDistribuidoraController::class, 'listarFamiliares'])->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/family-members', [SolicitudDistribuidoraController::class, 'crearFamiliar'])->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/family-members/{member}', [SolicitudDistribuidoraController::class, 'actualizarFamiliar'])->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/family-members/{member}', [SolicitudDistribuidoraController::class, 'eliminarFamiliar'])->middleware('permission:distributor_applications.update');
+
+            Route::get('distributor-applications/{application}/vehicles', [SolicitudDistribuidoraController::class, 'listarVehiculos'])->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/vehicles', [SolicitudDistribuidoraController::class, 'crearVehiculo'])->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/vehicles/{vehicle}', [SolicitudDistribuidoraController::class, 'actualizarVehiculo'])->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/vehicles/{vehicle}', [SolicitudDistribuidoraController::class, 'eliminarVehiculo'])->middleware('permission:distributor_applications.update');
+
+            Route::get('distributor-applications/{application}/assets-liabilities', [SolicitudDistribuidoraController::class, 'listarPatrimonio'])->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/assets-liabilities', [SolicitudDistribuidoraController::class, 'crearPatrimonio'])->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/assets-liabilities/{entry}', [SolicitudDistribuidoraController::class, 'actualizarPatrimonio'])->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/assets-liabilities/{entry}', [SolicitudDistribuidoraController::class, 'eliminarPatrimonio'])->middleware('permission:distributor_applications.update');
+
+            Route::get('distributor-applications/{application}/employments', [SolicitudDistribuidoraController::class, 'listarEmpleos'])->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/employments', [SolicitudDistribuidoraController::class, 'crearEmpleo'])->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/employments/{employment}', [SolicitudDistribuidoraController::class, 'actualizarEmpleo'])->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/employments/{employment}', [SolicitudDistribuidoraController::class, 'eliminarEmpleo'])->middleware('permission:distributor_applications.update');
+
+            Route::get('distributor-applications/{application}/commercial-credits', [SolicitudDistribuidoraController::class, 'listarCreditosComerciales'])->middleware('permission:distributor_applications.view');
+            Route::post('distributor-applications/{application}/commercial-credits', [SolicitudDistribuidoraController::class, 'crearCreditoComercial'])->middleware('permission:distributor_applications.update');
+            Route::patch('distributor-applications/{application}/commercial-credits/{credit}', [SolicitudDistribuidoraController::class, 'actualizarCreditoComercial'])->middleware('permission:distributor_applications.update');
+            Route::delete('distributor-applications/{application}/commercial-credits/{credit}', [SolicitudDistribuidoraController::class, 'eliminarCreditoComercial'])->middleware('permission:distributor_applications.update');
+        });
     });
 });

@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Models\SolicitudDistribuidora;
 use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
 use App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository;
 use App\Modules\Organization\Application\Branches\Repositories\BranchReadRepository;
@@ -22,6 +23,7 @@ use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentOrganiz
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentPersonnelReadRepository;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use App\Policies\BranchPolicy;
+use App\Policies\SolicitudDistribuidoraPolicy;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -52,6 +54,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(BranchRecord::class, BranchPolicy::class);
+        Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
