@@ -11,23 +11,40 @@ class UserRoleScope extends Model
 {
     use HasFactory, HasUuids;
 
-    public $timestamps = false; // We use custom timestamp fields in migration
-
     protected $fillable = [
+        'id',
         'user_id',
         'role_id',
         'branch_id',
         'assigned_by_user_id',
         'assigned_at',
+        'assignment_reason',
         'revoked_by_user_id',
         'revoked_at',
         'revocation_reason',
+        'scope_type',
+        'status',
     ];
 
     protected $casts = [
         'assigned_at' => 'datetime',
         'revoked_at' => 'datetime',
     ];
+
+    protected static function booted(): void
+    {
+        static::creating(function (UserRoleScope $assignment): void {
+            $assignment->assigned_at ??= now();
+            $assignment->scope_type ??= $assignment->branch_id === null ? 'GLOBAL' : 'BRANCH';
+            $assignment->status ??= 'ACTIVE';
+        });
+
+        static::saving(function (UserRoleScope $assignment): void {
+            if ($assignment->revoked_at !== null && $assignment->status === 'ACTIVE') {
+                $assignment->status = 'REVOKED';
+            }
+        });
+    }
 
     public function user(): BelongsTo
     {

@@ -5,6 +5,7 @@ namespace Database\Seeders;
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
+use Illuminate\Support\Str;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
@@ -25,7 +26,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'users', 'action' => 'create', 'code' => 'users.create', 'description' => 'Crear e invitar nuevos usuarios'],
             ['module' => 'users', 'action' => 'update', 'code' => 'users.update', 'description' => 'Modificar información de usuarios'],
             ['module' => 'users', 'action' => 'manage_state', 'code' => 'users.manage_state', 'description' => 'Bloquear, desbloquear y deshabilitar usuarios'],
-            
+
             // Roles Module
             ['module' => 'roles', 'action' => 'view', 'code' => 'roles.view', 'description' => 'Ver roles y permisos del sistema'],
             ['module' => 'roles', 'action' => 'assign', 'code' => 'roles.assign', 'description' => 'Asignar roles, sucursales y alcances operativos'],
@@ -34,6 +35,13 @@ class RolesAndPermissionsSeeder extends Seeder
             // Sessions Module
             ['module' => 'sessions', 'action' => 'view_global', 'code' => 'sessions.view_global', 'description' => 'Ver sesiones de otros usuarios'],
             ['module' => 'sessions', 'action' => 'revoke_global', 'code' => 'sessions.revoke_global', 'description' => 'Revocar sesiones de otros usuarios'],
+
+            // Organization Module
+            ['module' => 'organization', 'action' => 'view_branches', 'code' => 'branches.view', 'description' => 'Consultar sucursales dentro del alcance efectivo'],
+            ['module' => 'organization', 'action' => 'create_branches', 'code' => 'branches.create', 'description' => 'Crear sucursales'],
+            ['module' => 'organization', 'action' => 'update_branches', 'code' => 'branches.update', 'description' => 'Modificar sucursales'],
+            ['module' => 'organization', 'action' => 'activate_branches', 'code' => 'branches.activate', 'description' => 'Activar sucursales'],
+            ['module' => 'organization', 'action' => 'deactivate_branches', 'code' => 'branches.deactivate', 'description' => 'Desactivar sucursales'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -68,11 +76,28 @@ class RolesAndPermissionsSeeder extends Seeder
                 $syncData = [];
                 foreach ($permissions as $perm) {
                     $syncData[$perm->id] = [
-                        'id' => \Illuminate\Support\Str::uuid()->toString(),
+                        'id' => Str::uuid()->toString(),
                         'granted_at' => now(),
                     ];
                 }
                 $role->permissions()->sync($syncData);
+            }
+
+            if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
+                $permissionCodes = $roleData['code'] === 'branch_manager'
+                    ? ['branches.view', 'roles.assign']
+                    : ['branches.view'];
+                $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
+                $syncData = [];
+
+                foreach ($permissions as $permission) {
+                    $syncData[$permission->id] = [
+                        'id' => Str::uuid()->toString(),
+                        'granted_at' => now(),
+                    ];
+                }
+
+                $role->permissions()->syncWithoutDetaching($syncData);
             }
         }
     }
