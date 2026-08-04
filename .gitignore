@@ -41,6 +41,7 @@ Thumbs.db
 # Documentación generada
 *.md
 /docs/
+AGENTS.md
 
 # Paquetes y manifiestos generados
 *.zip
