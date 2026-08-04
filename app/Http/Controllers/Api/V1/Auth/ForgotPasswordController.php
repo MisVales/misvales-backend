@@ -33,14 +33,15 @@ class ForgotPasswordController extends Controller
             $plainToken = Str::random(60);
             $hashedToken = hash('sha256', $plainToken);
 
-            // 4. Limpiar tokens anteriores para este email (Upsert)
-            DB::table('password_reset_tokens')->updateOrInsert(
-                ['email' => $email],
-                [
-                    'token' => $hashedToken,
-                    'created_at' => now()
-                ]
-            );
+            // 4. Limpiar tokens anteriores para este usuario
+            DB::table('password_reset_tokens')->where('user_id', $user->id)->delete();
+            DB::table('password_reset_tokens')->insert([
+                'id' => Str::uuid(),
+                'user_id' => $user->id,
+                'token_hash' => $hashedToken,
+                'expires_at' => now()->addMinutes(60),
+                'created_at' => now()
+            ]);
 
             // 5. Enviar el correo electrónico con el token en texto plano
             \Illuminate\Support\Facades\Mail::to($user->email)->queue(new \App\Mail\Security\PasswordRecoveryMail(
