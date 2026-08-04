@@ -43,7 +43,7 @@ Route::prefix('v1')->group(function () {
         Route::post('me/security/totp/confirm', [\App\Http\Controllers\Api\V1\SecurityController::class, 'totpConfirm']);
         
         // Gestión de Usuarios (Punto 33)
-        Route::apiResource('users', [\App\Http\Controllers\Api\V1\UserController::class])->except(['destroy']);
+        Route::apiResource('users', \App\Http\Controllers\Api\V1\UserController::class)->except(['destroy']);
         Route::post('users/{id}/invite', [\App\Http\Controllers\Api\V1\UserController::class, 'invite'])->middleware('throttle:resend_invitation');
         Route::post('users/{id}/block', [\App\Http\Controllers\Api\V1\UserController::class, 'block']);
         Route::post('users/{id}/unblock', [\App\Http\Controllers\Api\V1\UserController::class, 'unblock']);
