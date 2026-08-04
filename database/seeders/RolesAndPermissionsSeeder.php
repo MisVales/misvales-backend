@@ -34,6 +34,11 @@ class RolesAndPermissionsSeeder extends Seeder
             // Sessions Module
             ['module' => 'sessions', 'action' => 'view_global', 'code' => 'sessions.view_global', 'description' => 'Ver sesiones de otros usuarios'],
             ['module' => 'sessions', 'action' => 'revoke_global', 'code' => 'sessions.revoke_global', 'description' => 'Revocar sesiones de otros usuarios'],
+
+            // Catalogs Module
+            ['module' => 'catalogs', 'action' => 'manage', 'code' => 'catalogs.manage', 'description' => 'Crear, modificar y publicar catálogos y configuraciones'],
+            ['module' => 'catalogs', 'action' => 'view_history', 'code' => 'catalogs.view_history', 'description' => 'Consultar historial y versiones de catálogos'],
+            ['module' => 'catalogs', 'action' => 'view_published', 'code' => 'catalogs.view_published', 'description' => 'Consultar catálogos y configuraciones vigentes'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -67,12 +72,28 @@ class RolesAndPermissionsSeeder extends Seeder
                 $permissions = Permission::all();
                 $syncData = [];
                 foreach ($permissions as $perm) {
-                    $syncData[$perm->id] = [
-                        'id' => \Illuminate\Support\Str::uuid()->toString(),
-                        'granted_at' => now(),
-                    ];
+                    $syncData[$perm->id] = ['id' => \Illuminate\Support\Str::uuid()->toString(), 'granted_at' => now()];
                 }
                 $role->permissions()->sync($syncData);
+            }
+
+            // Asignaciones específicas para el Módulo 3 (Puntos 77, 78, 79)
+            if ($roleData['code'] === 'admin') {
+                $permissions = Permission::whereIn('code', ['catalogs.view_history', 'catalogs.view_published'])->get();
+                $syncData = [];
+                foreach ($permissions as $perm) {
+                    $syncData[$perm->id] = ['id' => \Illuminate\Support\Str::uuid()->toString(), 'granted_at' => now()];
+                }
+                $role->permissions()->syncWithoutDetaching($syncData);
+            }
+
+            if (in_array($roleData['code'], ['branch_manager', 'coordinator', 'verifier', 'cashier', 'distributor'])) {
+                $permissions = Permission::whereIn('code', ['catalogs.view_published'])->get();
+                $syncData = [];
+                foreach ($permissions as $perm) {
+                    $syncData[$perm->id] = ['id' => \Illuminate\Support\Str::uuid()->toString(), 'granted_at' => now()];
+                }
+                $role->permissions()->syncWithoutDetaching($syncData);
             }
         }
     }

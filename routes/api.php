@@ -59,5 +59,59 @@ Route::prefix('v1')->group(function () {
         Route::get('users/{id}/assignments', [\App\Http\Controllers\Api\V1\UserAssignmentController::class, 'index']);
         Route::post('users/{id}/assignments', [\App\Http\Controllers\Api\V1\UserAssignmentController::class, 'store']);
         Route::delete('users/{id}/assignments/{assignmentId}', [\App\Http\Controllers\Api\V1\UserAssignmentController::class, 'destroy']);
+        
+        // --- Módulo 3: Configuración, Catálogos y Reglas de Negocio ---
+        // Permiso: catalogs.view_published (Cajeros, Verificadores, etc. - Solo lectura de lo vigente)
+        Route::middleware('permission:catalogs.view_published')->group(function () {
+            Route::get('configurations/{key}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'show']);
+            Route::get('categories', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'index']);
+            Route::get('categories/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'show']);
+            Route::get('products', [\App\Http\Controllers\Api\V1\ProductoController::class, 'index']);
+            Route::get('products/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'show']);
+            Route::get('redemption-periods/current', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'current']);
+        });
+
+        // Permiso: catalogs.view_history (Administradores - Pueden ver borradores, historial, etc.)
+        Route::middleware('permission:catalogs.view_history')->group(function () {
+            Route::get('configurations', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'index']);
+            Route::get('configurations/{key}/versions', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'getVersionsByKey']);
+            Route::get('configuration-versions/{id}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'showVersion']);
+            Route::get('categories/{id}/versions', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'getVersions']);
+            Route::get('category-versions/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'showVersion']);
+            Route::get('products/{id}/versions', [\App\Http\Controllers\Api\V1\ProductoController::class, 'getVersions']);
+            Route::get('product-versions/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'showVersion']);
+            Route::get('redemption-periods', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'index']);
+            Route::get('redemption-periods/{id}', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'show']);
+        });
+
+        // Permiso: catalogs.manage (Solo Gerente General - Crear, editar, publicar)
+        Route::middleware(['permission:catalogs.manage', \App\Http\Middleware\RequireXRequestId::class])->group(function () {
+            // Configuraciones
+            Route::post('configurations', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'store']);
+            Route::post('configurations/{key}/versions', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'storeVersionByKey']);
+            Route::patch('configuration-versions/{id}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'updateVersion']);
+            Route::post('configuration-versions/{id}/publish', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'publishVersion'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            Route::post('configuration-versions/{id}/deactivate', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'deactivateVersion'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            
+            // Categorías
+            Route::post('categories', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'store']);
+            Route::post('categories/{id}/versions', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'storeVersion']);
+            Route::patch('category-versions/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'updateVersion']);
+            Route::post('category-versions/{id}/publish', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'publishVersion'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            Route::post('categories/{id}/deactivate', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'deactivateCategory'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            
+            // Productos
+            Route::post('products', [\App\Http\Controllers\Api\V1\ProductoController::class, 'store']);
+            Route::post('products/{id}/versions', [\App\Http\Controllers\Api\V1\ProductoController::class, 'storeVersion']);
+            Route::patch('product-versions/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'updateVersion']);
+            Route::post('product-versions/{id}/publish', [\App\Http\Controllers\Api\V1\ProductoController::class, 'publishVersion'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            Route::post('products/{id}/deactivate', [\App\Http\Controllers\Api\V1\ProductoController::class, 'deactivateProduct'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            
+            // Periodos Canje
+            Route::post('redemption-periods', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'store']);
+            Route::patch('redemption-periods/{id}', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'update']);
+            Route::post('redemption-periods/{id}/publish', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'publish'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+            Route::post('redemption-periods/{id}/cancel', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'cancel'])->middleware(\App\Http\Middleware\EnforceIdempotency::class);
+        });
     });
 });

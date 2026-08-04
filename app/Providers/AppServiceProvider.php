@@ -21,6 +21,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Registrar Observers para Auditoría (Módulo 3)
+        \App\Models\ConfigurationDefinition::observe(\App\Observers\VersionObserver::class);
+        \App\Models\ConfigurationVersion::observe(\App\Observers\VersionObserver::class);
+        \App\Models\Category::observe(\App\Observers\VersionObserver::class);
+        \App\Models\CategoryVersion::observe(\App\Observers\VersionObserver::class);
+        \App\Models\Product::observe(\App\Observers\VersionObserver::class);
+        \App\Models\ProductVersion::observe(\App\Observers\VersionObserver::class);
+        \App\Models\RedemptionPeriod::observe(\App\Observers\VersionObserver::class);
+
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
             // El Super Admin (general_manager) o la comprobación dinámica por BD:
