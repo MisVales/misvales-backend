@@ -1,0 +1,79 @@
+<?php
+
+namespace Database\Seeders;
+
+use App\Models\Permission;
+use App\Models\Role;
+use Illuminate\Database\Seeder;
+
+class RolesAndPermissionsSeeder extends Seeder
+{
+    /**
+     * Run the database seeds.
+     */
+    public function run(): void
+    {
+        $this->seedPermissions();
+        $this->seedRoles();
+    }
+
+    private function seedPermissions(): void
+    {
+        $permissions = [
+            // Users Module
+            ['module' => 'users', 'action' => 'view', 'code' => 'users.view', 'description' => 'Ver lista y detalle de usuarios'],
+            ['module' => 'users', 'action' => 'create', 'code' => 'users.create', 'description' => 'Crear e invitar nuevos usuarios'],
+            ['module' => 'users', 'action' => 'update', 'code' => 'users.update', 'description' => 'Modificar información de usuarios'],
+            ['module' => 'users', 'action' => 'manage_state', 'code' => 'users.manage_state', 'description' => 'Bloquear, desbloquear y deshabilitar usuarios'],
+            
+            // Roles Module
+            ['module' => 'roles', 'action' => 'view', 'code' => 'roles.view', 'description' => 'Ver roles y permisos del sistema'],
+            ['module' => 'roles', 'action' => 'assign', 'code' => 'roles.assign', 'description' => 'Asignar roles, sucursales y alcances operativos'],
+            ['module' => 'roles', 'action' => 'manage_permissions', 'code' => 'roles.manage_permissions', 'description' => 'Modificar permisos de un rol'],
+
+            // Sessions Module
+            ['module' => 'sessions', 'action' => 'view_global', 'code' => 'sessions.view_global', 'description' => 'Ver sesiones de otros usuarios'],
+            ['module' => 'sessions', 'action' => 'revoke_global', 'code' => 'sessions.revoke_global', 'description' => 'Revocar sesiones de otros usuarios'],
+        ];
+
+        foreach ($permissions as $permissionData) {
+            Permission::updateOrCreate(
+                ['code' => $permissionData['code']],
+                $permissionData
+            );
+        }
+    }
+
+    private function seedRoles(): void
+    {
+        $roles = [
+            ['code' => 'general_manager', 'name' => 'Gerente general', 'description' => 'Administrador global del sistema', 'default_scope' => 'GLOBAL'],
+            ['code' => 'branch_manager', 'name' => 'Gerente de sucursal', 'description' => 'Administrador a nivel sucursal', 'default_scope' => 'BRANCH'],
+            ['code' => 'coordinator', 'name' => 'Coordinador', 'description' => 'Coordinador operativo', 'default_scope' => 'BRANCH'],
+            ['code' => 'verifier', 'name' => 'Verificador', 'description' => 'Personal de verificación', 'default_scope' => 'BRANCH'],
+            ['code' => 'admin', 'name' => 'Administrador', 'description' => 'Administrador de sistema', 'default_scope' => 'GLOBAL'],
+            ['code' => 'distributor', 'name' => 'Distribuidora', 'description' => 'Distribuidora de vales', 'default_scope' => 'ASSIGNED'],
+            ['code' => 'cashier', 'name' => 'Cajera', 'description' => 'Cajera de sucursal', 'default_scope' => 'BRANCH'],
+        ];
+
+        foreach ($roles as $roleData) {
+            $role = Role::updateOrCreate(
+                ['code' => $roleData['code']],
+                $roleData
+            );
+
+            // Al Gerente General le damos todos los permisos por defecto
+            if ($roleData['code'] === 'general_manager') {
+                $permissions = Permission::all();
+                $syncData = [];
+                foreach ($permissions as $perm) {
+                    $syncData[$perm->id] = [
+                        'id' => \Illuminate\Support\Str::uuid()->toString(),
+                        'granted_at' => now(),
+                    ];
+                }
+                $role->permissions()->sync($syncData);
+            }
+        }
+    }
+}

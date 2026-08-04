@@ -38,7 +38,7 @@ return new class extends Migration
         DB::statement("
             ALTER TABLE users 
             ADD CONSTRAINT chk_user_state 
-            CHECK (state IN ('PENDING_ACTIVATION', 'ACTIVE', 'LOCKED', 'DISABLED'))
+            CHECK (state IN ('INVITED', 'PENDING_ACTIVATION', 'ACTIVE', 'BLOCKED', 'DISABLED'))
         ");
     }
 

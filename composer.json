@@ -20,6 +20,7 @@
         "laravel/horizon": "^5.48",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "pragmarx/google2fa": "*",
         "predis/predis": "^3.5"
     },
     "require-dev": {

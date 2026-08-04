@@ -30,7 +30,7 @@ return new class extends Migration
         DB::statement('
             CREATE UNIQUE INDEX password_reset_tokens_active_unique 
             ON password_reset_tokens (user_id) 
-            WHERE consumed_at IS NULL AND revoked_at IS NULL AND expires_at > CURRENT_TIMESTAMP
+            WHERE consumed_at IS NULL AND revoked_at IS NULL
         ');
     }
 
