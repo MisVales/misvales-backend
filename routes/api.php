@@ -11,11 +11,16 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 Route::prefix('v1')->group(function () {
     Route::prefix('auth')->group(function () {
         Route::post('invitations/inspect', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'inspect'])->middleware('throttle:inspect_invitation');
+        Route::post('invitations/resend', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'resend'])->middleware('throttle:resend_invitation');
         Route::post('invitations/setup', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'setup']);
+        Route::post('invitations/passkey/setup', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'passkeySetup']);
+        Route::post('invitations/passkey/register', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'passkeyRegister']);
         Route::post('invitations/complete', [\App\Http\Controllers\Api\V1\Auth\InvitationController::class, 'complete']);
         
         Route::post('login', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'login']); // Protegido manual por el controlador y el servicio ciego
         Route::post('mfa/totp/verify', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'verifyTotp'])->middleware('throttle:totp');
+        Route::post('mfa/passkey/options', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'passkeyOptions'])->middleware('throttle:totp');
+        Route::post('mfa/passkey/verify', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'passkeyVerify'])->middleware('throttle:totp');
         Route::post('mfa/recovery-code/verify', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'verifyRecoveryCode'])->middleware('throttle:recovery_code');
         Route::post('refresh', [\App\Http\Controllers\Api\V1\Auth\AuthController::class, 'refresh']);
         Route::post('password/forgot', [\App\Http\Controllers\Api\V1\Auth\ForgotPasswordController::class, 'forgotPassword'])->middleware('throttle:forgot_password');

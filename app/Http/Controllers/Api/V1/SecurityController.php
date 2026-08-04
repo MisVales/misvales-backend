@@ -26,7 +26,7 @@ class SecurityController extends Controller
     {
         $request->validate([
             'current_password' => 'required|string',
-            'new_password' => 'required|string|min:12|confirmed',
+            'new_password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
             'totp_code' => 'nullable|string|size:6',
         ]);
 

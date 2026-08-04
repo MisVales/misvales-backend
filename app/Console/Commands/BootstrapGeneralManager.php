@@ -65,9 +65,13 @@ class BootstrapGeneralManager extends Command
             'user_id' => $user->id,
             'role_id' => $role->id,
             'branch_id' => null, // Alcance global
-            'revoked_at' => null,
+            'valid_to' => null,
+            'status' => 'ACTIVE',
         ], [
-            'assigned_at' => now(),
+            'scope_type' => 'GLOBAL',
+            'valid_from' => now(),
+            'assigned_by' => $user->id,
+            'reason' => 'Bootstrap inicial del sistema',
         ]);
 
         // Generar invitación (Punto 11)

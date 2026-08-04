@@ -82,12 +82,28 @@ class AuthController extends Controller
         $challengeToken = Str::random(64);
         $challengeHash = hash('sha256', $challengeToken);
 
-        Cache::put("mfa_challenge_{$challengeHash}", $user->id, now()->addMinutes(5));
+        Cache::put("mfa_challenge_{$challengeHash}", [
+            'user_id' => $user->id,
+            'totp_verified' => false,
+        ], now()->addMinutes(5));
+
+        $availableMfa = \App\Models\MfaCredential::where('user_id', $user->id)
+            ->whereNull('revoked_at')
+            ->pluck('type')
+            ->unique()
+            ->values()
+            ->toArray();
+
+        // Si por alguna razón no tiene métodos activos, asumimos TOTP (o requerir que lo configure)
+        if (empty($availableMfa)) {
+            $availableMfa = ['TOTP'];
+        }
 
         return response()->json([
-            'message' => 'Credenciales verificadas. Requiere segundo factor de autenticación (TOTP).',
+            'message' => 'Credenciales verificadas. Requiere segundo factor de autenticación.',
             'mfa_challenge_token' => $challengeToken,
             'expires_in' => 300,
+            'available_mfa' => $availableMfa,
         ]);
     }
 
@@ -102,12 +118,13 @@ class AuthController extends Controller
         ]);
 
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
-        $userId = Cache::get("mfa_challenge_{$challengeHash}");
+        $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$userId) {
+        if (!$sessionState || !is_array($sessionState)) {
             return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
         }
 
+        $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
 
@@ -168,8 +185,190 @@ class AuthController extends Controller
         $mfaCredential->last_used_at = now();
         $mfaCredential->save();
 
+        // Verificar si el usuario requiere también Passkey
+        $hasPasskey = \App\Models\MfaCredential::where('user_id', $user->id)
+            ->where('type', 'PASSKEY')
+            ->whereNull('revoked_at')
+            ->exists();
+
+        if ($hasPasskey) {
+            // Actualizar estado para permitir el siguiente paso
+            $sessionState['totp_verified'] = true;
+            Cache::put("mfa_challenge_{$challengeHash}", $sessionState, now()->addMinutes(5));
+
+            return response()->json([
+                'message' => 'TOTP verificado. Requiere Passkey.',
+                'next_step' => 'PASSKEY',
+                'mfa_challenge_token' => $request->mfa_challenge_token,
+                'expires_in' => 300,
+            ]);
+        }
+
+        // Si no tiene Passkey, lo dejamos entrar directo (solo 2FA)
         return $this->issueSessionTokens($user, $request, 'TOTP', $policyService);
     }
+
+    /**
+     * POST /api/v1/auth/mfa/passkey/options
+     */
+    public function passkeyOptions(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService)
+    {
+        $request->validate([
+            'mfa_challenge_token' => 'required|string',
+        ]);
+
+        $challengeHash = hash('sha256', $request->mfa_challenge_token);
+        $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
+
+        if (!$sessionState || !is_array($sessionState)) {
+            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+        }
+
+        if (!$sessionState['totp_verified']) {
+            return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
+        }
+
+        $userId = $sessionState['user_id'];
+        $user = User::find($userId);
+        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+
+        // Check if user has a passkey
+        $credentials = \App\Models\MfaCredential::where('user_id', $user->id)
+            ->where('type', 'PASSKEY')
+            ->whereNull('revoked_at')
+            ->get();
+
+        if ($credentials->isEmpty()) {
+            return response()->json(['error' => 'INVALID_MFA', 'message' => 'No hay configuración Passkey activa para este usuario.'], 403);
+        }
+
+        $credentialIds = $credentials->pluck('credential_identifier')->toArray();
+
+        $options = $webAuthnService->generateAuthenticationOptions($user, $credentialIds);
+
+        Cache::put("passkey_login_{$challengeHash}", serialize($options), now()->addMinutes(5));
+
+        return response($webAuthnService->serializeRequestOptions($options), 200)
+            ->header('Content-Type', 'application/json');
+    }
+
+    /**
+     * POST /api/v1/auth/mfa/passkey/verify
+     */
+    public function passkeyVerify(Request $request, \App\Services\Auth\WebAuthnService $webAuthnService, SessionPolicyService $policyService)
+    {
+        $request->validate([
+            'mfa_challenge_token' => 'required|string',
+            'clientDataJSON' => 'required|string',
+            'authenticatorData' => 'required|string',
+            'signature' => 'required|string',
+            'id' => 'required|string',
+        ]);
+
+        $challengeHash = hash('sha256', $request->mfa_challenge_token);
+        $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
+
+        if (!$sessionState || !is_array($sessionState)) {
+            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+        }
+
+        if (!$sessionState['totp_verified']) {
+            return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
+        }
+
+        $cachedOptions = Cache::get("passkey_login_{$challengeHash}");
+        if (!$cachedOptions) {
+            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+        }
+
+        $options = unserialize($cachedOptions);
+
+        $userId = $sessionState['user_id'];
+        $user = User::find($userId);
+        if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+
+        // Convert base64url (from frontend) to standard base64
+        $normalizedBase64Id = str_replace(['-', '_'], ['+', '/'], $request->id);
+        // Add padding if necessary
+        $mod4 = strlen($normalizedBase64Id) % 4;
+        if ($mod4 > 0) {
+            $normalizedBase64Id .= str_repeat('=', 4 - $mod4);
+        }
+
+        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)
+            ->where('type', 'PASSKEY')
+            ->where('credential_identifier', base64_encode(base64_decode($normalizedBase64Id))) // Ensure normalization
+            ->whereNull('revoked_at')
+            ->first();
+
+        if (!$mfaCredential) {
+            // Also try matching the exact raw string if base64 padding issues occur
+            $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)
+                ->where('type', 'PASSKEY')
+                ->where('credential_identifier', $request->id)
+                ->whereNull('revoked_at')
+                ->first();
+                
+            if (!$mfaCredential) {
+                return response()->json(['error' => 'INVALID_MFA', 'message' => 'Credencial no encontrada.'], 403);
+            }
+        }
+
+        try {
+            $signCount = $webAuthnService->verifyAuthentication(
+                $request->clientDataJSON,
+                $request->authenticatorData,
+                $request->signature,
+                $mfaCredential->public_key,
+                $options
+            );
+
+            // Update sign_count (for clone detection, optional but recommended)
+            if ($signCount > 0 && $signCount <= $mfaCredential->sign_count) {
+                // Posible clonación, pero no bloquearemos aquí en V1
+            }
+            $mfaCredential->sign_count = $signCount > 0 ? $signCount : $mfaCredential->sign_count + 1;
+            $mfaCredential->last_used_at = now();
+            $mfaCredential->save();
+
+            Cache::forget("mfa_challenge_{$challengeHash}");
+            Cache::forget("passkey_login_{$challengeHash}");
+            
+            $user->last_login_at = now();
+            $user->last_login_ip = $request->ip();
+            $user->failed_login_attempts = 0;
+            $user->save();
+
+            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+                'event_type' => 'MFA_SUCCESS',
+                'severity' => 'INFO',
+                'outcome' => 'SUCCESS',
+                'user_id' => $user->id,
+                'metadata' => ['mfa_type' => 'PASSKEY'],
+            ]);
+
+            return $this->issueSessionTokens($user, $request, 'PASSKEY', $policyService);
+        } catch (\Exception $e) {
+            $user->failed_login_attempts += 1;
+            if ($user->failed_login_attempts >= 5) {
+                $user->locked_until = now()->addMinutes(15);
+                Cache::forget("mfa_challenge_{$challengeHash}");
+                Cache::forget("passkey_login_{$challengeHash}");
+            }
+            $user->save();
+
+            app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+                'event_type' => 'MFA_FAILED',
+                'severity' => 'WARNING',
+                'outcome' => 'FAILURE',
+                'user_id' => $user->id,
+                'metadata' => ['mfa_type' => 'PASSKEY', 'reason' => $e->getMessage()],
+            ]);
+
+            return response()->json(['error' => 'INVALID_MFA', 'message' => 'Autenticación con Passkey fallida.'], 401);
+        }
+    }
+
 
     /**
      * POST /api/v1/auth/mfa/recovery-code/verify
@@ -182,10 +381,13 @@ class AuthController extends Controller
         ]);
 
         $challengeHash = hash('sha256', $request->mfa_challenge_token);
-        $userId = Cache::get("mfa_challenge_{$challengeHash}");
+        $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
-        if (!$userId) return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+        if (!$sessionState || !is_array($sessionState)) {
+            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+        }
 
+        $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (!$user) return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
 

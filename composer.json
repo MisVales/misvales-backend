@@ -20,8 +20,10 @@
         "laravel/horizon": "^5.48",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "nyholm/psr7": "^1.8",
         "pragmarx/google2fa": "*",
-        "predis/predis": "^3.5"
+        "predis/predis": "^3.5",
+        "web-auth/webauthn-lib": "^5.3"
     },
     "require-dev": {
         "fakerphp/faker": "^1.23",
