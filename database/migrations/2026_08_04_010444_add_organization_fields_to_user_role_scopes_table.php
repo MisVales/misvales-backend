@@ -14,8 +14,8 @@ return new class extends Migration
     {
         Schema::table('user_role_scopes', function (Blueprint $table) {
             // Eliminar los índices únicos de la migración anterior
-            $table->dropUnique('user_role_scopes_global_unique');
-            $table->dropUnique('user_role_scopes_branch_unique');
+            $table->dropIndex('user_role_scopes_global_unique');
+            $table->dropIndex('user_role_scopes_branch_unique');
 
             // Eliminar foreign keys de columnas a remover
             $table->dropForeign(['assigned_by_user_id']);
