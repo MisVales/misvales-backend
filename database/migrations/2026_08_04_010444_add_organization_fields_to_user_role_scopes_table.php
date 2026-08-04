@@ -71,7 +71,7 @@ return new class extends Migration
             ON user_role_scopes (user_id, role_id, scope_type)
             WHERE status = 'ACTIVE'
               AND valid_to IS NULL
-              AND branch_id IS NULL;
+              AND scope_type = 'GLOBAL';
         ");
 
         DB::statement("
@@ -86,7 +86,7 @@ return new class extends Migration
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_type CHECK (scope_type IN ('GLOBAL', 'BRANCH'));");
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_urs_status CHECK (status IN ('ACTIVE', 'ENDED', 'REVOKED'));");
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_branch_match CHECK (
-            (scope_type = 'GLOBAL' AND branch_id IS NULL) OR 
+            (scope_type = 'GLOBAL') OR 
             (scope_type = 'BRANCH' AND branch_id IS NOT NULL)
         );");
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);");

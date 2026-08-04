@@ -17,16 +17,18 @@ class UserRoleScope extends Model
         'user_id',
         'role_id',
         'branch_id',
-        'assigned_by_user_id',
-        'assigned_at',
-        'revoked_by_user_id',
-        'revoked_at',
-        'revocation_reason',
+        'assigned_by',
+        'valid_from',
+        'ended_by',
+        'valid_to',
+        'reason',
+        'scope_type',
+        'status',
     ];
 
     protected $casts = [
-        'assigned_at' => 'datetime',
-        'revoked_at' => 'datetime',
+        'valid_from' => 'datetime',
+        'valid_to' => 'datetime',
     ];
 
     public function user(): BelongsTo
@@ -41,11 +43,11 @@ class UserRoleScope extends Model
 
     public function assignedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'assigned_by_user_id');
+        return $this->belongsTo(User::class, 'assigned_by');
     }
 
-    public function revokedBy(): BelongsTo
+    public function endedBy(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'revoked_by_user_id');
+        return $this->belongsTo(User::class, 'ended_by');
     }
 }
