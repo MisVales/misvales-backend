@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\Role;
 
 #[Fillable(['name', 'email', 'normalized_email', 'password', 'state', 'webauthn_user_handle'])]
 #[Hidden(['password', 'remember_token'])]
@@ -19,6 +20,8 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, Notifiable, HasUuids;
+
+    protected $appends = ['is_active', 'branch_id'];
 
     /**
      * Get the attributes that should be cast.
@@ -64,6 +67,50 @@ class User extends Authenticatable
             ->whereHas('role.permissions', function ($query) use ($permissionKey) {
                 $query->where('code', $permissionKey);
             })
+            ->exists();
+    }
+
+    /**
+     * Get active status.
+     */
+    public function getIsActiveAttribute(): bool
+    {
+        return $this->state === 'ACTIVE';
+    }
+
+    /**
+     * Get branch id from scopes.
+     */
+    public function getBranchIdAttribute(): ?string
+    {
+        return $this->roleScopes()->whereNotNull('branch_id')->whereNull('revoked_at')->value('branch_id');
+    }
+
+    /**
+     * Assign role with optional branch_id (helper for tests and controllers).
+     */
+    public function assignRole(string $roleCode, ?string $branchId = null): void
+    {
+        $role = Role::where('code', $roleCode)->first();
+        if ($role) {
+            $this->roleScopes()->create([
+                'role_id' => $role->id,
+                'branch_id' => $branchId,
+                'scope_type' => $branchId ? 'BRANCH' : 'GLOBAL',
+                'assigned_by' => $this->id, // For tests
+                'status' => 'ACTIVE'
+            ]);
+        }
+    }
+    
+    /**
+     * Check if user has a role.
+     */
+    public function hasRole(string $roleCode): bool
+    {
+        return $this->roleScopes()
+            ->whereNull('revoked_at')
+            ->whereHas('role', fn ($q) => $q->where('code', $roleCode))
             ->exists();
     }
 }
