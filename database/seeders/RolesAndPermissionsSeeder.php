@@ -35,6 +35,15 @@ class RolesAndPermissionsSeeder extends Seeder
             // Sessions Module
             ['module' => 'sessions', 'action' => 'view_global', 'code' => 'sessions.view_global', 'description' => 'Ver sesiones de otros usuarios'],
             ['module' => 'sessions', 'action' => 'revoke_global', 'code' => 'sessions.revoke_global', 'description' => 'Revocar sesiones de otros usuarios'],
+
+            // Branches Module
+            ['module' => 'branches', 'action' => 'view', 'code' => 'branches.view', 'description' => 'Consultar sucursales registradas'],
+            ['module' => 'branches', 'action' => 'create', 'code' => 'branches.create', 'description' => 'Crear nuevas sucursales'],
+            ['module' => 'branches', 'action' => 'update', 'code' => 'branches.update', 'description' => 'Modificar datos generales de sucursales'],
+            ['module' => 'branches', 'action' => 'manage_state', 'code' => 'branches.manage_state', 'description' => 'Activar o desactivar sucursales'],
+
+            // Assignments Module
+            ['module' => 'assignments', 'action' => 'manage', 'code' => 'assignments.manage', 'description' => 'Asignar distribuidoras a coordinadores y reasignar'],
         ];
 
         foreach ($permissions as $permissionData) {

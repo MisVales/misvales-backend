@@ -64,4 +64,24 @@ class User extends Authenticatable
             })
             ->exists();
     }
+
+    /**
+     * Check if the user has jurisdiction over a specific branch.
+     * General Managers have GLOBAL scope, Branch Managers have BRANCH scope.
+     */
+    public function hasScopeForBranch(string $branchId): bool
+    {
+        if ($this->state !== 'ACTIVE') {
+            return false;
+        }
+
+        return $this->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
+            ->where(function ($query) use ($branchId) {
+                $query->where('scope_type', 'GLOBAL')
+                      ->orWhere('branch_id', $branchId);
+            })
+            ->exists();
+    }
 }

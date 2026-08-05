@@ -76,5 +76,18 @@ Route::prefix('v1')->group(function () {
         Route::get('users/{id}/assignments', [UserAssignmentController::class, 'index']);
         Route::post('users/{id}/assignments', [UserAssignmentController::class, 'store']);
         Route::delete('users/{id}/assignments/{assignmentId}', [UserAssignmentController::class, 'destroy']);
+
+        // Módulo 2 - Sucursales y Personal
+        Route::apiResource('branches', \App\Http\Controllers\Api\V1\BranchController::class)->except(['destroy']);
+        Route::patch('branches/{branch}/status', [\App\Http\Controllers\Api\V1\BranchController::class, 'changeStatus']);
+        
+        Route::get('branches/{branch}/personnel', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'index']);
+        Route::post('branches/{branch}/personnel', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'store']);
+        Route::delete('branches/{branch}/personnel/{assignment}', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'destroy']);
+
+        // Módulo 2 - Asignación Coordinador - Distribuidora
+        Route::get('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'index']);
+        Route::post('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'store']);
+        Route::delete('assignments/coordinator-distributor/{assignment}', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'destroy']);
     });
 });
