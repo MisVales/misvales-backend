@@ -19,7 +19,7 @@ class MeController extends Controller
         $user->load(['roleScopes' => function ($query) {
             // Solo alcances activos y no vencidos
             $query->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->with(['role' => function ($roleQuery) {
                     $roleQuery->with('permissions');
                 }]);
