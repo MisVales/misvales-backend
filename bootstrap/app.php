@@ -38,6 +38,19 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(TraceRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, \Illuminate\Http\Request $request) {
+            if ($request->is('api/*')) {
+                $model = $e->getModel();
+                if (str_contains($model, 'Category')) {
+                    return response()->json(['error' => 'CATEGORY_NOT_FOUND', 'message' => 'Categoría inexistente.'], 404);
+                }
+                if (str_contains($model, 'Product')) {
+                    return response()->json(['error' => 'PRODUCT_NOT_FOUND', 'message' => 'Producto inexistente.'], 404);
+                }
+                return response()->json(['error' => 'RESOURCE_NOT_FOUND', 'message' => 'Recurso inexistente.'], 404);
+            }
+        });
+
         $exceptions->dontFlash([
             'password',
             'password_confirmation',
