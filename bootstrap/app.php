@@ -20,6 +20,9 @@ use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
+use Illuminate\Validation\ValidationException;
+use App\Models\SolicitudDistribuidora;
+
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
         web: __DIR__.'/../routes/web.php',
@@ -42,6 +45,16 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(TraceRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
+        $distributorError = function (Request $request, string $code, string $message, int $status, array|object $details = []) {
+            return response()->json(['error' => [
+                'code' => $code,
+                'message' => $message,
+                'fields' => $status === 422 ? (object) $details : (object) [],
+                'details' => $status !== 422 ? (object) $details : (object) [],
+                'request_id' => $request->attributes->get('request_id'),
+            ]], $status);
+        };
+
         $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, \Illuminate\Http\Request $request) {
             if ($request->is('api/*')) {
                 $model = $e->getModel();
