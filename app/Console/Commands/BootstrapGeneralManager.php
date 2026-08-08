@@ -33,7 +33,7 @@ class BootstrapGeneralManager extends Command
      */
     public function handle()
     {
-        if (! env('INITIAL_GENERAL_MANAGER_ENABLED', false)) {
+        if (! env('INITIAL_GENERAL_MANAGER_ENABLED', true)) {
             $this->info('General Manager bootstrap is disabled in .env.');
 
             return;

@@ -11,6 +11,7 @@ use App\Models\MfaRecoveryCode;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\SessionPolicyService;
+use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
@@ -217,7 +218,8 @@ class SecurityController extends Controller
         }
 
         $mfaCredential->secret_ciphertext = Crypt::encryptString($newSecret);
-        $mfaCredential->is_active = true;
+        $mfaCredential->confirmed_at = now();
+        $mfaCredential->revoked_at = null;
         $mfaCredential->last_used_at = now();
         $mfaCredential->save();
 
@@ -248,6 +250,38 @@ class SecurityController extends Controller
     }
 
     /**
+     * POST /api/v1/me/security/totp/validate-current
+     * Valida el TOTP actual y contraseña antes de permitir reconfigurar.
+     */
+    public function validateCurrentTotp(Request $request)
+    {
+        $request->validate([
+            'current_password' => 'required|string',
+            'totp_code' => 'required|string|size:6',
+        ]);
+
+        $user = $request->user();
+
+        if (! Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
+        }
+
+        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
+        if (!$mfaCredential) {
+            return response()->json(['message' => 'No tienes TOTP configurado.'], 400);
+        }
+
+        $secret = \Illuminate\Support\Facades\Crypt::decryptString($mfaCredential->secret_ciphertext);
+        $mfaService = new MfaService();
+        
+        if (!$mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
+            return response()->json(['message' => 'El código de autenticador es incorrecto.'], 401);
+        }
+
+        return response()->json(['message' => 'Validación exitosa.']);
+    }
+
+    /**
      * Helper Privado: Revoca sesiones diferentes a la actual.
      */
     private function revokeOtherSessions(Request $request)
@@ -266,5 +300,99 @@ class SecurityController extends Controller
             ]);
             DB::table('personal_access_tokens')->where('token', $session->getRawOriginal('session_identifier_hash'))->delete();
         }
+    }
+
+    /**
+     * GET /api/v1/me/security/passkeys
+     */
+    public function passkeys(Request $request)
+    {
+        $passkeys = MfaCredential::where('user_id', $request->user()->id)
+            ->where('type', 'PASSKEY')
+            ->get(['id', 'created_at', 'last_used_at']);
+        
+        return response()->json($passkeys);
+    }
+
+    /**
+     * POST /api/v1/me/security/passkeys/options
+     */
+    public function passkeyOptions(Request $request, WebAuthnService $webAuthnService)
+    {
+        $options = $webAuthnService->generateRegistrationOptions($request->user());
+        $cacheKey = "passkey_setup_user_" . $request->user()->id;
+        Cache::put($cacheKey, serialize($options), now()->addMinutes(10));
+        return response($webAuthnService->serializeOptions($options))->header('Content-Type', 'application/json');
+    }
+
+    /**
+     * POST /api/v1/me/security/passkeys/register
+     */
+    public function passkeyRegister(Request $request, WebAuthnService $webAuthnService)
+    {
+        $request->validate([
+            'clientDataJSON' => 'required|string',
+            'attestationObject' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        $cacheKey = "passkey_setup_user_" . $user->id;
+        $cachedOptions = Cache::get($cacheKey);
+        
+        if (! $cachedOptions) {
+            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+        }
+
+        $options = unserialize($cachedOptions);
+
+        try {
+            $credentialData = $webAuthnService->verifyRegistration(
+                $request->clientDataJSON,
+                $request->attestationObject,
+                $options
+            );
+
+            MfaCredential::create([
+                'user_id' => $user->id,
+                'type' => 'PASSKEY',
+                'credential_identifier' => base64_encode($credentialData->credentialId),
+                'public_key' => base64_encode($credentialData->credentialPublicKey ?? ''),
+                'aaguid' => (string) $credentialData->aaguid,
+                'sign_count' => 0,
+                'confirmed_at' => now(),
+            ]);
+
+            Cache::forget($cacheKey);
+
+            return response()->json(['message' => 'Passkey registrado correctamente.']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: '.$e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/me/security/passkeys/{id}
+     */
+    public function deletePasskey(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $passkey = MfaCredential::where('user_id', $user->id)
+            ->where('type', 'PASSKEY')
+            ->where('id', $id)
+            ->firstOrFail();
+
+        // Validar que siempre quede al menos 1 método MFA o 1 Passkey.
+        $totalMfa = MfaCredential::where('user_id', $user->id)
+            ->whereIn('type', ['PASSKEY', 'TOTP'])
+            ->count();
+
+        if ($totalMfa <= 1) {
+            return response()->json(['error' => 'LAST_MFA_METHOD', 'message' => 'No puedes eliminar esta llave de acceso porque es tu único método de autenticación.'], 400);
+        }
+
+        $passkey->delete();
+
+        return response()->json(['message' => 'Llave de acceso eliminada correctamente.']);
     }
 }

@@ -17,8 +17,9 @@ class MeController extends Controller
 
         // Cargar los alcances (scopes) con sus respectivos roles y permisos
         $user->load(['roleScopes' => function ($query) {
-            // Solo alcances no revocados
-            $query->whereNull('revoked_at')
+            // Solo alcances activos y no vencidos
+            $query->where('status', 'ACTIVE')
+                ->whereNull('valid_to')
                 ->with(['role' => function ($roleQuery) {
                     $roleQuery->with('permissions');
                 }]);

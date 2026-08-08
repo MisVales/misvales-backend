@@ -10,6 +10,8 @@ use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\UserAssignmentController;
+use App\Http\Controllers\Api\V1\InvitationListController;
+use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -55,7 +57,12 @@ Route::prefix('v1')->group(function () {
         Route::post('me/security/password', [SecurityController::class, 'changePassword']);
         Route::post('me/security/recovery-codes', [SecurityController::class, 'regenerateRecoveryCodes']);
         Route::get('me/security/totp/setup', [SecurityController::class, 'totpSetup']);
+        Route::post('me/security/totp/validate-current', [SecurityController::class, 'validateCurrentTotp']);
         Route::post('me/security/totp/confirm', [SecurityController::class, 'totpConfirm']);
+        Route::get('me/security/passkeys', [SecurityController::class, 'passkeys']);
+        Route::post('me/security/passkeys/options', [SecurityController::class, 'passkeyOptions']);
+        Route::post('me/security/passkeys/register', [SecurityController::class, 'passkeyRegister']);
+        Route::delete('me/security/passkeys/{id}', [SecurityController::class, 'deletePasskey']);
 
         // Gestión de Usuarios (Punto 33)
         Route::apiResource('users', UserController::class)->except(['destroy']);
@@ -71,6 +78,12 @@ Route::prefix('v1')->group(function () {
         Route::get('roles', [RoleController::class, 'index']);
         Route::get('roles/{id}', [RoleController::class, 'show']);
         Route::put('roles/{id}/permissions', [RoleController::class, 'syncPermissions']);
+
+        // Auditoría
+        Route::get('security-events', [SecurityEventController::class, 'index']);
+
+        // Invitaciones
+        Route::get('invitations', [InvitationListController::class, 'index']);
 
         // Asignaciones Jerárquicas (Punto 35)
         Route::get('users/{id}/assignments', [UserAssignmentController::class, 'index']);

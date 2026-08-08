@@ -31,24 +31,22 @@ class ResetPasswordController extends Controller
         $hashedToken = hash('sha256', $request->token);
 
         $user = User::where('normalized_email', $email)->first();
+        if (! $user || $user->state !== 'ACTIVE') {
+            return response()->json(['message' => 'Usuario no encontrado o inactivo.'], 404);
+        }
 
         // Buscar el token activo usando los nombres canónicos del módulo 1.
         $resetRecord = DB::table('password_reset_tokens')
-            ->when($user !== null, fn ($query) => $query->where('user_id', $user->id))
+            ->where('user_id', $user->id)
             ->where('token_hash', $hashedToken)
             ->whereNull('consumed_at')
             ->whereNull('revoked_at')
             ->where('expires_at', '>', now())
             ->first();
 
-        // 1. Validar Token y Expiración (60 minutos)
-        if (! $resetRecord || $resetRecord->token !== $hashedToken || now()->diffInMinutes($resetRecord->created_at) > 60) {
+        // 1. Validar Token y Expiración (usando expires_at)
+        if (! $resetRecord) {
             return response()->json(['message' => 'El token de recuperación es inválido o ha expirado.'], 400);
-        }
-
-        $user = User::where('normalized_email', $email)->first();
-        if (! $user || $user->state !== 'ACTIVE') {
-            return response()->json(['message' => 'Usuario no encontrado o inactivo.'], 404);
         }
 
         // 2. Actualizar el Hash (Argon2id por defecto en Laravel 11)
@@ -56,7 +54,8 @@ class ResetPasswordController extends Controller
         $user->password_changed_at = now();
         $user->save();
 
-        // 3. Consumir lógicamente el token para conservar el historial.
+        // 3. Invalidar el Token (conservar el historial lógico si se requiere, pero usar borrado como en local o consumo si aplica)
+        // Consumir lógicamente el token para conservar el historial como define upstream.
         DB::table('password_reset_tokens')
             ->where('id', $resetRecord->id)
             ->update(['consumed_at' => now()]);

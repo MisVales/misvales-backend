@@ -46,7 +46,7 @@ trait ReauthenticatesMfa
         }
 
         // Validar el código TOTP provisto
-        $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->where('is_active', true)->first();
+        $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->whereNull('revoked_at')->first();
         if (! $mfaCredential) {
             return response()->json(['message' => 'No hay configuración MFA activa.'], 403);
         }

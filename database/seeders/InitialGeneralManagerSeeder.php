@@ -6,6 +6,9 @@ use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Mail;
+use App\Models\User;
+use App\Mail\ActivationInvitationMail;
 
 class InitialGeneralManagerSeeder extends Seeder
 {
@@ -56,7 +59,7 @@ class InitialGeneralManagerSeeder extends Seeder
                     'id' => $userId,
                     'name' => $managerName,
                     'email' => $managerEmail,
-                    'normalized_email' => strtoupper($managerEmail),
+                    'normalized_email' => strtolower(trim($managerEmail)),
                     'state' => 'PENDING_ACTIVATION',
                     'password' => null,
                     'email_verified_at' => null,
@@ -100,7 +103,7 @@ class InitialGeneralManagerSeeder extends Seeder
                     'id' => Str::uuid()->toString(),
                     'user_id' => $user->id,
                     'role_id' => $role->id,
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'scope_type' => 'GLOBAL',
                     'valid_from' => $now,
                     'valid_to' => null,
@@ -133,7 +136,15 @@ class InitialGeneralManagerSeeder extends Seeder
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
-                dump('Generated Token: '.$token);
+                
+                // Enviar el correo automáticamente
+                $userModel = User::find($user->id);
+                if ($userModel) {
+                    Mail::to($userModel->email)->send(new ActivationInvitationMail($userModel, $token));
+                    dump('Invitation email sent to: ' . $userModel->email);
+                } else {
+                    dump('Generated Token: '.$token);
+                }
             }
         });
     }

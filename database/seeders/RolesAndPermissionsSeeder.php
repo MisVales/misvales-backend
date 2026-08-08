@@ -36,6 +36,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Assignments Module
             ['module' => 'assignments', 'action' => 'manage', 'code' => 'assignments.manage', 'description' => 'Asignar distribuidoras a coordinadores y reasignar'],
+
+            // Audit Module
+            ['module' => 'audit', 'action' => 'view', 'code' => 'audit.view', 'description' => 'Ver auditoría y eventos de seguridad'],
         ];
 
         foreach ($permissions as $permissionData) {
