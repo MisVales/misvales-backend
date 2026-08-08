@@ -2,6 +2,31 @@
 
 namespace App\Providers;
 
+use App\Models\Distribuidora;
+use App\Models\SolicitudDistribuidora;
+use App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository;
+use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
+use App\Modules\Organization\Application\Branches\Repositories\BranchReadRepository;
+use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
+use App\Modules\Organization\Application\Personnel\Repositories\PersonnelReadRepository;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationHierarchyResolver;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationScopeResolver;
+use App\Modules\Organization\Domain\Assignments\Repositories\OrganizationAssignmentRepository;
+use App\Modules\Organization\Domain\Branches\Repositories\BranchRepository;
+use App\Modules\Organization\Infrastructure\Events\DatabaseOrganizationEventPublisher;
+use App\Modules\Organization\Infrastructure\IdentityAccess\EloquentOrganizationHierarchyResolver;
+use App\Modules\Organization\Infrastructure\IdentityAccess\EloquentOrganizationIdentityAccess;
+use App\Modules\Organization\Infrastructure\IdentityAccess\EloquentOrganizationScopeResolver;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentAssignmentReadRepository;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchReadRepository;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchRepository;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentOrganizationAssignmentRepository;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentPersonnelReadRepository;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
+use App\Policies\BranchPolicy;
+use App\Policies\DistribuidoraPolicy;
+use App\Policies\SolicitudDistribuidoraPolicy;
+use App\Services\Distribuidora\AuditorDistribuidora;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -15,15 +40,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(\App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentAssignmentReadRepository::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Events\OrganizationEventPublisher::class, \App\Modules\Organization\Infrastructure\Events\DatabaseOrganizationEventPublisher::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Identity\OrganizationIdentityAccess::class, \App\Modules\Organization\Infrastructure\Identity\EloquentOrganizationIdentityAccess::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Branches\Repositories\BranchRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchRepository::class);
-        $this->app->bind(\App\Modules\Organization\Application\Branches\Repositories\BranchReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchReadRepository::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Assignments\OrganizationScopeResolver::class, \App\Modules\Organization\Infrastructure\Assignments\EloquentOrganizationScopeResolver::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Assignments\OrganizationHierarchyResolver::class, \App\Modules\Organization\Infrastructure\Assignments\EloquentOrganizationHierarchyResolver::class);
-        $this->app->bind(\App\Modules\Organization\Domain\Assignments\Repositories\OrganizationAssignmentRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentOrganizationAssignmentRepository::class);
-        $this->app->bind(\App\Modules\Organization\Application\Personnel\Repositories\PersonnelReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentPersonnelReadRepository::class);
+        $this->app->bind(AssignmentReadRepository::class, EloquentAssignmentReadRepository::class);
+        $this->app->bind(OrganizationEventPublisher::class, DatabaseOrganizationEventPublisher::class);
+        $this->app->bind(OrganizationIdentityAccess::class, EloquentOrganizationIdentityAccess::class);
+        $this->app->bind(BranchRepository::class, EloquentBranchRepository::class);
+        $this->app->bind(BranchReadRepository::class, EloquentBranchReadRepository::class);
+        $this->app->bind(OrganizationScopeResolver::class, EloquentOrganizationScopeResolver::class);
+        $this->app->bind(OrganizationHierarchyResolver::class, EloquentOrganizationHierarchyResolver::class);
+        $this->app->bind(OrganizationAssignmentRepository::class, EloquentOrganizationAssignmentRepository::class);
+        $this->app->bind(PersonnelReadRepository::class, EloquentPersonnelReadRepository::class);
     }
 
     /**
@@ -31,8 +56,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::policy(\App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord::class, \App\Policies\BranchPolicy::class);
-        Gate::policy(\App\Models\SolicitudDistribuidora::class, \App\Policies\SolicitudDistribuidoraPolicy::class);
+        Gate::policy(BranchRecord::class, BranchPolicy::class);
+        Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
+        Gate::policy(Distribuidora::class, DistribuidoraPolicy::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
@@ -64,7 +90,36 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('resend_invitation', function (Request $request) {
-            return Limit::perMinute(3)->by($request->ip());
+            $distribuidora = $request->route('distributor');
+            $identificador = $distribuidora instanceof Distribuidora
+                ? $distribuidora->id
+                : (is_string($distribuidora) ? $distribuidora : $request->ip());
+
+            return Limit::perMinute(3)->by($identificador)->response(function () use ($request, $distribuidora) {
+                $afectada = $distribuidora instanceof Distribuidora
+                    ? $distribuidora
+                    : Distribuidora::query()->find(is_string($distribuidora) ? $distribuidora : null);
+
+                if ($afectada !== null && $request->user() !== null) {
+                    app(AuditorDistribuidora::class)->registrar(
+                        'DISTRIBUTOR_ACTIVATION_INVITATION_RESENT',
+                        'Distributor',
+                        $afectada->id,
+                        $request->user(),
+                        $afectada->branch_id,
+                        resultado: 'FAILED',
+                        motivo: 'DISTRIBUTOR_INVITATION_RATE_LIMITED',
+                    );
+                }
+
+                return response()->json(['error' => [
+                    'code' => 'DISTRIBUTOR_INVITATION_RATE_LIMITED',
+                    'message' => 'Se alcanzó el límite de reenvíos de invitación.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 429);
+            });
         });
     }
 }

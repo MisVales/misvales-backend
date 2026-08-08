@@ -1,5 +1,7 @@
 <?php
+
 namespace Database\Seeders;
+
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
@@ -39,6 +41,22 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Audit Module
             ['module' => 'audit', 'action' => 'view', 'code' => 'audit.view', 'description' => 'Ver auditoría y eventos de seguridad'],
+
+            // Distributor Applications Module
+            ['module' => 'distributor_applications', 'action' => 'view', 'code' => 'distributor_applications.view', 'description' => 'Consultar solicitudes de distribuidora dentro del alcance autorizado'],
+            ['module' => 'distributor_applications', 'action' => 'create', 'code' => 'distributor_applications.create', 'description' => 'Crear solicitudes de distribuidora'],
+            ['module' => 'distributor_applications', 'action' => 'update', 'code' => 'distributor_applications.update', 'description' => 'Actualizar solicitudes de distribuidora en captura'],
+            ['module' => 'distributor_applications', 'action' => 'submit', 'code' => 'distributor_applications.submit', 'description' => 'Enviar solicitudes de distribuidora a revisión'],
+            ['module' => 'distributor_applications', 'action' => 'view_sensitive', 'code' => 'distributor_applications.view_sensitive', 'description' => 'Consultar datos sensibles completos de una solicitud'],
+
+            // Distributors Module
+            ['module' => 'distributors', 'action' => 'view_any', 'code' => 'distributors.view_any', 'description' => 'Listar distribuidoras dentro del alcance autorizado'],
+            ['module' => 'distributors', 'action' => 'view', 'code' => 'distributors.view', 'description' => 'Consultar una distribuidora'],
+            ['module' => 'distributors', 'action' => 'activate', 'code' => 'distributors.activate', 'description' => 'Materializar una solicitud autorizada'],
+            ['module' => 'distributors', 'action' => 'assign_category', 'code' => 'distributors.assign_category', 'description' => 'Asignar una categoría publicada'],
+            ['module' => 'distributors', 'action' => 'view_category_history', 'code' => 'distributors.view_category_history', 'description' => 'Consultar el historial de categorías'],
+            ['module' => 'distributors', 'action' => 'resend_activation', 'code' => 'distributors.resend_activation', 'description' => 'Reenviar una invitación de activación'],
+            ['module' => 'distributors', 'action' => 'view_initial_credit', 'code' => 'distributors.view_initial_credit', 'description' => 'Consultar la línea inicial autorizada'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -109,10 +127,40 @@ class RolesAndPermissionsSeeder extends Seeder
 
                 $role->permissions()->syncWithoutDetaching($syncData);
             }
+
+            if ($roleData['code'] === 'branch_manager') {
+                $this->assignPerms($role, [
+                    'distributors.view_any', 'distributors.view', 'distributors.activate',
+                    'distributors.assign_category', 'distributors.view_category_history',
+                    'distributors.resend_activation', 'distributors.view_initial_credit',
+                ]);
+            }
+
+            if ($roleData['code'] === 'admin') {
+                $this->assignPerms($role, [
+                    'distributors.view_any', 'distributors.view',
+                    'distributors.view_category_history', 'distributors.view_initial_credit',
+                ]);
+            }
+
+            if ($roleData['code'] === 'coordinator') {
+                $this->assignPerms($role, [
+                    'distributors.view_any', 'distributors.view',
+                    'distributors.view_category_history', 'distributors.view_initial_credit',
+                ]);
+            }
+
+            if ($roleData['code'] === 'distributor') {
+                $this->assignPerms($role, [
+                    'distributors.view', 'distributors.view_category_history',
+                    'distributors.view_initial_credit',
+                ]);
+            }
         }
     }
 
-    private function assignPerms(Role $role, array $codes) {
+    private function assignPerms(Role $role, array $codes): void
+    {
         $permissions = Permission::whereIn('code', $codes)->get();
         $syncData = [];
         foreach ($permissions as $perm) {

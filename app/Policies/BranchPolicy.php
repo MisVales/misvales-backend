@@ -21,7 +21,7 @@ class BranchPolicy
 
     public function view(User $user, Branch $branch): bool
     {
-        if (!$user->hasPermissionTo('branches.view')) {
+        if (! $user->hasPermissionTo('branches.view')) {
             return false;
         }
 
@@ -31,30 +31,45 @@ class BranchPolicy
     public function create(User $user): bool
     {
         // General Manager with global scope and branches.create permission
-        if (!$user->hasPermissionTo('branches.create')) {
+        if (! $user->hasPermissionTo('branches.create')) {
             return false;
         }
 
         // Only users with GLOBAL scope can create branches
         return $user->roleScopes()
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->where('scope_type', 'GLOBAL')
             ->exists();
     }
 
     public function update(User $user, Branch $branch): bool
     {
-        if (!$user->hasPermissionTo('branches.update')) {
+        if (! $user->hasPermissionTo('branches.update')) {
             return false;
         }
 
         return $user->hasScopeForBranch($branch->id);
     }
 
+    public function updateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('branches.update');
+    }
+
+    public function activateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('branches.manage_state');
+    }
+
+    public function deactivateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('branches.manage_state');
+    }
+
     public function manageState(User $user, Branch $branch): bool
     {
-        if (!$user->hasPermissionTo('branches.manage_state')) {
+        if (! $user->hasPermissionTo('branches.manage_state')) {
             return false;
         }
 
@@ -63,7 +78,7 @@ class BranchPolicy
 
     public function managePersonnel(User $user, Branch $branch): bool
     {
-        if (!$user->hasPermissionTo('roles.assign')) {
+        if (! $user->hasPermissionTo('roles.assign')) {
             return false;
         }
 

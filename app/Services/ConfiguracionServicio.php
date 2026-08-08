@@ -41,7 +41,7 @@ class ConfiguracionServicio
         $enumTipo = \App\Enums\ConfigurationValueType::tryFrom($tipo);
         return match ($enumTipo) {
             \App\Enums\ConfigurationValueType::DECIMAL,
-            \App\Enums\ConfigurationValueType::PERCENTAGE => number_format((float) $valor, 4, '.', ''), // Previene floats en JSON y da 4 decimales
+            \App\Enums\ConfigurationValueType::PERCENTAGE => (float) number_format((float) $valor, 4, '.', ''),
             \App\Enums\ConfigurationValueType::INTEGER => (int) $valor,
             default => $valor,
         };

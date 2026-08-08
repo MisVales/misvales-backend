@@ -1,18 +1,38 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\BranchController as LegacyBranchController;
+use App\Http\Controllers\Api\V1\CoordinatorAssignmentController;
+use App\Http\Controllers\Api\V1\CategoriaController;
+use App\Http\Controllers\Api\V1\ConfiguracionController;
+use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PermissionController;
+use App\Http\Controllers\Api\V1\ProductoController;
+use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
-use App\Http\Controllers\Api\V1\SessionController;
-use App\Http\Controllers\Api\V1\UserAssignmentController;
-use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
+use App\Http\Controllers\Api\V1\SessionController;
+use App\Http\Controllers\Api\V1\SolicitudDistribuidoraController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvidenciaVerificacionController;
+use App\Http\Controllers\VerificacionDistribuidora\VerificacionDistribuidoraController;
+use App\Modules\Organization\Presentation\Http\Controllers\BranchAssignmentController;
+use App\Modules\Organization\Presentation\Http\Controllers\BranchController;
+use App\Modules\Organization\Presentation\Http\Controllers\BranchPersonnelController;
+use App\Modules\Organization\Presentation\Http\Controllers\PersonnelController;
+use App\Modules\Organization\Presentation\Http\Controllers\UserAssignmentCommandController;
+use App\Modules\Organization\Presentation\Http\Controllers\UserAssignmentQueryController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -85,22 +105,129 @@ Route::prefix('v1')->group(function () {
         // Invitaciones
         Route::get('invitations', [InvitationListController::class, 'index']);
 
+        // Módulo 3 - Configuraciones, categorías y productos versionados
+        Route::get('configurations', [ConfiguracionController::class, 'index']);
+        Route::post('configurations', [ConfiguracionController::class, 'store']);
+        Route::get('configurations/{key}', [ConfiguracionController::class, 'show']);
+        Route::get('configurations/{key}/versions', [ConfiguracionController::class, 'getVersionsByKey']);
+        Route::post('configurations/{key}/versions', [ConfiguracionController::class, 'storeVersionByKey']);
+        Route::put('configurations/{configuration}/versions/{id}/publish', [ConfiguracionController::class, 'publishNested']);
+        Route::get('configuration-versions/{id}', [ConfiguracionController::class, 'showVersion']);
+        Route::patch('configuration-versions/{id}', [ConfiguracionController::class, 'updateVersion']);
+        Route::post('configuration-versions/{id}/publish', [ConfiguracionController::class, 'publishVersion']);
+        Route::post('configuration-versions/{id}/deactivate', [ConfiguracionController::class, 'deactivateVersion']);
+
+        Route::get('categories', [CategoriaController::class, 'index']);
+        Route::post('categories', [CategoriaController::class, 'store']);
+        Route::get('categories/{id}', [CategoriaController::class, 'show']);
+        Route::get('categories/{id}/versions', [CategoriaController::class, 'getVersions']);
+        Route::post('categories/{id}/versions', [CategoriaController::class, 'storeVersion']);
+        Route::get('category-versions/{id}', [CategoriaController::class, 'showVersion']);
+        Route::patch('category-versions/{id}', [CategoriaController::class, 'updateVersion']);
+        Route::post('category-versions/{id}/publish', [CategoriaController::class, 'publishVersion']);
+        Route::post('categories/{id}/deactivate', [CategoriaController::class, 'deactivateCategory']);
+
+        Route::get('products', [ProductoController::class, 'index']);
+        Route::post('products', [ProductoController::class, 'store']);
+        Route::get('products/{id}', [ProductoController::class, 'show']);
+        Route::get('products/{id}/versions', [ProductoController::class, 'getVersions']);
+        Route::post('products/{id}/versions', [ProductoController::class, 'storeVersion']);
+        Route::get('product-versions/{id}', [ProductoController::class, 'showVersion']);
+        Route::patch('product-versions/{id}', [ProductoController::class, 'updateVersion']);
+        Route::post('product-versions/{id}/publish', [ProductoController::class, 'publishVersion']);
+        Route::post('products/{id}/deactivate', [ProductoController::class, 'deactivateProduct']);
+
         // Asignaciones Jerárquicas (Punto 35)
-        Route::get('users/{id}/assignments', [UserAssignmentController::class, 'index']);
-        Route::post('users/{id}/assignments', [UserAssignmentController::class, 'store']);
-        Route::delete('users/{id}/assignments/{assignmentId}', [UserAssignmentController::class, 'destroy']);
+        Route::get('users/{id}/assignments', [UserAssignmentQueryController::class, 'index']);
+        Route::post('users/{id}/assignments', [UserAssignmentCommandController::class, 'store']);
+        Route::patch('users/{id}/assignments/{assignmentId}', [UserAssignmentCommandController::class, 'update']);
+        Route::delete('users/{id}/assignments/{assignmentId}', [UserAssignmentCommandController::class, 'destroy']);
+
+        // Módulo 4 - Captura de solicitudes de distribuidora
+        Route::get('distributor-applications', [SolicitudDistribuidoraController::class, 'index']);
+        Route::post('distributor-applications', [SolicitudDistribuidoraController::class, 'store']);
+        Route::get('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'show']);
+        Route::patch('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'update']);
+        Route::put('distributor-applications/{application}/personal-data', [SolicitudDistribuidoraController::class, 'guardarDatosPersonales']);
+        Route::post('distributor-applications/{application}/submit', [SolicitudDistribuidoraController::class, 'enviarARevision']);
+
+        Route::get('distributor-applications/{application}/residences', [SolicitudDistribuidoraController::class, 'listarDomicilios']);
+        Route::post('distributor-applications/{application}/residences', [SolicitudDistribuidoraController::class, 'crearDomicilio']);
+        Route::patch('distributor-applications/{application}/residences/{residence}', [SolicitudDistribuidoraController::class, 'actualizarDomicilio']);
+        Route::delete('distributor-applications/{application}/residences/{residence}', [SolicitudDistribuidoraController::class, 'eliminarDomicilio']);
+
+        Route::get('distributor-applications/{application}/family-members', [SolicitudDistribuidoraController::class, 'listarFamiliares']);
+        Route::post('distributor-applications/{application}/family-members', [SolicitudDistribuidoraController::class, 'crearFamiliar']);
+        Route::patch('distributor-applications/{application}/family-members/{member}', [SolicitudDistribuidoraController::class, 'actualizarFamiliar']);
+        Route::delete('distributor-applications/{application}/family-members/{member}', [SolicitudDistribuidoraController::class, 'eliminarFamiliar']);
+
+        Route::get('distributor-applications/{application}/vehicles', [SolicitudDistribuidoraController::class, 'listarVehiculos']);
+        Route::post('distributor-applications/{application}/vehicles', [SolicitudDistribuidoraController::class, 'crearVehiculo']);
+        Route::patch('distributor-applications/{application}/vehicles/{vehicle}', [SolicitudDistribuidoraController::class, 'actualizarVehiculo']);
+        Route::delete('distributor-applications/{application}/vehicles/{vehicle}', [SolicitudDistribuidoraController::class, 'eliminarVehiculo']);
+
+        Route::get('distributor-applications/{application}/assets-liabilities', [SolicitudDistribuidoraController::class, 'listarPatrimonio']);
+        Route::post('distributor-applications/{application}/assets-liabilities', [SolicitudDistribuidoraController::class, 'crearPatrimonio']);
+        Route::patch('distributor-applications/{application}/assets-liabilities/{entry}', [SolicitudDistribuidoraController::class, 'actualizarPatrimonio']);
+        Route::delete('distributor-applications/{application}/assets-liabilities/{entry}', [SolicitudDistribuidoraController::class, 'eliminarPatrimonio']);
+
+        Route::get('distributor-applications/{application}/employments', [SolicitudDistribuidoraController::class, 'listarEmpleos']);
+        Route::post('distributor-applications/{application}/employments', [SolicitudDistribuidoraController::class, 'crearEmpleo']);
+        Route::patch('distributor-applications/{application}/employments/{employment}', [SolicitudDistribuidoraController::class, 'actualizarEmpleo']);
+        Route::delete('distributor-applications/{application}/employments/{employment}', [SolicitudDistribuidoraController::class, 'eliminarEmpleo']);
+
+        Route::get('distributor-applications/{application}/commercial-credits', [SolicitudDistribuidoraController::class, 'listarCreditosComerciales']);
+        Route::post('distributor-applications/{application}/commercial-credits', [SolicitudDistribuidoraController::class, 'crearCreditoComercial']);
+        Route::patch('distributor-applications/{application}/commercial-credits/{credit}', [SolicitudDistribuidoraController::class, 'actualizarCreditoComercial']);
+        Route::delete('distributor-applications/{application}/commercial-credits/{credit}', [SolicitudDistribuidoraController::class, 'eliminarCreditoComercial']);
+
+        // Módulo 5 - Revisión, visita, evaluación y autorización
+        Route::post('distributor-applications/{applicationId}/return-to-draft', [VerificacionDistribuidoraController::class, 'devolverACaptura']);
+        Route::post('distributor-applications/{applicationId}/assign-verifier', [VerificacionDistribuidoraController::class, 'asignarVerificador']);
+        Route::get('verification-visits', [VerificacionDistribuidoraController::class, 'consultarAsignadas']);
+        Route::get('verification-visits/{visitId}', [VerificacionDistribuidoraController::class, 'consultarVisita']);
+        Route::post('verification-visits/{visitId}/start', [VerificacionDistribuidoraController::class, 'iniciarVisita']);
+        Route::patch('verification-visits/{visitId}', [VerificacionDistribuidoraController::class, 'registrarDiferencias']);
+        Route::post('verification-visits/{visitId}/complete', [VerificacionDistribuidoraController::class, 'finalizarVisita']);
+        Route::get('distributor-applications/{applicationId}/corrections', [CorreccionSolicitudController::class, 'listarDiferencias']);
+        Route::post('distributor-applications/{applicationId}/corrections', [CorreccionSolicitudController::class, 'aplicarCorreccion']);
+        Route::post('distributor-applications/{applicationId}/corrections/complete', [CorreccionSolicitudController::class, 'finalizarCorrecciones']);
+        Route::get('distributor-applications/{applicationId}/evaluations', [EvaluacionSolicitudController::class, 'consultarEvaluacion']);
+        Route::post('distributor-applications/{applicationId}/evaluations', [EvaluacionSolicitudController::class, 'evaluar']);
+        Route::get('distributor-applications/{applicationId}/authorizations', [AutorizacionSolicitudController::class, 'consultarAutorizacion']);
+        Route::post('distributor-applications/{applicationId}/authorizations/approve', [AutorizacionSolicitudController::class, 'autorizar']);
+        Route::post('verification-visits/{visitId}/evidences', [EvidenciaVerificacionController::class, 'adjuntarEvidencia']);
+        Route::get('verification-visits/{visitId}/evidences', [EvidenciaVerificacionController::class, 'consultarEvidencia']);
+        Route::get('verification-evidences/{mediaId}/download', [EvidenciaVerificacionController::class, 'descargarEvidencia']);
+        Route::delete('verification-evidences/{mediaId}', [EvidenciaVerificacionController::class, 'eliminarEvidenciaAbierta']);
+
+        Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])
+            ->middleware(['permission:distributors.activate', 'idempotency']);
+
+        Route::get('distributors', [DistribuidoraController::class, 'index'])
+            ->middleware('permission:distributors.view_any');
+        Route::get('distributors/{distributor}', [DistribuidoraController::class, 'show'])
+            ->middleware('permission:distributors.view');
+        Route::get('distributors/{distributor}/category-assignments', [AsignacionCategoriaDistribuidoraController::class, 'index'])
+            ->middleware('permission:distributors.view_category_history');
+        Route::post('distributors/{distributor}/category-assignments', [AsignacionCategoriaDistribuidoraController::class, 'store'])
+            ->middleware('permission:distributors.assign_category');
+        Route::post('distributors/{distributor}/activation-invitations/resend', [ReenvioInvitacionDistribuidoraController::class, 'store'])
+            ->middleware(['permission:distributors.resend_activation', 'throttle:resend_invitation']);
 
         // Módulo 2 - Sucursales y Personal
-        Route::apiResource('branches', \App\Http\Controllers\Api\V1\BranchController::class)->except(['destroy']);
-        Route::patch('branches/{branch}/status', [\App\Http\Controllers\Api\V1\BranchController::class, 'changeStatus']);
-        
-        Route::get('branches/{branch}/personnel', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'index']);
-        Route::post('branches/{branch}/personnel', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'store']);
-        Route::delete('branches/{branch}/personnel/{assignment}', [\App\Http\Controllers\Api\V1\BranchPersonnelController::class, 'destroy']);
+        Route::apiResource('branches', BranchController::class)->except(['destroy']);
+        Route::post('branches/{id}/activate', [BranchController::class, 'activate']);
+        Route::post('branches/{id}/deactivate', [BranchController::class, 'deactivate']);
+        Route::patch('branches/{branch}/status', [LegacyBranchController::class, 'changeStatus']);
+
+        Route::get('branches/{id}/personnel', [BranchPersonnelController::class, 'index']);
+        Route::get('branches/{id}/assignments', [BranchAssignmentController::class, 'index']);
+        Route::get('personnel', [PersonnelController::class, 'index']);
 
         // Módulo 2 - Asignación Coordinador - Distribuidora
-        Route::get('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'index']);
-        Route::post('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'store']);
-        Route::delete('assignments/coordinator-distributor/{assignment}', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'destroy']);
+        Route::get('assignments/coordinator-distributor', [CoordinatorAssignmentController::class, 'index']);
+        Route::post('assignments/coordinator-distributor', [CoordinatorAssignmentController::class, 'store']);
+        Route::delete('assignments/coordinator-distributor/{assignment}', [CoordinatorAssignmentController::class, 'destroy']);
     });
 });

@@ -19,7 +19,7 @@ class MeController extends Controller
         $user->load(['roleScopes' => function ($query) {
             // Solo alcances activos y no vencidos
             $query->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->with(['role' => function ($roleQuery) {
                     $roleQuery->with('permissions');
                 }]);
@@ -39,6 +39,8 @@ class MeController extends Controller
                 'role' => $scope->role->code,
                 'role_name' => $scope->role->name,
                 'branch_id' => $scope->branch_id,
+                'scope_type' => $scope->scope_type,
+                'scope_id' => $scope->scope_id,
                 'permissions' => $rolePermissions,
             ];
 

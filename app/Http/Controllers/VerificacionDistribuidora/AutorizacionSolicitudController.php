@@ -19,12 +19,15 @@ class AutorizacionSolicitudController extends Controller {
     public function autorizar(AutorizarSolicitudRequest $request, string $applicationId) {
         $data = $request->validated();
         
-        if ($data['decision'] === ApplicationAuthorizationDecision::APPROVED->value) {
+        $decision = $data['decision'] ?? ApplicationAuthorizationDecision::APPROVED->value;
+
+        if ($decision === ApplicationAuthorizationDecision::APPROVED->value) {
             $auth = $this->autorizacionService->autorizar(
                 $applicationId, 
                 auth()->id(), 
-                $data['reason'], (int) $data['lock_version'], 
-                (float) $data['initial_credit_line_amount'], (int) $data['lock_version']
+                $data['reason'],
+                (float) $data['initial_credit_line_amount'],
+                (int) $data['lock_version'],
             );
             $msg = 'Solicitud autorizada exitosamente.';
         } else {
@@ -36,6 +39,6 @@ class AutorizacionSolicitudController extends Controller {
             $msg = 'Solicitud rechazada exitosamente.';
         }
 
-        return response()->json(['message' => $msg, 'data' => $auth], 201);
+        return response()->json(['message' => $msg, 'data' => $auth]);
     }
 }

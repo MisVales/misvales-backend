@@ -31,6 +31,7 @@ class UserFactory extends Factory
             'normalized_email' => strtolower($email),
             'email_verified_at' => now(),
             'password' => static::$password ??= Hash::make('password'),
+            'state' => 'ACTIVE',
         ];
     }
 

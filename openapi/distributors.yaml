@@ -1,0 +1,206 @@
+openapi: 3.1.0
+info:
+  title: MisVales API - Distribuidoras
+  version: 1.0.0
+paths:
+  /api/v1/distributors:
+    get:
+      summary: Listar distribuidoras dentro del alcance efectivo
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: coordinator_id, in: query, schema: { type: string, format: uuid } }
+        - { name: category_id, in: query, schema: { type: string, format: uuid } }
+        - { name: status, in: query, schema: { $ref: '#/components/schemas/DistributorStatus' } }
+        - { name: activation_status, in: query, schema: { $ref: '#/components/schemas/UserAccessStatus' } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [distributor_number, created_at, activated_at, status] } }
+        - { name: direction, in: query, schema: { type: string, enum: [asc, desc] } }
+      responses:
+        '200':
+          description: Listado paginado
+          content: { application/json: { schema: { $ref: '#/components/schemas/DistributorCollection' } } }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+  /api/v1/distributors/{id}:
+    get:
+      summary: Consultar detalle operativo, acceso, categoría y línea inicial
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200':
+          description: Detalle visible según permisos
+          content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/DistributorDetail' } } } } }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /api/v1/distributors/{id}/category-assignments:
+    get:
+      summary: Consultar historial de categorías
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Historial de asignaciones }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      summary: Cerrar la vigencia anterior y asignar una categoría publicada
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_version_id, starts_at, lock_version]
+              properties:
+                category_version_id: { type: string, format: uuid }
+                starts_at: { type: string, format: date-time }
+                reason: { type: [string, 'null'], maxLength: 255 }
+                lock_version: { type: integer, minimum: 1 }
+      responses:
+        '201': { description: Categoría asignada }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /api/v1/distributor-applications/{id}/activation:
+    post:
+      summary: Materializar una solicitud con autorización gerencial favorable
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, maxLength: 128 } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [category_version_id]
+              properties:
+                category_version_id: { type: string, format: uuid }
+      responses:
+        '201': { description: Distribuidora materializada }
+        '200': { description: Resultado existente recuperado idempotentemente }
+        '400': { description: Idempotency-Key ausente o inválida }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /api/v1/distributors/{id}/activation-invitations/resend:
+    post:
+      summary: Revocar invitaciones anteriores y enviar una nueva
+      security: [{ bearerAuth: [] }]
+      parameters: [{ $ref: '#/components/parameters/DistributorId' }]
+      responses:
+        '200': { description: Respuesta genérica de reenvío }
+        '401': { description: No autenticado }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '429': { description: Límite de reenvíos excedido }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
+  parameters:
+    DistributorId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  schemas:
+    DistributorStatus:
+      type: string
+      enum: [PENDING_ACTIVATION, ACTIVE, DISABLED]
+    UserAccessStatus:
+      type: string
+      enum: [INVITED, PENDING_ACTIVATION, ACTIVE, BLOCKED, DISABLED]
+    BranchSummary:
+      type: object
+      required: [id, name]
+      properties:
+        id: { type: string, format: uuid }
+        name: { type: string }
+    DistributorSummary:
+      type: object
+      required: [id, distributor_number, full_name, status, activation_status]
+      properties:
+        id: { type: string, format: uuid }
+        distributor_number: { type: string, pattern: '^DIS-[0-9]{4}-[0-9]{6,}$' }
+        full_name: { type: string }
+        branch: { $ref: '#/components/schemas/BranchSummary' }
+        coordinator: { type: [object, 'null'] }
+        category: { type: [object, 'null'] }
+        status: { $ref: '#/components/schemas/DistributorStatus' }
+        activation_status: { $ref: '#/components/schemas/UserAccessStatus' }
+        lock_version: { type: integer, minimum: 1 }
+    DistributorDetail:
+      allOf:
+        - { $ref: '#/components/schemas/DistributorSummary' }
+        - type: object
+          properties:
+            application_id: { type: string, format: uuid }
+            user_id: { type: string, format: uuid }
+            category_history: { type: array, items: { type: object } }
+            initial_credit: { type: [object, 'null'] }
+            initial_restriction: { type: [object, 'null'] }
+            origin: { type: object }
+            created_at: { type: string, format: date-time }
+            activated_at: { type: [string, 'null'], format: date-time }
+    DistributorCollection:
+      type: object
+      required: [data, meta]
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/DistributorSummary' } }
+        meta: { type: object }
+    DistributorErrorCode:
+      type: string
+      enum:
+        - DISTRIBUTOR_APPLICATION_NOT_APPROVED
+        - DISTRIBUTOR_ALREADY_EXISTS
+        - DISTRIBUTOR_NUMBER_CONFLICT
+        - DISTRIBUTOR_CATEGORY_NOT_PUBLISHED
+        - DISTRIBUTOR_CATEGORY_NOT_EFFECTIVE
+        - DISTRIBUTOR_COORDINATOR_SCOPE_INVALID
+        - DISTRIBUTOR_BRANCH_MISMATCH
+        - DISTRIBUTOR_USER_CONFLICT
+        - DISTRIBUTOR_INITIAL_CREDIT_INVALID
+        - DISTRIBUTOR_ACTIVATION_STATE_INVALID
+        - DISTRIBUTOR_INVITATION_RATE_LIMITED
+        - RESOURCE_VERSION_CONFLICT
+        - AUTH_SCOPE_DENIED
+        - DISTRIBUTOR_NOT_FOUND
+        - DISTRIBUTOR_VALIDATION_FAILED
+        - MISSING_IDEMPOTENCY_KEY
+        - IDEMPOTENCY_KEY_REUSED
+        - CONCURRENT_REQUEST
+    Error:
+      type: object
+      properties:
+        error:
+          type: object
+          required: [code, message, fields, details, request_id]
+          properties:
+            code: { $ref: '#/components/schemas/DistributorErrorCode' }
+            message: { type: string }
+            fields: { type: object }
+            details: { type: object }
+            request_id: { type: [string, 'null'] }
+  responses:
+    Forbidden:
+      description: Permiso o alcance denegado
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    NotFound:
+      description: Recurso no visible o inexistente
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    Conflict:
+      description: Conflicto de estado, duplicado o versión
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }
+    ValidationError:
+      description: Datos inválidos
+      content: { application/json: { schema: { $ref: '#/components/schemas/Error' } } }

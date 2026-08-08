@@ -33,7 +33,9 @@ class ConfiguracionController extends Controller
             $request->user()->id
         );
 
-        return new ConfiguracionResource($configuracion);
+        return (new ConfiguracionResource($configuracion))
+            ->response()
+            ->setStatusCode(201);
     }
 
     public function show(string $key)
@@ -82,7 +84,7 @@ class ConfiguracionController extends Controller
         $version = ConfigurationVersion::findOrFail($id);
 
         try {
-            $publicada = $this->servicio->publicarVersion($version, $request->validated(), $request->user()->id);
+            $publicada = $this->servicio->publicarVersion($version, $request->user()->id);
             return new ConfiguracionVersionResource($publicada);
         } catch (\InvalidArgumentException $e) {
             return response()->json(['message' => $e->getMessage()], 400);
@@ -92,7 +94,18 @@ class ConfiguracionController extends Controller
     public function deactivateVersion(\App\Http\Requests\Configuracion\TransicionVersionRequest $request, string $id)
     {
         $version = ConfigurationVersion::findOrFail($id);
-        $desactivada = $this->servicio->desactivarVersion($version, $request->validated(), $request->user()->id);
+        $desactivada = $this->servicio->desactivarVersion($version, $request->user()->id);
         return new ConfiguracionVersionResource($desactivada);
+    }
+
+    public function publishNested(Request $request, string $configuration, string $id)
+    {
+        $version = ConfigurationVersion::query()
+            ->where('configuration_definition_id', $configuration)
+            ->findOrFail($id);
+
+        return new ConfiguracionVersionResource(
+            $this->servicio->publicarVersion($version, $request->user()->id),
+        );
     }
 }

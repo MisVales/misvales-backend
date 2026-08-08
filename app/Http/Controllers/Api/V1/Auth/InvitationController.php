@@ -2,11 +2,14 @@
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\Enums\EstadoDistribuidora;
 use App\Http\Controllers\Controller;
 use App\Mail\ActivationInvitationMail;
 use App\Models\AccountInvitation;
+use App\Models\Distribuidora;
 use App\Models\MfaCredential;
 use App\Models\MfaRecoveryCode;
+use App\Models\OutboxEvent;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\WebAuthnService;
@@ -385,7 +388,7 @@ class InvitationController extends Controller
             }
         }
 
-        DB::transaction(function () use ($invitation) {
+        $distribuidoraActivada = DB::transaction(function () use ($invitation): ?Distribuidora {
             $user = $invitation->user;
 
             // 1. Activar cuenta finalmente
@@ -400,6 +403,32 @@ class InvitationController extends Controller
                 'recovery_codes_confirmed_at' => now(),
                 'exchange_token_hash' => null, // Invalidar explícitamente
             ]);
+
+            $distribuidora = Distribuidora::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($distribuidora !== null && $distribuidora->status === EstadoDistribuidora::PENDIENTE_ACTIVACION) {
+                $distribuidora->forceFill([
+                    'status' => EstadoDistribuidora::ACTIVA,
+                    'activated_at' => now(),
+                    'activated_by' => $user->id,
+                ])->save();
+
+                OutboxEvent::create([
+                    'event_type' => 'DISTRIBUTOR_ACCESS_ACTIVATED',
+                    'payload' => [
+                        'event_code' => 'EV-010',
+                        'distributor_id' => $distribuidora->id,
+                        'user_id' => $user->id,
+                        'branch_id' => $distribuidora->branch_id,
+                    ],
+                    'status' => 'PENDING',
+                ]);
+            }
+
+            return $distribuidora;
         });
 
         app(SecurityAuditService::class)->log($request, [
@@ -410,6 +439,18 @@ class InvitationController extends Controller
             'entity_id' => $invitation->id,
             'user_id' => $invitation->user_id,
         ]);
+
+        if ($distribuidoraActivada !== null) {
+            app(SecurityAuditService::class)->log($request, [
+                'event_type' => 'DISTRIBUTOR_ACCESS_ACTIVATED',
+                'severity' => 'INFO',
+                'outcome' => 'SUCCESS',
+                'entity_type' => 'Distributor',
+                'entity_id' => $distribuidoraActivada->id,
+                'user_id' => $invitation->user_id,
+                'branch_id' => $distribuidoraActivada->branch_id,
+            ]);
+        }
 
         app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ACCOUNT_ACTIVATED',

@@ -36,6 +36,14 @@ class AuthSession extends Model
         'revoked_at' => 'datetime',
     ];
 
+    protected static function booted(): void
+    {
+        static::creating(function (AuthSession $session): void {
+            $session->expires_at ??= now()->addHours(8);
+            $session->last_activity_at ??= now();
+        });
+    }
+
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
