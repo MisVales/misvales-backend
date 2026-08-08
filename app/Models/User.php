@@ -12,6 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
+use App\Models\Role;
 
 #[Fillable(['name', 'email', 'normalized_email', 'password', 'state', 'webauthn_user_handle'])]
 #[Hidden(['password', 'remember_token'])]
@@ -19,6 +20,8 @@ class User extends Authenticatable
 {
     /** @use HasFactory<UserFactory> */
     use HasApiTokens, HasFactory, HasUuids, Notifiable;
+
+    protected $appends = ['is_active', 'branch_id'];
 
     /**
      * Get the attributes that should be cast.

@@ -1,0 +1,31 @@
+<?php
+use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
+
+return new class extends Migration {
+    public function up(): void {
+        Schema::create('media_files', function (Blueprint $table) {
+            $table->uuid('id')->primary();
+            $table->uuid('verification_visit_id');
+            $table->string('file_type', 50);
+            $table->string('disk');
+            $table->text('path');
+            $table->string('original_name');
+            $table->string('mime_type');
+            $table->bigInteger('size_bytes');
+            $table->char('sha256', 64);
+            $table->uuid('uploaded_by');
+            $table->timestampsTz();
+
+            $table->foreign('verification_visit_id')->references('id')->on('verification_visits')->restrictOnDelete();
+            $table->foreign('uploaded_by')->references('id')->on('users')->restrictOnDelete();
+            
+            // Indice compuesto para evitar subida duplicada exacta en la misma visita
+            $table->unique(['verification_visit_id', 'sha256']);
+        });
+    }
+    public function down(): void {
+        Schema::dropIfExists('media_files');
+    }
+};

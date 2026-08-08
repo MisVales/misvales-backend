@@ -1,7 +1,5 @@
 <?php
-
 namespace Database\Seeders;
-
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
@@ -9,9 +7,6 @@ use Illuminate\Support\Str;
 
 class RolesAndPermissionsSeeder extends Seeder
 {
-    /**
-     * Run the database seeds.
-     */
     public function run(): void
     {
         $this->seedPermissions();
@@ -21,7 +16,6 @@ class RolesAndPermissionsSeeder extends Seeder
     private function seedPermissions(): void
     {
         $permissions = [
-            // Users Module
             ['module' => 'users', 'action' => 'view', 'code' => 'users.view', 'description' => 'Ver lista y detalle de usuarios'],
             ['module' => 'users', 'action' => 'create', 'code' => 'users.create', 'description' => 'Crear e invitar nuevos usuarios'],
             ['module' => 'users', 'action' => 'update', 'code' => 'users.update', 'description' => 'Modificar información de usuarios'],
@@ -31,8 +25,6 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'roles', 'action' => 'view', 'code' => 'roles.view', 'description' => 'Ver roles y permisos del sistema'],
             ['module' => 'roles', 'action' => 'assign', 'code' => 'roles.assign', 'description' => 'Asignar roles, sucursales y alcances operativos'],
             ['module' => 'roles', 'action' => 'manage_permissions', 'code' => 'roles.manage_permissions', 'description' => 'Modificar permisos de un rol'],
-
-            // Sessions Module
             ['module' => 'sessions', 'action' => 'view_global', 'code' => 'sessions.view_global', 'description' => 'Ver sesiones de otros usuarios'],
             ['module' => 'sessions', 'action' => 'revoke_global', 'code' => 'sessions.revoke_global', 'description' => 'Revocar sesiones de otros usuarios'],
 
@@ -47,10 +39,7 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
 
         foreach ($permissions as $permissionData) {
-            Permission::updateOrCreate(
-                ['code' => $permissionData['code']],
-                $permissionData
-            );
+            Permission::updateOrCreate(['code' => $permissionData['code']], $permissionData);
         }
     }
 
@@ -67,12 +56,9 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
 
         foreach ($roles as $roleData) {
-            $role = Role::updateOrCreate(
-                ['code' => $roleData['code']],
-                $roleData
-            );
+            $role = Role::updateOrCreate(['code' => $roleData['code']], $roleData);
+            $role->permissions()->detach(); // Reset permissions for clean seed
 
-            // Al Gerente General le damos todos los permisos por defecto
             if ($roleData['code'] === 'general_manager') {
                 $permissions = Permission::all();
                 $syncData = [];
@@ -121,5 +107,14 @@ class RolesAndPermissionsSeeder extends Seeder
                 $role->permissions()->syncWithoutDetaching($syncData);
             }
         }
+    }
+
+    private function assignPerms(Role $role, array $codes) {
+        $permissions = Permission::whereIn('code', $codes)->get();
+        $syncData = [];
+        foreach ($permissions as $perm) {
+            $syncData[$perm->id] = ['id' => Str::uuid()->toString(), 'granted_at' => now()];
+        }
+        $role->permissions()->syncWithoutDetaching($syncData);
     }
 }
