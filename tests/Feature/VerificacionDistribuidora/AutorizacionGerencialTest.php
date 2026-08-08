@@ -34,7 +34,7 @@ class AutorizacionGerencialTest extends Modulo5TestCase {
             ]);
 
         $response->assertStatus(200);
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::AUTHORIZED_PENDING_ACTIVATION->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::AUTHORIZED_PENDING_ACTIVATION->value]);
         
         // Validate isolation (No user or credit line created, handled in Modulo 6)
         $this->assertDatabaseMissing('users', ['email' => $app->applicant_data['personal_info']['rfc'] ?? '']); // Or any indicator of creation

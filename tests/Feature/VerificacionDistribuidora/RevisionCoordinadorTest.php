@@ -22,7 +22,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
             ]);
 
         $response->assertStatus(200);
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::DRAFT->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::DRAFT->value]);
         $this->assertDatabaseHas('audit_logs', ['event_type' => 'DISTRIBUTOR_APPLICATION_RETURNED_TO_DRAFT', 'entity_id' => $app->id]);
     }
 
@@ -58,7 +58,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
             ]);
 
         $response->assertStatus(200);
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::VERIFIER_ASSIGNED->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::VERIFIER_ASSIGNED->value]);
         $this->assertDatabaseHas('verification_visits', ['application_id' => $app->id, 'verifier_id' => $verifier->id]);
     }
 }

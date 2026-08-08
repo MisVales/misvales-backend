@@ -72,13 +72,13 @@ class BootstrapGeneralManager extends Command
             'user_id' => $user->id,
             'role_id' => $role->id,
             'branch_id' => null, // Alcance global
-            'valid_to' => null,
+            'revoked_at' => null,
             'status' => 'ACTIVE',
         ], [
             'scope_type' => 'GLOBAL',
-            'valid_from' => now(),
-            'assigned_by' => $user->id,
-            'reason' => 'Bootstrap inicial del sistema',
+            'assigned_at' => now(),
+            'assigned_by_user_id' => $user->id,
+            'assignment_reason' => 'Bootstrap inicial del sistema',
         ]);
 
         app(HeadquartersBranchSeeder::class)->run($user->id);

@@ -11,7 +11,7 @@ class DistributorApplication extends Model {
     use \Illuminate\Database\Eloquent\Factories\HasFactory;
     use HasUuids, HasOptimisticLocking, \App\Traits\MasksSensitiveData;
 
-    protected $table = 'distributor_applications';
+    protected $table = 'distributor_applications_m5';
     
     protected $fillable = [
         'applicant_data', 

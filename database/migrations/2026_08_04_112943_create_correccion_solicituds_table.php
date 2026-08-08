@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->timestampTz('corrected_at');
             $table->timestampsTz();
 
-            $table->foreign('application_id')->references('id')->on('distributor_applications')->restrictOnDelete();
+            $table->foreign('application_id')->references('id')->on('distributor_applications_m5')->restrictOnDelete();
             $table->foreign('verification_visit_id')->references('id')->on('verification_visits')->restrictOnDelete();
             $table->foreign('corrected_by')->references('id')->on('users')->restrictOnDelete();
         });

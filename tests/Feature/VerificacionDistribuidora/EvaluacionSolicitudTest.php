@@ -20,6 +20,6 @@ class EvaluacionSolicitudTest extends Modulo5TestCase {
             ]);
 
         $response->assertStatus(200); // Because we changed it to implicitly return Response
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::MANAGER_AUTHORIZATION->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::MANAGER_AUTHORIZATION->value]);
     }
 }

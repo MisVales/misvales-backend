@@ -15,15 +15,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->bind(AssignmentReadRepository::class, EloquentAssignmentReadRepository::class);
-        $this->app->bind(OrganizationEventPublisher::class, DatabaseOrganizationEventPublisher::class);
-        $this->app->bind(OrganizationIdentityAccess::class, EloquentOrganizationIdentityAccess::class);
-        $this->app->bind(BranchRepository::class, EloquentBranchRepository::class);
-        $this->app->bind(BranchReadRepository::class, EloquentBranchReadRepository::class);
-        $this->app->bind(OrganizationScopeResolver::class, EloquentOrganizationScopeResolver::class);
-        $this->app->bind(OrganizationHierarchyResolver::class, EloquentOrganizationHierarchyResolver::class);
-        $this->app->bind(OrganizationAssignmentRepository::class, EloquentOrganizationAssignmentRepository::class);
-        $this->app->bind(PersonnelReadRepository::class, EloquentPersonnelReadRepository::class);
+        $this->app->bind(\App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentAssignmentReadRepository::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Events\OrganizationEventPublisher::class, \App\Modules\Organization\Infrastructure\Events\DatabaseOrganizationEventPublisher::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Identity\OrganizationIdentityAccess::class, \App\Modules\Organization\Infrastructure\Identity\EloquentOrganizationIdentityAccess::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Branches\Repositories\BranchRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchRepository::class);
+        $this->app->bind(\App\Modules\Organization\Application\Branches\Repositories\BranchReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchReadRepository::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Assignments\OrganizationScopeResolver::class, \App\Modules\Organization\Infrastructure\Assignments\EloquentOrganizationScopeResolver::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Assignments\OrganizationHierarchyResolver::class, \App\Modules\Organization\Infrastructure\Assignments\EloquentOrganizationHierarchyResolver::class);
+        $this->app->bind(\App\Modules\Organization\Domain\Assignments\Repositories\OrganizationAssignmentRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentOrganizationAssignmentRepository::class);
+        $this->app->bind(\App\Modules\Organization\Application\Personnel\Repositories\PersonnelReadRepository::class, \App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentPersonnelReadRepository::class);
     }
 
     /**
@@ -31,8 +31,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
-        Gate::policy(BranchRecord::class, BranchPolicy::class);
-        Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
+        Gate::policy(\App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord::class, \App\Policies\BranchPolicy::class);
+        Gate::policy(\App\Models\SolicitudDistribuidora::class, \App\Policies\SolicitudDistribuidoraPolicy::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {

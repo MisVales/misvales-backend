@@ -14,7 +14,7 @@ return new class extends Migration {
             $table->text('reason')->nullable();
             $table->timestampsTz();
 
-            $table->foreign('application_id')->references('id')->on('distributor_applications')->restrictOnDelete();
+            $table->foreign('application_id')->references('id')->on('distributor_applications_m5')->restrictOnDelete();
             $table->foreign('user_id')->references('id')->on('users')->restrictOnDelete();
         });
     }

@@ -95,7 +95,7 @@ class InitialGeneralManagerSeeder extends Seeder
                 ->where('user_id', $user->id)
                 ->where('role_id', $role->id)
                 ->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->exists();
 
             if (! $scopeExists) {
@@ -105,11 +105,11 @@ class InitialGeneralManagerSeeder extends Seeder
                     'role_id' => $role->id,
                     'branch_id' => null,
                     'scope_type' => 'GLOBAL',
-                    'valid_from' => $now,
-                    'valid_to' => null,
+                    'assigned_at' => $now,
+                    'revoked_at' => null,
                     'status' => 'ACTIVE',
-                    'assigned_by' => $user->id,
-                    'reason' => 'Bootstrap inicial del sistema',
+                    'assigned_by_user_id' => $user->id,
+                    'assignment_reason' => 'Bootstrap inicial del sistema',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);

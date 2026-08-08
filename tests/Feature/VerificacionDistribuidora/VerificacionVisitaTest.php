@@ -33,7 +33,7 @@ class VerificacionVisitaTest extends Modulo5TestCase {
 
         $response->assertStatus(200);
         $this->assertDatabaseHas('verification_visits', ['id' => $visit->id, 'status' => VerificationVisitStatus::IN_PROGRESS->value]);
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::PHYSICAL_VERIFICATION->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::PHYSICAL_VERIFICATION->value]);
     }
 
     public function test_registro_de_diferencias() {
@@ -65,6 +65,6 @@ class VerificacionVisitaTest extends Modulo5TestCase {
             ]);
 
         $response->assertStatus(200);
-        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::TERMINATED_UNFAVORABLE->value]);
+        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::TERMINATED_UNFAVORABLE->value]);
     }
 }

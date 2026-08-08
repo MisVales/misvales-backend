@@ -117,8 +117,8 @@ class UserController extends Controller
                     'user_id' => $user->id,
                     'role_id' => $role->id,
                     'branch_id' => $request->branch_id,
-                    'assigned_by' => $request->user()->id,
-                    'valid_from' => now(),
+                    'assigned_by_user_id' => $request->user()->id,
+                    'assigned_at' => now(),
                     'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
                     'status' => 'ACTIVE',
                 ]);
@@ -277,7 +277,7 @@ class UserController extends Controller
                 'Tu cuenta ha sido suspendida temporalmente por un administrador del sistema por motivos de seguridad.',
                 [
                     'time' => now()->toDateTimeString(),
-                    'reason' => 'Violación de políticas de seguridad / Revisión manual',
+                    'assignment_reason' => 'Violación de políticas de seguridad / Revisión manual',
                 ]
             )
         );

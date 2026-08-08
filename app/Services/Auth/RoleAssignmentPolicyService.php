@@ -63,7 +63,7 @@ class RoleAssignmentPolicyService
         $scopes = UserRoleScope::with('role')
             ->where('user_id', $actor->id)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->get();
 
         foreach ($scopes as $scope) {
@@ -85,7 +85,7 @@ class RoleAssignmentPolicyService
     {
         $scopes = UserRoleScope::where('user_id', $actor->id)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->get();
 
         foreach ($scopes as $scope) {
@@ -111,7 +111,7 @@ class RoleAssignmentPolicyService
             ->where('user_id', $targetUser->id)
             ->where('branch_id', $branchId)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->get()
             ->pluck('role.code')
             ->toArray();

@@ -24,7 +24,7 @@ return new class extends Migration {
             $table->integer('lock_version')->default(1);
             $table->timestampsTz();
 
-            $table->foreign('application_id')->references('id')->on('distributor_applications')->restrictOnDelete();
+            $table->foreign('application_id')->references('id')->on('distributor_applications_m5')->restrictOnDelete();
             $table->foreign('verifier_id')->references('id')->on('users')->restrictOnDelete();
             $table->foreign('assigned_by')->references('id')->on('users')->restrictOnDelete();
         });

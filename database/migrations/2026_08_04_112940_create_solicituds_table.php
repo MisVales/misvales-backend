@@ -5,7 +5,7 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::create('distributor_applications', function (Blueprint $table) {
+        Schema::create('distributor_applications_m5', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->json('applicant_data')->comment('Datos de la aspirante');
             $table->string('status', 50)->default('COORDINATOR_REVIEW');
@@ -24,6 +24,6 @@ return new class extends Migration {
         });
     }
     public function down(): void {
-        Schema::dropIfExists('distributor_applications');
+        Schema::dropIfExists('distributor_applications_m5');
     }
 };

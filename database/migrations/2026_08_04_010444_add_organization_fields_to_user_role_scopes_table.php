@@ -42,9 +42,9 @@ return new class extends Migration
             CREATE UNIQUE INDEX user_role_scopes_active_global_unique
             ON user_role_scopes (user_id, role_id, scope_type)
             WHERE status = 'ACTIVE'
-              AND valid_to IS NULL
+              AND revoked_at IS NULL
               AND scope_type = 'GLOBAL';
-        ");
+        SQL);
 
         DB::statement(<<<'SQL'
             CREATE UNIQUE INDEX user_role_scopes_active_branch_unique
@@ -61,10 +61,10 @@ return new class extends Migration
             (scope_type = 'GLOBAL') OR 
             (scope_type = 'BRANCH' AND branch_id IS NOT NULL)
         );");
-        DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);');
+        DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (revoked_at IS NULL OR revoked_at > assigned_at);');
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
-            (status = 'ACTIVE' AND valid_to IS NULL AND ended_by IS NULL) OR 
-            (status IN ('ENDED', 'REVOKED') AND valid_to IS NOT NULL)
+            (status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) OR 
+            (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
         );");
 
         DB::statement(<<<'SQL'
@@ -74,7 +74,7 @@ return new class extends Migration
                 RAISE EXCEPTION 'No se deben eliminar físicamente asignaciones anteriores.';
             END;
             $$ LANGUAGE plpgsql;
-        ");
+        SQL);
         DB::statement('
             CREATE TRIGGER trg_prevent_urs_deletion
             BEFORE DELETE ON user_role_scopes
