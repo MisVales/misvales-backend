@@ -84,6 +84,23 @@ class RolesAndPermissionsSeeder extends Seeder
                 }
                 $role->permissions()->sync($syncData);
             }
+
+            if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
+                $permissionCodes = $roleData['code'] === 'branch_manager'
+                    ? ['branches.view', 'roles.assign']
+                    : ['branches.view'];
+                $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
+                $syncData = [];
+
+                foreach ($permissions as $permission) {
+                    $syncData[$permission->id] = [
+                        'id' => Str::uuid()->toString(),
+                        'granted_at' => now(),
+                    ];
+                }
+
+                $role->permissions()->syncWithoutDetaching($syncData);
+            }
         }
     }
 }

@@ -15,7 +15,15 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(AssignmentReadRepository::class, EloquentAssignmentReadRepository::class);
+        $this->app->bind(OrganizationEventPublisher::class, DatabaseOrganizationEventPublisher::class);
+        $this->app->bind(OrganizationIdentityAccess::class, EloquentOrganizationIdentityAccess::class);
+        $this->app->bind(BranchRepository::class, EloquentBranchRepository::class);
+        $this->app->bind(BranchReadRepository::class, EloquentBranchReadRepository::class);
+        $this->app->bind(OrganizationScopeResolver::class, EloquentOrganizationScopeResolver::class);
+        $this->app->bind(OrganizationHierarchyResolver::class, EloquentOrganizationHierarchyResolver::class);
+        $this->app->bind(OrganizationAssignmentRepository::class, EloquentOrganizationAssignmentRepository::class);
+        $this->app->bind(PersonnelReadRepository::class, EloquentPersonnelReadRepository::class);
     }
 
     /**
@@ -23,6 +31,8 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Gate::policy(BranchRecord::class, BranchPolicy::class);
+
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
             // El Super Admin (general_manager) o la comprobación dinámica por BD:

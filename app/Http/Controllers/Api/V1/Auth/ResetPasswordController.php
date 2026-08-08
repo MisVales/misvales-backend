@@ -30,9 +30,15 @@ class ResetPasswordController extends Controller
         $email = trim(strtolower($request->email));
         $hashedToken = hash('sha256', $request->token);
 
-        // Buscar el token en base de datos
+        $user = User::where('normalized_email', $email)->first();
+
+        // Buscar el token activo usando los nombres canónicos del módulo 1.
         $resetRecord = DB::table('password_reset_tokens')
-            ->where('email', $email)
+            ->when($user !== null, fn ($query) => $query->where('user_id', $user->id))
+            ->where('token_hash', $hashedToken)
+            ->whereNull('consumed_at')
+            ->whereNull('revoked_at')
+            ->where('expires_at', '>', now())
             ->first();
 
         // 1. Validar Token y Expiración (60 minutos)
@@ -50,8 +56,10 @@ class ResetPasswordController extends Controller
         $user->password_changed_at = now();
         $user->save();
 
-        // 3. Invalidar el Token
-        DB::table('password_reset_tokens')->where('email', $email)->delete();
+        // 3. Consumir lógicamente el token para conservar el historial.
+        DB::table('password_reset_tokens')
+            ->where('id', $resetRecord->id)
+            ->update(['consumed_at' => now()]);
 
         // 4. Revocar todas las sesiones activas (Punto 29)
         $activeSessions = AuthSession::where('user_id', $user->id)

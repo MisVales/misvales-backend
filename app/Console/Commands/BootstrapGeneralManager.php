@@ -7,6 +7,7 @@ use App\Models\AccountInvitation;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use Database\Seeders\HeadquartersBranchSeeder;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -79,6 +80,8 @@ class BootstrapGeneralManager extends Command
             'assigned_by' => $user->id,
             'reason' => 'Bootstrap inicial del sistema',
         ]);
+
+        app(HeadquartersBranchSeeder::class)->run($user->id);
 
         // Generar invitación (Punto 11)
         // Revisamos si ya tiene una invitación activa para no generar basura
