@@ -83,4 +83,9 @@ class Distribuidora extends Model
     {
         return $this->hasOne(LineaCredito::class, 'distributor_id');
     }
+
+    public function asignacionesClientes(): HasMany
+    {
+        return $this->hasMany(AsignacionClienteDistribuidora::class, 'distributor_id');
+    }
 }

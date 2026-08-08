@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Http\Requests\Api\V1\Cliente;
+
+use Illuminate\Contracts\Validation\Validator;
+use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Http\Exceptions\HttpResponseException;
+use Illuminate\Validation\Rule;
+
+class CrearClienteRequest extends FormRequest
+{
+    protected function prepareForValidation(): void
+    {
+        if (is_string($this->input('curp'))) {
+            $this->merge([
+                'curp' => mb_strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', trim($this->input('curp')))),
+            ]);
+        }
+    }
+
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
+        return [
+            'first_name' => ['required', 'string', 'max:120'],
+            'first_last_name' => ['required', 'string', 'max:120'],
+            'second_last_name' => ['nullable', 'string', 'max:120'],
+            'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
+            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zÑñ&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'birth_place' => ['required', 'string', 'max:160'],
+            'birth_state' => ['required', 'string', 'max:120'],
+            'birth_city' => ['required', 'string', 'max:120'],
+            'official_id_type' => ['required', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
+            'official_id_number' => ['nullable', 'string', 'max:80'],
+            'official_id_media_id' => ['nullable', 'uuid', 'exists:media_files,id'],
+
+            'address' => ['required', 'array'],
+            'address.street' => ['required', 'string', 'max:180'],
+            'address.exterior_number' => ['required', 'string', 'max:30'],
+            'address.interior_number' => ['nullable', 'string', 'max:30'],
+            'address.neighborhood' => ['required', 'string', 'max:160'],
+            'address.postal_code' => ['required', 'regex:/^\d{5}$/'],
+            'address.municipality' => ['required', 'string', 'max:160'],
+            'address.city' => ['required', 'string', 'max:160'],
+            'address.state' => ['required', 'string', 'max:120'],
+            'address.country' => ['sometimes', 'string', 'size:2'],
+            'address.address_proof_media_id' => ['nullable', 'uuid', 'exists:media_files,id'],
+
+            'bank_account' => ['required', 'array'],
+            'bank_account.bank_name' => ['required', 'string', 'max:160'],
+            'bank_account.account_holder_name' => ['required', 'string', 'max:240'],
+            'bank_account.account_number' => ['nullable', 'string', 'regex:/^\d{4,30}$/'],
+            'bank_account.clabe' => ['required', 'string', 'regex:/^\d{18}$/'],
+        ];
+    }
+
+    public function messages(): array
+    {
+        return [
+            'curp.regex' => 'La CURP no tiene un formato válido.',
+            'bank_account.clabe.regex' => 'La CLABE debe contener exactamente 18 dígitos.',
+            'address.postal_code.regex' => 'El código postal debe contener 5 dígitos.',
+        ];
+    }
+
+    protected function failedValidation(Validator $validator): void
+    {
+        throw new HttpResponseException(response()->json(['error' => [
+            'code' => 'CLIENT_VALIDATION_FAILED',
+            'message' => 'Los datos enviados no cumplen las reglas del registro de cliente.',
+            'fields' => $validator->errors(),
+            'details' => (object) [],
+            'request_id' => $this->attributes->get('request_id'),
+        ]], 422));
+    }
+}

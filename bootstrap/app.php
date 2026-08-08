@@ -118,6 +118,15 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (ModelNotFoundException $e, Request $request) {
             if ($request->is('api/*')) {
                 $model = $e->getModel();
+                if ($request->is('api/v1/clients*')) {
+                    return response()->json(['error' => [
+                        'code' => 'CLIENT_NOT_FOUND',
+                        'message' => 'El cliente o movimiento no existe o no está dentro del alcance autorizado.',
+                        'fields' => (object) [],
+                        'details' => (object) [],
+                        'request_id' => $request->attributes->get('request_id'),
+                    ]], 404);
+                }
                 if ($request->is('api/v1/distributors*')) {
                     return response()->json(['error' => [
                         'code' => 'DISTRIBUTOR_NOT_FOUND',
@@ -365,6 +374,15 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->renderable(function (NotFoundHttpException $e, Request $request) use ($distributorError) {
+            if ($request->is('api/v1/clients*')) {
+                return $distributorError(
+                    $request,
+                    'CLIENT_NOT_FOUND',
+                    'El cliente o movimiento no existe o no está dentro del alcance autorizado.',
+                    404,
+                );
+            }
+
             if (! $request->is('api/v1/distributor-applications*') || $request->route() === null || $request->route('application') === null) {
                 return null;
             }

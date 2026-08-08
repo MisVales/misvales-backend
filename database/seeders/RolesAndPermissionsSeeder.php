@@ -57,6 +57,16 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'distributors', 'action' => 'view_category_history', 'code' => 'distributors.view_category_history', 'description' => 'Consultar el historial de categorías'],
             ['module' => 'distributors', 'action' => 'resend_activation', 'code' => 'distributors.resend_activation', 'description' => 'Reenviar una invitación de activación'],
             ['module' => 'distributors', 'action' => 'view_initial_credit', 'code' => 'distributors.view_initial_credit', 'description' => 'Consultar la línea inicial autorizada'],
+
+            // Clients Module
+            ['module' => 'clients', 'action' => 'view', 'code' => 'clients.view', 'description' => 'Consultar clientes finales dentro del alcance autorizado'],
+            ['module' => 'clients', 'action' => 'view_sensitive', 'code' => 'clients.view_sensitive', 'description' => 'Consultar datos sensibles completos de clientes finales'],
+            ['module' => 'clients', 'action' => 'create', 'code' => 'clients.create', 'description' => 'Registrar clientes finales propios'],
+            ['module' => 'clients', 'action' => 'view_assignment_history', 'code' => 'clients.view_assignment_history', 'description' => 'Consultar historial de asignaciones del cliente'],
+            ['module' => 'clients', 'action' => 'view_bank_accounts', 'code' => 'clients.view_bank_accounts', 'description' => 'Consultar cuentas bancarias enmascaradas del cliente'],
+            ['module' => 'clients', 'action' => 'manage_bank_accounts', 'code' => 'clients.manage_bank_accounts', 'description' => 'Administrar cuentas bancarias del cliente'],
+            ['module' => 'clients', 'action' => 'view_portfolio', 'code' => 'clients.view_portfolio', 'description' => 'Consultar cartera informativa del cliente'],
+            ['module' => 'clients', 'action' => 'manage_portfolio', 'code' => 'clients.manage_portfolio', 'description' => 'Administrar cartera informativa propia'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -134,12 +144,20 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.assign_category', 'distributors.view_category_history',
                     'distributors.resend_activation', 'distributors.view_initial_credit',
                 ]);
+                $this->assignPerms($role, [
+                    'clients.view', 'clients.view_sensitive', 'clients.view_assignment_history',
+                    'clients.view_bank_accounts', 'clients.view_portfolio',
+                ]);
             }
 
             if ($roleData['code'] === 'admin') {
                 $this->assignPerms($role, [
                     'distributors.view_any', 'distributors.view',
                     'distributors.view_category_history', 'distributors.view_initial_credit',
+                ]);
+                $this->assignPerms($role, [
+                    'clients.view', 'clients.view_assignment_history',
+                    'clients.view_bank_accounts', 'clients.view_portfolio',
                 ]);
             }
 
@@ -148,12 +166,20 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view_any', 'distributors.view',
                     'distributors.view_category_history', 'distributors.view_initial_credit',
                 ]);
+                $this->assignPerms($role, [
+                    'clients.view', 'clients.view_assignment_history',
+                    'clients.view_bank_accounts', 'clients.view_portfolio',
+                ]);
             }
 
             if ($roleData['code'] === 'distributor') {
                 $this->assignPerms($role, [
                     'distributors.view', 'distributors.view_category_history',
                     'distributors.view_initial_credit',
+                ]);
+                $this->assignPerms($role, [
+                    'clients.view', 'clients.create', 'clients.view_bank_accounts',
+                    'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
                 ]);
             }
         }
