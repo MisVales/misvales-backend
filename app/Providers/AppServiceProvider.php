@@ -32,6 +32,7 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Gate::policy(BranchRecord::class, BranchPolicy::class);
+        Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {

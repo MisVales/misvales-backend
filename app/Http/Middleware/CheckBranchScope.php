@@ -15,11 +15,14 @@ class CheckBranchScope
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Se asume que el parámetro en la ruta se llama 'branch' o se pasa 'branch_id' en el body
-        $branchId = $request->route('branch') ?? $request->input('branch_id');
+        $solicitud = $request->route('application');
+        $branchId = $solicitud instanceof SolicitudDistribuidora
+            ? $solicitud->branch_id
+            : ($request->route('branch') ?? $request->input('branch_id'));
 
         if ($branchId && $request->user()) {
             $hasScope = UserRoleScope::where('user_id', $request->user()->id)
+                ->where('status', 'ACTIVE')
                 ->whereNull('revoked_at')
                 ->where(function ($query) use ($branchId) {
                     $query->whereNull('branch_id') // Acceso Global
