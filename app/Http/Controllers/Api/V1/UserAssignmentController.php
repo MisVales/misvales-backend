@@ -31,7 +31,7 @@ class UserAssignmentController extends Controller
         $assignments = UserRoleScope::with(['role', 'assignedBy'])
             ->where('user_id', $userId)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->get();
 
         return response()->json($assignments);
@@ -71,7 +71,7 @@ class UserAssignmentController extends Controller
             ->where('role_id', $request->role_id)
             ->where('branch_id', $request->branch_id)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->exists();
 
         if ($exists) {
@@ -83,8 +83,8 @@ class UserAssignmentController extends Controller
             'user_id' => $user->id,
             'role_id' => $request->role_id,
             'branch_id' => $request->branch_id,
-            'assigned_by' => $request->user()->id,
-            'valid_from' => now(),
+            'assigned_by_user_id' => $request->user()->id,
+            'assigned_at' => now(),
             'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
             'status' => 'ACTIVE',
         ]);
@@ -115,7 +115,7 @@ class UserAssignmentController extends Controller
         $assignment = UserRoleScope::where('id', $assignmentId)
             ->where('user_id', $userId)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->firstOrFail();
 
         Gate::authorize('delete', $assignment);
@@ -125,9 +125,9 @@ class UserAssignmentController extends Controller
             return $reauthResult;
         }
 
-        $assignment->valid_to = now();
-        $assignment->ended_by = $request->user()->id;
-        $assignment->reason = 'REVOKED_BY_ADMIN';
+        $assignment->revoked_at = now();
+        $assignment->revoked_by_user_id = $request->user()->id;
+        $assignment->revocation_reason = 'REVOKED_BY_ADMIN';
         $assignment->status = 'REVOKED';
         $assignment->save();
 

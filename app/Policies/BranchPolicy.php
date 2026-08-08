@@ -38,7 +38,7 @@ class BranchPolicy
         // Only users with GLOBAL scope can create branches
         return $user->roleScopes()
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->where('scope_type', 'GLOBAL')
             ->exists();
     }

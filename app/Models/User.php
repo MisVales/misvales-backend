@@ -12,7 +12,6 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 use Laravel\Sanctum\HasApiTokens;
-use App\Models\Role;
 
 #[Fillable(['name', 'email', 'normalized_email', 'password', 'state', 'webauthn_user_handle'])]
 #[Hidden(['password', 'remember_token'])]
@@ -61,7 +60,7 @@ class User extends Authenticatable
 
         return $this->roleScopes()
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->whereHas('role.permissions', function ($query) use ($permissionKey) {
                 $query->where('code', $permissionKey);
             })
@@ -80,11 +79,64 @@ class User extends Authenticatable
 
         return $this->roleScopes()
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->where(function ($query) use ($branchId) {
                 $query->where('scope_type', 'GLOBAL')
-                      ->orWhere('branch_id', $branchId);
+                    ->orWhere('branch_id', $branchId);
             })
+            ->exists();
+    }
+
+    /**
+     * Get active status.
+     */
+    public function getIsActiveAttribute(): bool
+    {
+        return $this->state === 'ACTIVE';
+    }
+
+    /**
+     * Get branch id from active scopes.
+     */
+    public function getBranchIdAttribute(): ?string
+    {
+        return $this->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNotNull('branch_id')
+            ->whereNull('revoked_at')
+            ->value('branch_id');
+    }
+
+    /**
+     * Assign role with optional branch_id.
+     */
+    public function assignRole(string $roleCode, ?string $branchId = null): void
+    {
+        $role = Role::query()->where('code', $roleCode)->first();
+
+        if ($role === null) {
+            return;
+        }
+
+        $this->roleScopes()->create([
+            'role_id' => $role->id,
+            'branch_id' => $branchId,
+            'scope_type' => $branchId === null ? 'GLOBAL' : 'BRANCH',
+            'assigned_by_user_id' => $this->id,
+            'assigned_at' => now(),
+            'status' => 'ACTIVE',
+        ]);
+    }
+
+    /**
+     * Check if user has an active role.
+     */
+    public function hasRole(string $roleCode): bool
+    {
+        return $this->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at')
+            ->whereHas('role', fn ($query) => $query->where('code', $roleCode))
             ->exists();
     }
 }

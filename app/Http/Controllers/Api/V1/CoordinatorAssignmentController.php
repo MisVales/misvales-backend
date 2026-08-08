@@ -61,7 +61,7 @@ class CoordinatorAssignmentController extends Controller
             })
             ->where('branch_id', $validated['branch_id'])
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->exists();
 
         if (!$isCoordinator) {

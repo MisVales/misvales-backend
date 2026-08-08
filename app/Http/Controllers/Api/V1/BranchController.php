@@ -26,14 +26,14 @@ class BranchController extends Controller
         
         $hasGlobalScope = $user->roleScopes()
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->where('scope_type', 'GLOBAL')
             ->exists();
 
         if (!$hasGlobalScope) {
             $branchIds = $user->roleScopes()
                 ->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->where('scope_type', 'BRANCH')
                 ->pluck('branch_id')
                 ->unique();

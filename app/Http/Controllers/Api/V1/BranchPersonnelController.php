@@ -27,7 +27,7 @@ class BranchPersonnelController extends Controller
         $personnel = UserRoleScope::with(['user', 'role'])
             ->where('branch_id', $branch->id)
             ->where('status', 'ACTIVE')
-            ->whereNull('valid_to')
+            ->whereNull('revoked_at')
             ->get();
 
         return response()->json($personnel);
@@ -71,7 +71,7 @@ class BranchPersonnelController extends Controller
                 ->where('role_id', $role->id)
                 ->where('branch_id', $branch->id)
                 ->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->first();
 
             if ($existing) {
@@ -84,8 +84,8 @@ class BranchPersonnelController extends Controller
                 'user_id' => $user->id,
                 'role_id' => $role->id,
                 'branch_id' => $branch->id,
-                'assigned_by' => $request->user()->id,
-                'valid_from' => now(),
+                'assigned_by_user_id' => $request->user()->id,
+                'assigned_at' => now(),
                 'scope_type' => 'BRANCH',
                 'status' => 'ACTIVE',
             ]);
@@ -116,14 +116,14 @@ class BranchPersonnelController extends Controller
             return response()->json(['message' => 'La asignación no pertenece a esta sucursal.'], 403);
         }
 
-        if ($assignment->status !== 'ACTIVE' || $assignment->valid_to !== null) {
+        if ($assignment->status !== 'ACTIVE' || $assignment->revoked_at !== null) {
             return response()->json(['message' => 'La asignación ya está terminada o revocada.'], 400);
         }
 
         $assignment->status = 'ENDED';
-        $assignment->valid_to = now();
-        $assignment->ended_by = $request->user()->id;
-        $assignment->reason = $request->input('reason', 'Asignación retirada');
+        $assignment->revoked_at = now();
+        $assignment->revoked_by_user_id = $request->user()->id;
+        $assignment->revocation_reason = $request->input('reason', 'Asignación retirada');
         $assignment->save();
 
         app(SecurityAuditService::class)->log($request, [
