@@ -5,9 +5,16 @@ namespace App\Services\Auth;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
+use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
 
 class RoleAssignmentPolicyService
 {
+    public function __construct(
+        private readonly OrganizationAssignmentRules $assignmentRules,
+    ) {}
+
     /**
      * Diccionario de rangos para establecer la jerarquía.
      * Un rol solo puede asignar roles con un rango ESTRICTAMENTE MENOR al suyo máximo.
@@ -28,11 +35,21 @@ class RoleAssignmentPolicyService
     public function validateAssignment(User $actor, User $targetUser, Role $roleToAssign, ?string $branchId)
     {
         // 1. Estado del usuario receptor
-        if (!in_array($targetUser->state, ['ACTIVE', 'INVITED', 'PENDING_ACTIVATION'])) {
+        if (! in_array($targetUser->state, ['ACTIVE', 'INVITED', 'PENDING_ACTIVATION'])) {
             return 'El usuario receptor no está en un estado válido para recibir asignaciones.';
         }
 
-        // 2. Jerarquía
+        // 2. Alcance permitido por la matriz organizacional autoritativa.
+        // Los controladores heredados solo representan GLOBAL o BRANCH.
+        $scope = $branchId === null ? OrganizationScope::GLOBAL : OrganizationScope::BRANCH;
+
+        try {
+            $this->assignmentRules->assertRoleAllowsScope($roleToAssign->code, $scope);
+        } catch (RoleScopeNotAllowed $exception) {
+            return $exception->getMessage();
+        }
+
+        // 3. Jerarquía
         $actorMaxRank = $this->getActorMaxRank($actor);
         $roleRank = $this->ranks[$roleToAssign->code] ?? 10; // Roles no listados tienen rango bajo
 
@@ -40,12 +57,12 @@ class RoleAssignmentPolicyService
             return "No tienes el nivel jerárquico suficiente para asignar el rol de '{$roleToAssign->name}'.";
         }
 
-        // 3. Alcance del Actor
+        // 4. Alcance del Actor
         if (! $this->actorHasScopeOverBranch($actor, $branchId)) {
             return 'No tienes jurisdicción sobre la sucursal seleccionada para realizar asignaciones.';
         }
 
-        // 4. Separación de Funciones (Segregation of Duties)
+        // 5. Separación de Funciones (Segregation of Duties)
         $sodConflict = $this->checkSegregationOfDuties($targetUser, $roleToAssign, $branchId);
         if ($sodConflict) {
             return "Violación de Separación de Funciones (SoD): {$sodConflict}";
@@ -83,18 +100,21 @@ class RoleAssignmentPolicyService
      */
     private function actorHasScopeOverBranch(User $actor, ?string $targetBranchId): bool
     {
-        $scopes = UserRoleScope::where('user_id', $actor->id)
+        $scopes = UserRoleScope::with('role')
+            ->where('user_id', $actor->id)
             ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->get();
 
         foreach ($scopes as $scope) {
-            // Si el actor tiene un rol global, puede asignar donde sea.
-            if ($scope->branch_id === null) {
+            // Solo los roles globales definidos por la matriz tienen
+            // jurisdicción sobre todas las sucursales.
+            if ($scope->scope_type === 'GLOBAL'
+                && in_array($scope->role?->code, ['general_manager', 'admin'], true)) {
                 return true;
             }
-            // Si coincide la sucursal, puede asignar ahí.
-            if ($scope->branch_id === $targetBranchId) {
+
+            if ($scope->scope_type === 'BRANCH' && $scope->branch_id === $targetBranchId) {
                 return true;
             }
         }

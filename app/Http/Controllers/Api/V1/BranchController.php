@@ -6,7 +6,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Branch;
 use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
@@ -23,21 +22,24 @@ class BranchController extends Controller
 
         // Enforce scope: if the user does NOT have global scope, filter to branches they have access to.
         $user = $request->user();
-        
+
         $hasGlobalScope = $user->roleScopes()
             ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->where('scope_type', 'GLOBAL')
+            ->whereHas('role', function ($roleQuery) {
+                $roleQuery->whereIn('code', ['general_manager', 'admin']);
+            })
             ->exists();
 
-        if (!$hasGlobalScope) {
+        if (! $hasGlobalScope) {
             $branchIds = $user->roleScopes()
                 ->where('status', 'ACTIVE')
                 ->whereNull('revoked_at')
                 ->where('scope_type', 'BRANCH')
                 ->pluck('branch_id')
                 ->unique();
-                
+
             $query->whereIn('id', $branchIds);
         }
 
@@ -84,6 +86,7 @@ class BranchController extends Controller
     public function show(Request $request, Branch $branch)
     {
         Gate::authorize('view', $branch);
+
         return response()->json($branch);
     }
 
@@ -95,7 +98,7 @@ class BranchController extends Controller
         Gate::authorize('update', $branch);
 
         $validated = $request->validate([
-            'code' => 'sometimes|string|max:20|unique:branches,code,' . $branch->id,
+            'code' => 'sometimes|string|max:20|unique:branches,code,'.$branch->id,
             'name' => 'sometimes|string|max:150',
         ]);
 

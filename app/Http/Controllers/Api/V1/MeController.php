@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
+use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class MeController extends Controller
 {
@@ -11,7 +15,7 @@ class MeController extends Controller
      * GET /api/v1/me
      * Devuelve la identidad del usuario, alcances y permisos efectivos.
      */
-    public function show(Request $request)
+    public function show(Request $request, OrganizationAssignmentRules $assignmentRules)
     {
         $user = $request->user();
 
@@ -30,6 +34,20 @@ class MeController extends Controller
 
         foreach ($user->roleScopes as $scope) {
             if (! $scope->role) {
+                continue;
+            }
+
+            try {
+                $organizationScope = OrganizationScope::fromString($scope->scope_type);
+                $assignmentRules->assertRoleAllowsScope($scope->role->code, $organizationScope);
+            } catch (InvalidArgumentException|RoleScopeNotAllowed) {
+                // Una asignación estructuralmente inválida no concede
+                // capacidades efectivas ni se anuncia al cliente.
+                continue;
+            }
+
+            if (($organizationScope === OrganizationScope::BRANCH && $scope->branch_id === null)
+                || ($organizationScope === OrganizationScope::GLOBAL && $scope->branch_id !== null)) {
                 continue;
             }
 

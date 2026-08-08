@@ -81,8 +81,15 @@ class User extends Authenticatable
             ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->where(function ($query) use ($branchId) {
-                $query->where('scope_type', 'GLOBAL')
-                    ->orWhere('branch_id', $branchId);
+                $query->where(function ($globalQuery) {
+                    $globalQuery->where('scope_type', 'GLOBAL')
+                        ->whereHas('role', function ($roleQuery) {
+                            $roleQuery->whereIn('code', ['general_manager', 'admin']);
+                        });
+                })->orWhere(function ($branchQuery) use ($branchId) {
+                    $branchQuery->where('scope_type', 'BRANCH')
+                        ->where('branch_id', $branchId);
+                });
             })
             ->exists();
     }

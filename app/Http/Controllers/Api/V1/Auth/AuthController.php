@@ -36,15 +36,16 @@ class AuthController extends Controller
         $ip = $request->ip();
         $email = trim(strtolower($request->email));
         $throttleKey = "login_attempts_{$ip}_{$email}";
+        $rateLimitEnabled = (bool) config('ratelimit.enabled', true);
 
         // 1. Bloqueo Progresivo Ciego (Punto 42)
-        $lockoutSeconds = $lockoutService->checkLockout($ip, $email);
+        $lockoutSeconds = $rateLimitEnabled ? $lockoutService->checkLockout($ip, $email) : null;
         if ($lockoutSeconds) {
             return response()->json(['error' => 'RATE_LIMIT_EXCEEDED', 'message' => "Demasiados intentos. Intente nuevamente en {$lockoutSeconds} segundos."], 429);
         }
 
         // 2. Rate Limiting General (Punto 41)
-        if (RateLimiter::tooManyAttempts($throttleKey, 5)) {
+        if ($rateLimitEnabled && RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
 
             return response()->json(['error' => 'RATE_LIMIT_EXCEEDED', 'message' => "Demasiados intentos. Intente nuevamente en {$seconds} segundos."], 429);
@@ -54,8 +55,10 @@ class AuthController extends Controller
 
         // 3. Verificación de existencia y estado ciego
         if (! $user || $user->state !== 'ACTIVE') {
-            RateLimiter::hit($throttleKey);
-            $lockoutService->recordFailedAttempt($ip, $email);
+            if ($rateLimitEnabled) {
+                RateLimiter::hit($throttleKey);
+                $lockoutService->recordFailedAttempt($ip, $email);
+            }
 
             app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'LOGIN_FAILED',
@@ -70,8 +73,10 @@ class AuthController extends Controller
 
         // 4. Verificación de contraseña
         if (! Hash::check($request->password, $user->password)) {
-            RateLimiter::hit($throttleKey);
-            $lockoutService->recordFailedAttempt($ip, $email);
+            if ($rateLimitEnabled) {
+                RateLimiter::hit($throttleKey);
+                $lockoutService->recordFailedAttempt($ip, $email);
+            }
 
             app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'LOGIN_FAILED',
