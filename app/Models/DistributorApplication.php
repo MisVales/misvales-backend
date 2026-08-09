@@ -9,6 +9,8 @@ use App\Traits\MasksSensitiveData;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DistributorApplication extends Model
@@ -20,12 +22,14 @@ class DistributorApplication extends Model
 
     protected $fillable = [
         'applicant_data',
+        'original_applicant_data',
         'pending_sections',
         'status',
         'branch_id',
         'coordinator_id',
         'verifier_id',
         'manager_id',
+        'submitted_by',
         'lock_version',
     ];
 
@@ -33,6 +37,7 @@ class DistributorApplication extends Model
 
     protected $casts = [
         'applicant_data' => 'array',
+        'original_applicant_data' => 'array',
         'masked_applicant_data' => 'array',
         'pending_sections' => 'array',
         'status' => ApplicationStatus::class,
@@ -46,6 +51,36 @@ class DistributorApplication extends Model
     public function autorizacion(): HasOne
     {
         return $this->hasOne(ApplicationAuthorization::class, 'application_id');
+    }
+
+    public function authorization(): HasOne
+    {
+        return $this->autorizacion();
+    }
+
+    public function verificationVisits(): HasMany
+    {
+        return $this->hasMany(VerificationVisit::class, 'application_id');
+    }
+
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(ApplicationCorrection::class, 'application_id');
+    }
+
+    public function evaluation(): HasOne
+    {
+        return $this->hasOne(ApplicationEvaluation::class, 'application_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
+    }
+
+    public function submitter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'submitted_by');
     }
 
     public function transitionTo(ApplicationStatus $newStatus, string $userId, ?string $reason = null): void

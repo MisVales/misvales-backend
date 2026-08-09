@@ -24,6 +24,11 @@ use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvidenciaVerificacionController;
+use App\Http\Controllers\VerificacionDistribuidora\VerificacionDistribuidoraController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchAssignmentController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchPersonnelController;
@@ -168,6 +173,43 @@ Route::prefix('v1')->group(function () {
         Route::patch('redemption-periods/{id}', [PeriodoCanjeController::class, 'update']);
         Route::post('redemption-periods/{id}/publish', [PeriodoCanjeController::class, 'publish']);
         Route::post('redemption-periods/{id}/cancel', [PeriodoCanjeController::class, 'cancel']);
+
+        // Módulo 5 - Verificación y autorización formal de distribuidoras
+        Route::get('distributor-applications', [VerificacionDistribuidoraController::class, 'index'])
+            ->middleware('permission:verification.applications.view');
+        Route::get('distributor-applications/{application}', [VerificacionDistribuidoraController::class, 'show'])
+            ->middleware('permission:verification.applications.view');
+        Route::get('distributor-applications/{application}/available-verifiers', [VerificacionDistribuidoraController::class, 'verificadoresDisponibles'])
+            ->middleware('permission:verification.verifiers.assign');
+        Route::post('distributor-applications/{application}/assign-verifier', [VerificacionDistribuidoraController::class, 'asignarVerificador'])
+            ->middleware('permission:verification.verifiers.assign');
+
+        Route::get('verification-visits/assigned', [VerificacionDistribuidoraController::class, 'consultarAsignadas'])
+            ->middleware('permission:verification.visits.view');
+        Route::get('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'consultarVisita'])
+            ->middleware('permission:verification.visits.view');
+        Route::post('verification-visits/{visit}/start', [VerificacionDistribuidoraController::class, 'iniciarVisita'])
+            ->middleware('permission:verification.visits.perform');
+        Route::put('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'actualizarVisita'])
+            ->middleware('permission:verification.visits.perform');
+        Route::post('verification-visits/{visit}/finish', [VerificacionDistribuidoraController::class, 'finalizarVisita'])
+            ->middleware('permission:verification.visits.perform');
+
+        Route::post('verification-visits/{visit}/evidences', [EvidenciaVerificacionController::class, 'adjuntarEvidencia'])
+            ->middleware(['permission:verification.evidences.manage', 'throttle:30,1']);
+        Route::get('verification-visits/{visit}/evidences/{evidence}/download', [EvidenciaVerificacionController::class, 'descargarEvidencia'])
+            ->middleware('permission:verification.visits.view');
+        Route::delete('verification-visits/{visit}/evidences/{evidence}', [EvidenciaVerificacionController::class, 'eliminarEvidenciaAbierta'])
+            ->middleware('permission:verification.evidences.manage');
+
+        Route::post('distributor-applications/{application}/corrections', [CorreccionSolicitudController::class, 'aplicarCorreccion'])
+            ->middleware('permission:verification.corrections.manage');
+        Route::post('distributor-applications/{application}/corrections/finish', [CorreccionSolicitudController::class, 'finalizarCorrecciones'])
+            ->middleware('permission:verification.corrections.manage');
+        Route::post('distributor-applications/{application}/evaluate', [EvaluacionSolicitudController::class, 'evaluar'])
+            ->middleware('permission:verification.evaluations.decide');
+        Route::post('distributor-applications/{application}/authorize', [AutorizacionSolicitudController::class, 'autorizar'])
+            ->middleware('permission:verification.authorizations.decide');
 
         // Módulo 6 - Activación y administración de distribuidoras
         Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])

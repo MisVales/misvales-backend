@@ -2,24 +2,19 @@
 
 namespace App\Exceptions;
 
-use Exception;
-use Illuminate\Http\JsonResponse;
+use Symfony\Component\HttpKernel\Exception\HttpException;
+use Throwable;
 
-class BusinessException extends Exception
+class BusinessException extends HttpException
 {
     public string $errorCode;
 
-    public function __construct(string $errorCode, string $message, int $statusCode = 400, ?Exception $previous = null)
+    public int $statusCode;
+
+    public function __construct(string $errorCode, string $message, int $statusCode = 400, ?Throwable $previous = null)
     {
         $this->errorCode = $errorCode;
-        parent::__construct($message, $statusCode, $previous);
-    }
-
-    public function render($request): JsonResponse
-    {
-        return response()->json([
-            'error' => $this->errorCode,
-            'message' => $this->getMessage()
-        ], $this->getCode());
+        $this->statusCode = $statusCode;
+        parent::__construct($statusCode, $message, $previous);
     }
 }

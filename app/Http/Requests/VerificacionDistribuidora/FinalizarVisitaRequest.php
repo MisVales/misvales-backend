@@ -1,17 +1,24 @@
 <?php
+
 namespace App\Http\Requests\VerificacionDistribuidora;
-use Illuminate\Foundation\Http\FormRequest;
+
 use App\Enums\VerificationVisitResult;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class FinalizarVisitaRequest extends FormRequest {
-    public function authorize() { return true; }
-    public function rules() {
+class FinalizarVisitaRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
         return [
-            'result' => ['required', 'string', Rule::enum(VerificationVisitResult::class)],
-            'observations' => 'nullable|string|max:2000',
-            'differences_payload' => 'nullable|array',
-            'lock_version' => 'required|integer|min:1'
+            'resultado_fisico' => ['required', Rule::enum(VerificationVisitResult::class)],
+            'observaciones' => 'nullable|string|max:2000|required_if:resultado_fisico,UNFAVORABLE',
+            'lock_version' => 'required|integer|min:1',
         ];
     }
 }

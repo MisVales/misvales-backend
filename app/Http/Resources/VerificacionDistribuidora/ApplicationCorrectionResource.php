@@ -1,21 +1,29 @@
 <?php
+
 namespace App\Http\Resources\VerificacionDistribuidora;
+
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ApplicationCorrectionResource extends JsonResource {
-    public function toArray(Request $request): array {
+class ApplicationCorrectionResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
+        $difference = collect($this->visit?->differences_payload['items'] ?? [])->first(
+            fn (array $item): bool => ($item['seccion'] ?? null) === ($this->section?->value ?? $this->section)
+                && ($item['campo'] ?? null) === $this->field_path,
+        );
+
         return [
             'id' => $this->id,
-            'application_id' => $this->application_id,
-            'verification_visit_id' => $this->verification_visit_id,
-            'section' => $this->section->value ?? $this->section,
-            'field_path' => $this->field_path,
-            'reason' => $this->reason,
-            'corrected_by' => $this->corrected_by,
-            'corrected_at' => $this->corrected_at?->toIso8601String(),
-            'created_at' => $this->created_at?->toIso8601String(),
-            // No exponemos previous_value_payload o new_value_payload si hay riesgo de ciphertext/hmac
+            'seccion' => $this->section?->value ?? $this->section,
+            'campo' => $this->field_path,
+            'valor_original' => $this->previous_value_payload,
+            'valor_observado' => $difference['dato_observado'] ?? null,
+            'valor_corregido' => $this->new_value_payload,
+            'motivo' => $this->reason,
+            'corregido_por' => $this->corrected_by,
+            'fecha_correccion' => $this->corrected_at?->toIso8601String(),
         ];
     }
 }

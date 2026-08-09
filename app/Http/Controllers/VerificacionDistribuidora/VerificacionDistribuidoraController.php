@@ -1,81 +1,124 @@
 <?php
+
 namespace App\Http\Controllers\VerificacionDistribuidora;
 
 use App\Http\Controllers\Controller;
-use App\Services\VerificacionDistribuidora\ServicioVerificacionDistribuidora;
-use App\Services\VerificacionDistribuidora\ServicioRevisionCoordinador;
-use Illuminate\Http\JsonResponse;
-use App\Http\Requests\VerificacionDistribuidora\DevolverSolicitudCapturaRequest;
-use App\Http\Requests\VerificacionDistribuidora\AsignarVerificadorRequest;
-use App\Http\Requests\VerificacionDistribuidora\IniciarVisitaRequest;
 use App\Http\Requests\VerificacionDistribuidora\ActualizarVisitaRequest;
+use App\Http\Requests\VerificacionDistribuidora\AsignarVerificadorRequest;
 use App\Http\Requests\VerificacionDistribuidora\FinalizarVisitaRequest;
+use App\Http\Requests\VerificacionDistribuidora\IniciarVisitaRequest;
+use App\Http\Resources\VerificacionDistribuidora\DistributorApplicationResource;
+use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
+use App\Services\VerificacionDistribuidora\ServicioConsultaExpedientes;
+use App\Services\VerificacionDistribuidora\ServicioRevisionCoordinador;
+use App\Services\VerificacionDistribuidora\ServicioVerificacionDistribuidora;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
-class VerificacionDistribuidoraController extends Controller {
-    
+class VerificacionDistribuidoraController extends Controller
+{
     public function __construct(
-        private ServicioVerificacionDistribuidora $verificacionService,
-        private ServicioRevisionCoordinador $revisionService
+        private readonly ServicioVerificacionDistribuidora $verificacion,
+        private readonly ServicioRevisionCoordinador $revision,
+        private readonly ServicioConsultaExpedientes $consulta,
     ) {}
 
-    // ---- Métodos de Coordinador ----
-
-    public function devolverACaptura(DevolverSolicitudCapturaRequest $request, string $applicationId) {
-        $data = $request->validated();
-        $this->revisionService->devolverACaptura($applicationId, auth()->id(), $data['reason'], $data['pending_sections'], (int) $data['lock_version']);
-        return response()->json(['message' => 'Solicitud devuelta a captura exitosamente.'], 200);
-    }
-
-    public function asignarVerificador(AsignarVerificadorRequest $request, string $applicationId) {
-        $data = $request->validated();
-        $this->revisionService->asignarVerificador($applicationId, auth()->id(), $data['verifier_id'], (int) $data['lock_version']);
-        return response()->json(['message' => 'Verificador asignado exitosamente.'], 200);
-    }
-
-    // ---- Métodos de Verificador ----
-
-    public function consultarAsignadas() {
-        $visits = $this->verificacionService->consultarAsignadas(auth()->id());
-        return \App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource::collection($visits);
-    }
-
-    public function consultarVisita(string $visitId) {
-        $visit = $this->verificacionService->consultarVisita($visitId, auth()->id());
-        return new \App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource($visit);
-    }
-
-    public function iniciarVisita(IniciarVisitaRequest $request, string $visitId) {
-        $request->validated();
-        $data = $request->validated();
-        $visit = $this->verificacionService->iniciarVisita($visitId, auth()->id(), (int) $data['lock_version']);
-        return (new \App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource($visit))->additional(['message' => 'Visita iniciada.']);
-    }
-
-    public function actualizarVisita(ActualizarVisitaRequest $request, string $visitId) {
-        $data = $request->validated();
-        $this->verificacionService->actualizarVisita($visitId, auth()->id(), $data['latitude'] ?? null, $data['longitude'] ?? null, $data['accuracy'] ?? null, (int) $data['lock_version']);
-        return response()->json(['message' => 'Visita actualizada.'], 200);
-    }
-
-    public function registrarDiferencias(Request $request, string $visitId) {
-        // En una app real usaríamos un FormRequest estricto para validar la estructura del JSON
-        $differences = $request->validate([
-            'differences_payload' => 'required|array',
-            'lock_version' => 'required|integer'
+    public function index(Request $request)
+    {
+        $filters = $request->validate([
+            'estado' => 'nullable|string|max:50',
+            'buscar' => 'nullable|string|max:120',
+            'por_pagina' => 'nullable|integer|min:1|max:100',
         ]);
-        $this->verificacionService->registrarDiferencias($visitId, auth()->id(), $differences['differences_payload'], (int) $differences['lock_version']);
-        return response()->json(['message' => 'Diferencias registradas.'], 200);
+
+        return DistributorApplicationResource::collection(
+            $this->consulta->listar((string) $request->user()->id, $filters),
+        );
     }
 
-    public function finalizarVisita(FinalizarVisitaRequest $request, string $visitId) {
-        $data = $request->validated();
-        $this->verificacionService->finalizarVisita(
-            $visitId, 
-            auth()->id(), 
-            $data['result'], 
-            $data['observations'] ?? null, (int) $data['lock_version']
+    public function show(Request $request, string $application): DistributorApplicationResource
+    {
+        return new DistributorApplicationResource(
+            $this->consulta->consultar($application, (string) $request->user()->id),
         );
-        return response()->json(['message' => 'Visita finalizada exitosamente.'], 200);
+    }
+
+    public function verificadoresDisponibles(Request $request, string $application): JsonResponse
+    {
+        $applicationRecord = $this->consulta->consultar($application, (string) $request->user()->id);
+        $users = $this->consulta->verificadoresDisponibles($application, (string) $request->user()->id);
+
+        return response()->json(['data' => $users->map(fn ($user) => [
+            'id' => $user->id,
+            'nombre_completo' => $user->name,
+            'sucursal_id' => $applicationRecord->branch_id,
+            'estado' => $user->state,
+        ])]);
+    }
+
+    public function asignarVerificador(
+        AsignarVerificadorRequest $request,
+        string $application,
+    ): DistributorApplicationResource {
+        $data = $request->validated();
+        $this->revision->asignarVerificador(
+            $application,
+            (string) $request->user()->id,
+            $data['verifier_id'],
+            (int) $data['lock_version'],
+        );
+
+        return new DistributorApplicationResource(
+            $this->consulta->consultar($application, (string) $request->user()->id),
+        );
+    }
+
+    public function consultarAsignadas(Request $request)
+    {
+        return VerificationVisitResource::collection(
+            $this->verificacion->consultarAsignadas((string) $request->user()->id),
+        );
+    }
+
+    public function consultarVisita(Request $request, string $visit): VerificationVisitResource
+    {
+        return new VerificationVisitResource(
+            $this->verificacion->consultarVisita($visit, (string) $request->user()->id),
+        );
+    }
+
+    public function iniciarVisita(IniciarVisitaRequest $request, string $visit): VerificationVisitResource
+    {
+        $data = $request->validated();
+
+        return new VerificationVisitResource($this->verificacion->iniciarVisita(
+            $visit,
+            (string) $request->user()->id,
+            (int) $data['lock_version'],
+        ));
+    }
+
+    public function actualizarVisita(ActualizarVisitaRequest $request, string $visit): VerificationVisitResource
+    {
+        $data = $request->validated();
+
+        return new VerificationVisitResource($this->verificacion->actualizarVisita(
+            $visit,
+            (string) $request->user()->id,
+            $data,
+        ));
+    }
+
+    public function finalizarVisita(FinalizarVisitaRequest $request, string $visit): VerificationVisitResource
+    {
+        $data = $request->validated();
+
+        return new VerificationVisitResource($this->verificacion->finalizarVisita(
+            $visit,
+            (string) $request->user()->id,
+            $data['resultado_fisico'],
+            $data['observaciones'] ?? null,
+            (int) $data['lock_version'],
+        ));
     }
 }

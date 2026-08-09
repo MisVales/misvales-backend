@@ -57,6 +57,8 @@ class DistributorApplicationFactory extends Factory
                     'rfc' => strtoupper(Str::random(13)),
                 ],
             ],
+            'original_applicant_data' => fn (array $attributes) => $attributes['applicant_data'],
+            'submitted_by' => User::factory(),
             'status' => ApplicationStatus::DRAFT,
             'lock_version' => 1,
         ];

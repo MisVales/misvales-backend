@@ -1,154 +1,227 @@
 <?php
-namespace App\Services\VerificacionDistribuidora;
-use App\Models\DistributorApplication;
-use App\Models\VerificationVisit;
-use App\Models\MediaFile;
-use App\Enums\ApplicationStatus;
-use App\Enums\VerificationVisitStatus;
-use App\Enums\VerificationVisitResult;
-use Illuminate\Support\Facades\DB;
-use App\Exceptions\BusinessException;
-use Illuminate\Database\Eloquent\Collection;
-use App\Helpers\AuditHelper;
 
-class ServicioVerificacionDistribuidora {
-    
-    public function consultarAsignadas(string $verifierId): Collection {
-        return VerificationVisit::with('application')
+namespace App\Services\VerificacionDistribuidora;
+
+use App\Enums\ApplicationStatus;
+use App\Enums\VerificationVisitResult;
+use App\Enums\VerificationVisitStatus;
+use App\Exceptions\BusinessException;
+use App\Helpers\AuditHelper;
+use App\Models\DistributorApplication;
+use App\Models\MediaFile;
+use App\Models\VerificationVisit;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Arr;
+use Illuminate\Support\Facades\DB;
+
+class ServicioVerificacionDistribuidora
+{
+    public function __construct(private readonly ServicioAccesoVerificacion $acceso) {}
+
+    public function consultarAsignadas(string $verifierId): Collection
+    {
+        $this->acceso->usuarioActivo($verifierId);
+
+        return VerificationVisit::query()
+            ->with(['application.branch', 'mediaFiles'])
             ->where('verifier_id', $verifierId)
             ->whereIn('status', [VerificationVisitStatus::ASSIGNED, VerificationVisitStatus::IN_PROGRESS])
-            ->get();
+            ->latest('assigned_at')
+            ->get()
+            ->filter(function (VerificationVisit $visit) use ($verifierId): bool {
+                try {
+                    $this->acceso->exigirVerificador($visit, $verifierId);
+
+                    return true;
+                } catch (BusinessException) {
+                    return false;
+                }
+            })
+            ->values();
     }
 
-    public function consultarVisita(string $visitId, string $verifierId): VerificationVisit {
-        $visit = VerificationVisit::with(['application', 'mediaFiles'])
-            ->where('id', $visitId)
-            ->where('verifier_id', $verifierId)
-            ->first();
-        if (!$visit) throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
+    public function consultarVisita(string $visitId, string $verifierId): VerificationVisit
+    {
+        $visit = VerificationVisit::query()->with(['application.branch', 'mediaFiles'])->find($visitId);
+        if ($visit === null) {
+            throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
+        }
+
+        $this->acceso->exigirVerificador($visit, $verifierId);
+
         return $visit;
     }
 
-    public function iniciarVisita(string $visitId, string $verifierId, int $lockVersion): VerificationVisit {
-        return DB::transaction(function () use ($visitId, $verifierId, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
-            if (!$visit) throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
-            if ($visit->lock_version !== $lockVersion) throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
-            
-            $application = DistributorApplication::lockForUpdate()->find($visit->application_id);
-
-            if ($visit->verifier_id !== $verifierId) {
-                AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, null, 'Intento de inicio no autorizado');
-                throw new BusinessException('VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER', 'No asignado a este verificador.', 403);
+    public function iniciarVisita(string $visitId, string $verifierId, int $lockVersion): VerificationVisit
+    {
+        return DB::transaction(function () use ($visitId, $verifierId, $lockVersion): VerificationVisit {
+            $visit = VerificationVisit::query()->lockForUpdate()->find($visitId);
+            if ($visit === null) {
+                throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
-            if ($visit->status === VerificationVisitStatus::IN_PROGRESS) throw new BusinessException('VERIFICATION_VISIT_ALREADY_STARTED', 'La visita ya está en progreso.', 409);
-            if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'La visita ya está completada.', 409);
-            if ($visit->status !== VerificationVisitStatus::ASSIGNED) throw new BusinessException('DISTRIBUTOR_APPLICATION_INVALID_STATE', 'La visita no está asignada.', 409);
 
-            $application->transitionTo(ApplicationStatus::PHYSICAL_VERIFICATION, $verifierId, "Inicio de visita");
-            
-            $visit->forceFill([
-                'status' => VerificationVisitStatus::IN_PROGRESS,
-                'started_at' => now(),
-            ])->save();
+            $this->exigirVersion($visit, $lockVersion);
+            $this->acceso->exigirVerificador($visit, $verifierId);
+            $application = DistributorApplication::query()->lockForUpdate()->findOrFail($visit->application_id);
 
-            AuditHelper::log('VERIFICATION_VISIT_STARTED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, ['status' => 'IN_PROGRESS'], null, 'SUCCESS', $visit->lock_version);
+            if ($visit->status !== VerificationVisitStatus::ASSIGNED
+                || $application->status !== ApplicationStatus::VERIFIER_ASSIGNED) {
+                throw new BusinessException('INVALID_TRANSITION', 'La visita no puede iniciarse en su estado actual.', 409);
+            }
 
-            return $visit;
+            $application->transitionTo(ApplicationStatus::PHYSICAL_VERIFICATION, $verifierId, 'Visita física iniciada.');
+            $visit->forceFill(['status' => VerificationVisitStatus::IN_PROGRESS, 'started_at' => now()])->save();
+
+            AuditHelper::log(
+                'VERIFICATION_VISIT_STARTED',
+                'VerificationVisit',
+                $visit->id,
+                $verifierId,
+                $application->branch_id,
+                previous: ['status' => VerificationVisitStatus::ASSIGNED->value],
+                new: ['status' => VerificationVisitStatus::IN_PROGRESS->value],
+                version: $visit->lock_version,
+            );
+
+            return $visit->load(['application.branch', 'mediaFiles']);
         });
     }
 
-    public function actualizarVisita(string $visitId, string $verifierId, ?float $lat, ?float $lng, ?float $accuracy, int $lockVersion): void {
-        DB::transaction(function () use ($visitId, $verifierId, $lat, $lng, $accuracy, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
-            if (!$visit) throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
-            if ($visit->lock_version !== $lockVersion) throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
-            if ($visit->verifier_id !== $verifierId) throw new BusinessException('VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER', 'No asignado a este verificador.', 403);
-            if ($visit->status === VerificationVisitStatus::ASSIGNED) throw new BusinessException('VERIFICATION_VISIT_NOT_STARTED', 'Visita no iniciada.', 409);
-            if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita completada.', 409);
-            
-            $visit->forceFill([
-                'latitude' => (string)$lat,
-                'longitude' => (string)$lng,
-                'location_accuracy_meters' => (string)$accuracy
-            ])->save();
-        });
-    }
-
-    public function registrarDiferencias(string $visitId, string $verifierId, array $differencesPayload, int $lockVersion): void {
-        DB::transaction(function () use ($visitId, $verifierId, $differencesPayload, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
-            if (!$visit) throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
-            if ($visit->lock_version !== $lockVersion) throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
-            if ($visit->verifier_id !== $verifierId) {
-                AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'VerificationVisit', $visit->id, $verifierId, null, null, null, 'Intento de registro de diferencias no autorizado');
-                throw new BusinessException('VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER', 'No autorizado.', 403);
+    public function actualizarVisita(string $visitId, string $verifierId, array $data): VerificationVisit
+    {
+        return DB::transaction(function () use ($visitId, $verifierId, $data): VerificationVisit {
+            $visit = VerificationVisit::query()->lockForUpdate()->find($visitId);
+            if ($visit === null) {
+                throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
-            if ($visit->status === VerificationVisitStatus::ASSIGNED) throw new BusinessException('VERIFICATION_VISIT_NOT_STARTED', 'Visita no iniciada.', 409);
-            if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita completada.', 409);
-            
-            $visit->forceFill(['differences_payload' => $differencesPayload])->save();
-            
-            AuditHelper::log('VERIFICATION_DIFFERENCE_RECORDED', 'VerificationVisit', $visit->id, $verifierId, null, null, ['has_differences' => $differencesPayload['has_differences'] ?? false], null, 'SUCCESS', $visit->lock_version);
+
+            $this->exigirVersion($visit, (int) $data['lock_version']);
+            $this->acceso->exigirVerificador($visit, $verifierId);
+            $application = DistributorApplication::query()->findOrFail($visit->application_id);
+
+            if ($visit->status !== VerificationVisitStatus::IN_PROGRESS
+                || $application->status !== ApplicationStatus::PHYSICAL_VERIFICATION) {
+                throw new BusinessException('VERIFICATION_VISIT_NOT_IN_PROGRESS', 'La visita no está en progreso.', 409);
+            }
+
+            $previous = [
+                'observations' => $visit->observations,
+                'differences_payload' => $visit->differences_payload,
+            ];
+
+            if (array_key_exists('diferencias', $data)) {
+                $this->validarDatosDeclarados($application, $data['diferencias'] ?? []);
+                $visit->differences_payload = [
+                    'has_differences' => count($data['diferencias'] ?? []) > 0,
+                    'items' => $data['diferencias'] ?? [],
+                ];
+            }
+
+            $visit->observations = $data['observaciones_generales'] ?? $visit->observations;
+            $visit->latitude = $data['latitud'] ?? $visit->latitude;
+            $visit->longitude = $data['longitud'] ?? $visit->longitude;
+            $visit->location_accuracy_meters = $data['precision_metros'] ?? $visit->location_accuracy_meters;
+            $visit->save();
+
+            AuditHelper::log(
+                'VERIFICATION_VISIT_DOCUMENTED',
+                'VerificationVisit',
+                $visit->id,
+                $verifierId,
+                $application->branch_id,
+                previous: $previous,
+                new: [
+                    'observations' => $visit->observations,
+                    'differences_payload' => $visit->differences_payload,
+                ],
+                version: $visit->lock_version,
+            );
+
+            return $visit->load(['application.branch', 'mediaFiles']);
         });
     }
 
     public function finalizarVisita(
-        string $visitId, 
-        string $verifierId, 
+        string $visitId,
+        string $verifierId,
         string $result,
         ?string $observations,
-        int $lockVersion
-    ): void {
-        DB::transaction(function () use ($visitId, $verifierId, $result, $observations, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
-            if (!$visit) throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
-            if ($visit->lock_version !== $lockVersion) throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
-            
-            $application = DistributorApplication::lockForUpdate()->find($visit->application_id);
-            if (!$application) throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
-            
-            if ($visit->verifier_id !== $verifierId) {
-                AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, null, 'Intento de finalización no autorizado');
-                throw new BusinessException('VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER', 'No autorizado.', 403);
-            }
-            if ($visit->status === VerificationVisitStatus::ASSIGNED) throw new BusinessException('VERIFICATION_VISIT_NOT_STARTED', 'Visita no iniciada.', 409);
-            if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita ya completada.', 409);
-
-            $hasEvidence = MediaFile::where('verification_visit_id', $visit->id)->exists();
-            if (!$hasEvidence) throw new BusinessException('VERIFICATION_VISIT_EVIDENCE_REQUIRED', 'No se puede finalizar la visita sin evidencias.', 409);
-
-            $resEnum = VerificationVisitResult::tryFrom($result);
-            if (!$resEnum) throw new BusinessException('VERIFICATION_VISIT_RESULT_INVALID', 'Resultado inválido.', 422);
-
-            if ($resEnum === VerificationVisitResult::UNFAVORABLE && empty($observations)) {
-                throw new BusinessException('VERIFICATION_VISIT_RESULT_INVALID', 'Se requieren observaciones para visitas desfavorables.', 422);
+        int $lockVersion,
+    ): VerificationVisit {
+        return DB::transaction(function () use ($visitId, $verifierId, $result, $observations, $lockVersion): VerificationVisit {
+            $visit = VerificationVisit::query()->lockForUpdate()->find($visitId);
+            if ($visit === null) {
+                throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
 
+            $this->exigirVersion($visit, $lockVersion);
+            $this->acceso->exigirVerificador($visit, $verifierId);
+            $application = DistributorApplication::query()->lockForUpdate()->findOrFail($visit->application_id);
+
+            if ($visit->status !== VerificationVisitStatus::IN_PROGRESS
+                || $application->status !== ApplicationStatus::PHYSICAL_VERIFICATION) {
+                throw new BusinessException('INVALID_TRANSITION', 'La visita no puede finalizarse en su estado actual.', 409);
+            }
+
+            if (! MediaFile::query()->where('verification_visit_id', $visit->id)->exists()) {
+                throw new BusinessException('VERIFICATION_VISIT_EVIDENCE_REQUIRED', 'Debe registrar al menos una evidencia.', 409);
+            }
+
+            if ($visit->differences_payload === null) {
+                throw new BusinessException('VERIFICATION_COMPARISON_REQUIRED', 'Debe registrar la comparación del expediente.', 409);
+            }
+
+            $visitResult = VerificationVisitResult::from($result);
             $visit->forceFill([
                 'status' => VerificationVisitStatus::COMPLETED,
-                'completed_at' => now(),
+                'result' => $visitResult,
+                'observations' => $observations ?? $visit->observations,
                 'visited_at' => now(),
-                'result' => $resEnum,
-                'observations' => $observations,
+                'completed_at' => now(),
             ])->save();
 
-            AuditHelper::log('VERIFICATION_VISIT_COMPLETED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, ['result' => $resEnum->value], $observations, 'SUCCESS', $visit->lock_version);
+            $nextStatus = match (true) {
+                $visitResult === VerificationVisitResult::UNFAVORABLE => ApplicationStatus::TERMINATED_UNFAVORABLE,
+                (bool) ($visit->differences_payload['has_differences'] ?? false) => ApplicationStatus::COORDINATOR_CORRECTION,
+                default => ApplicationStatus::COORDINATOR_EVALUATION,
+            };
+            $application->transitionTo($nextStatus, $verifierId, "Resultado físico: {$visitResult->value}");
 
-            $appStatus = $resEnum === VerificationVisitResult::FAVORABLE 
-                ? ApplicationStatus::COORDINATOR_EVALUATION 
-                : ApplicationStatus::TERMINATED_UNFAVORABLE;
-            
-            $differencesPayload = $visit->differences_payload ?? [];
-            if ($resEnum === VerificationVisitResult::FAVORABLE && !empty($differencesPayload) && ($differencesPayload['has_differences'] ?? false)) {
-                $appStatus = ApplicationStatus::COORDINATOR_CORRECTION;
-            }
+            AuditHelper::log(
+                'VERIFICATION_VISIT_COMPLETED',
+                'VerificationVisit',
+                $visit->id,
+                $verifierId,
+                $application->branch_id,
+                new: ['result' => $visitResult->value, 'application_status' => $nextStatus->value],
+                reason: $visit->observations,
+                version: $visit->lock_version,
+            );
 
-            $application->transitionTo($appStatus, $verifierId, "Visita completada: " . $resEnum->value);
-
-            if ($appStatus === ApplicationStatus::TERMINATED_UNFAVORABLE) {
-                AuditHelper::log('APPLICATION_TERMINATED_UNFAVORABLE', 'DistributorApplication', $application->id, $verifierId, $application->branch_id, null, null, $observations, 'SUCCESS', $application->lock_version);
-            }
+            return $visit->load(['application.branch', 'mediaFiles']);
         });
+    }
+
+    private function validarDatosDeclarados(DistributorApplication $application, array $differences): void
+    {
+        foreach ($differences as $difference) {
+            $path = $difference['seccion'].'.'.$difference['campo'];
+            $original = Arr::get($application->original_applicant_data, $path);
+
+            if ($original !== $difference['dato_declarado']) {
+                throw new BusinessException(
+                    'VERIFICATION_DECLARED_VALUE_MISMATCH',
+                    "El valor declarado de {$path} no coincide con el expediente original.",
+                    422,
+                );
+            }
+        }
+    }
+
+    private function exigirVersion(VerificationVisit $visit, int $lockVersion): void
+    {
+        if ($visit->lock_version !== $lockVersion) {
+            throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
+        }
     }
 }

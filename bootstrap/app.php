@@ -1,5 +1,6 @@
 <?php
 
+use App\Exceptions\BusinessException;
 use App\Http\Middleware\CheckBranchScope;
 use App\Http\Middleware\EnforceIdempotency;
 use App\Http\Middleware\RequireActiveUser;
@@ -120,6 +121,17 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*'),
         );
+
+        $exceptions->renderable(function (BusinessException $e, Request $request) {
+            $response = response()->json([
+                'error' => $e->errorCode,
+                'message' => $e->getMessage(),
+                'request_id' => $request->attributes->get('request_id'),
+            ]);
+            $response->setStatusCode($e->statusCode);
+
+            return $response;
+        });
 
         $exceptions->renderable(function (AccessDeniedHttpException $e, Request $request) {
             app(SecurityAuditService::class)->log($request, [

@@ -1,33 +1,53 @@
 <?php
+
 namespace App\Http\Controllers\VerificacionDistribuidora;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\VerificacionDistribuidora\AdjuntarEvidenciaRequest;
+use App\Http\Resources\VerificacionDistribuidora\MediaFileResource;
 use App\Services\VerificacionDistribuidora\ServicioEvidenciaVerificacion;
 use Illuminate\Http\JsonResponse;
-use App\Http\Requests\VerificacionDistribuidora\AdjuntarEvidenciaRequest;
 use Illuminate\Http\Request;
 
-class EvidenciaVerificacionController extends Controller {
-    
-    public function __construct(private ServicioEvidenciaVerificacion $evidenciaService) {}
+class EvidenciaVerificacionController extends Controller
+{
+    public function __construct(private readonly ServicioEvidenciaVerificacion $evidencia) {}
 
-    public function adjuntarEvidencia(AdjuntarEvidenciaRequest $request, string $visitId) {
+    public function adjuntarEvidencia(AdjuntarEvidenciaRequest $request, string $visit): JsonResponse
+    {
         $data = $request->validated();
-        $media = $this->evidenciaService->adjuntarEvidencia($visitId, auth()->id(), $request->file('file'), $data['file_type'], (int) $data['lock_version']);
-        return (new \App\Http\Resources\VerificacionDistribuidora\MediaFileResource($media))->additional(['message' => 'Evidencia adjuntada.']);
+
+        return (new MediaFileResource($this->evidencia->adjuntarEvidencia(
+            $visit,
+            (string) $request->user()->id,
+            $request->file('file'),
+            $data['tipo'],
+            (int) $data['lock_version'],
+        )))->response()->setStatusCode(201);
     }
 
-    public function consultarEvidencia(string $visitId) {
-        $media = $this->evidenciaService->consultarEvidencia($visitId);
-        return response()->json(['data' => $media], 200);
+    public function descargarEvidencia(Request $request, string $visit, string $evidence)
+    {
+        return $this->evidencia->descargarEvidencia(
+            $visit,
+            $evidence,
+            (string) $request->user()->id,
+        );
     }
 
-    public function descargarEvidencia(string $mediaId) {
-        return $this->evidenciaService->descargarEvidencia($mediaId, auth()->id());
-    }
+    public function eliminarEvidenciaAbierta(
+        Request $request,
+        string $visit,
+        string $evidence,
+    ): JsonResponse {
+        $data = $request->validate(['lock_version' => 'required|integer|min:1']);
+        $this->evidencia->eliminarEvidenciaAbierta(
+            $visit,
+            $evidence,
+            (string) $request->user()->id,
+            (int) $data['lock_version'],
+        );
 
-    public function eliminarEvidenciaAbierta(string $mediaId) {
-        $this->evidenciaService->eliminarEvidenciaAbierta($mediaId, auth()->id());
-        return response()->json(['message' => 'Evidencia eliminada exitosamente.'], 200);
+        return response()->json(status: 204);
     }
 }

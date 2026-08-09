@@ -53,6 +53,16 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'distributors', 'action' => 'resend_activation', 'code' => 'distributors.resend_activation', 'description' => 'Reenviar una invitación de activación'],
             ['module' => 'distributors', 'action' => 'view_initial_credit', 'code' => 'distributors.view_initial_credit', 'description' => 'Consultar la línea inicial autorizada'],
 
+            // Module 5 - Distributor verification and formal authorization
+            ['module' => 'verification', 'action' => 'view_applications', 'code' => 'verification.applications.view', 'description' => 'Consultar expedientes de verificación dentro del alcance'],
+            ['module' => 'verification', 'action' => 'assign_verifier', 'code' => 'verification.verifiers.assign', 'description' => 'Asignar verificadores dentro de la sucursal'],
+            ['module' => 'verification', 'action' => 'view_visits', 'code' => 'verification.visits.view', 'description' => 'Consultar visitas asignadas o dentro del alcance'],
+            ['module' => 'verification', 'action' => 'perform_visits', 'code' => 'verification.visits.perform', 'description' => 'Realizar únicamente visitas asignadas'],
+            ['module' => 'verification', 'action' => 'manage_evidence', 'code' => 'verification.evidences.manage', 'description' => 'Registrar evidencias de una visita asignada'],
+            ['module' => 'verification', 'action' => 'manage_corrections', 'code' => 'verification.corrections.manage', 'description' => 'Corregir diferencias conservando el historial'],
+            ['module' => 'verification', 'action' => 'evaluate', 'code' => 'verification.evaluations.decide', 'description' => 'Emitir la evaluación del coordinador'],
+            ['module' => 'verification', 'action' => 'authorize', 'code' => 'verification.authorizations.decide', 'description' => 'Emitir la decisión gerencial formal'],
+
             // Clients Module
             ['module' => 'clients', 'action' => 'view', 'code' => 'clients.view', 'description' => 'Consultar clientes finales dentro del alcance autorizado'],
             ['module' => 'clients', 'action' => 'view_sensitive', 'code' => 'clients.view_sensitive', 'description' => 'Consultar datos sensibles completos de clientes finales'],
@@ -138,6 +148,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if ($roleData['code'] === 'branch_manager') {
                 $this->assignPerms($role, [
+                    'verification.applications.view', 'verification.visits.view',
+                    'verification.authorizations.decide',
                     'distributors.view_any', 'distributors.view', 'distributors.activate',
                     'distributors.assign_category', 'distributors.view_category_history',
                     'distributors.resend_activation', 'distributors.view_initial_credit',
@@ -148,6 +160,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if ($roleData['code'] === 'admin') {
                 $this->assignPerms($role, [
+                    'verification.applications.view', 'verification.visits.view',
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
                     'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
@@ -156,6 +169,9 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if ($roleData['code'] === 'coordinator') {
                 $this->assignPerms($role, [
+                    'verification.applications.view', 'verification.verifiers.assign',
+                    'verification.visits.view', 'verification.corrections.manage',
+                    'verification.evaluations.decide',
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
                     'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
@@ -167,6 +183,13 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view', 'distributors.view_category_history', 'distributors.view_initial_credit',
                     'clients.view', 'clients.create', 'clients.view_bank_accounts',
                     'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
+                ]);
+            }
+
+            if ($roleData['code'] === 'verifier') {
+                $this->assignPerms($role, [
+                    'verification.applications.view', 'verification.visits.view',
+                    'verification.visits.perform', 'verification.evidences.manage',
                 ]);
             }
         }

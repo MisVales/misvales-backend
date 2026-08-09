@@ -1,18 +1,24 @@
 <?php
+
 namespace App\Http\Requests\VerificacionDistribuidora;
-use Illuminate\Foundation\Http\FormRequest;
+
 use App\Enums\ApplicationEvaluationResult;
+use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-class EvaluarSolicitudRequest extends FormRequest {
-    public function authorize() { return true; }
-    public function rules() {
+class EvaluarSolicitudRequest extends FormRequest
+{
+    public function authorize(): bool
+    {
+        return true;
+    }
+
+    public function rules(): array
+    {
         return [
-            'visit_id' => ['required', 'uuid'],
-            'result' => ['required', 'string', Rule::enum(ApplicationEvaluationResult::class)],
-            'reason' => 'required|string|max:2000',
-            'payload' => 'nullable|array',
-            'lock_version' => 'required|integer|min:1'
+            'dictamen' => ['required', Rule::enum(ApplicationEvaluationResult::class)],
+            'motivo' => 'required|string|max:2000',
+            'lock_version' => 'required|integer|min:1',
         ];
     }
 }
