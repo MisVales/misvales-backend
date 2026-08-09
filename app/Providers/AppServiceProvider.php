@@ -7,6 +7,7 @@ use App\Models\CategoryVersion;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RedemptionPeriod;
@@ -35,7 +36,9 @@ use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRe
 use App\Observers\VersionObserver;
 use App\Policies\BranchPolicy;
 use App\Policies\CoordinatorAssignmentPolicy;
+use App\Policies\DistribuidoraPolicy;
 use App\Policies\SolicitudDistribuidoraPolicy;
+use App\Services\Distribuidora\AuditorDistribuidora;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -68,6 +71,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Gate::policy(BranchRecord::class, BranchPolicy::class);
         Gate::policy(CoordinatorDistributorAssignment::class, CoordinatorAssignmentPolicy::class);
+        Gate::policy(Distribuidora::class, DistribuidoraPolicy::class);
         Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
 
         ConfigurationDefinition::observe(VersionObserver::class);
@@ -112,7 +116,36 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('resend_invitation', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(Limit::perMinute(3)->by($request->ip()));
+            $distribuidora = $request->route('distributor');
+            $identifier = $distribuidora instanceof Distribuidora
+                ? $distribuidora->id
+                : (is_string($distribuidora) ? $distribuidora : $request->ip());
+
+            return $configuredLimit(Limit::perMinute(3)->by($identifier)->response(function () use ($request, $distribuidora) {
+                $affected = $distribuidora instanceof Distribuidora
+                    ? $distribuidora
+                    : Distribuidora::query()->find(is_string($distribuidora) ? $distribuidora : null);
+
+                if ($affected !== null && $request->user() !== null) {
+                    app(AuditorDistribuidora::class)->registrar(
+                        'DISTRIBUTOR_ACTIVATION_INVITATION_RESENT',
+                        'Distributor',
+                        $affected->id,
+                        $request->user(),
+                        $affected->branch_id,
+                        resultado: 'FAILED',
+                        motivo: 'DISTRIBUTOR_INVITATION_RATE_LIMITED',
+                    );
+                }
+
+                return response()->json(['error' => [
+                    'code' => 'DISTRIBUTOR_INVITATION_RATE_LIMITED',
+                    'message' => 'Se alcanzó el límite de reenvíos de invitación.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 429);
+            }));
         });
     }
 }

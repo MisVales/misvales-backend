@@ -24,6 +24,7 @@ class UserRoleScope extends Model
         'assignment_reason',
         'revocation_reason',
         'scope_type',
+        'scope_id',
         'status',
     ];
 
@@ -70,5 +71,10 @@ class UserRoleScope extends Model
     public function endedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'revoked_by_user_id');
+    }
+
+    public function distribuidora(): BelongsTo
+    {
+        return $this->belongsTo(Distribuidora::class, 'scope_id');
     }
 }

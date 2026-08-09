@@ -57,6 +57,8 @@ class MeController extends Controller
                 'role' => $scope->role->code,
                 'role_name' => $scope->role->name,
                 'branch_id' => $scope->branch_id,
+                'scope_type' => $scope->scope_type,
+                'scope_id' => $scope->scope_id,
                 'permissions' => $rolePermissions,
             ];
 

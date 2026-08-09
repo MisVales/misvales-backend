@@ -5,6 +5,7 @@ use App\Models\User;
 
 class AuditHelper {
     public static function log(string $eventName, string $entityType, string $entityId, ?string $actorId, ?string $branchId, ?array $previous = null, ?array $new = null, ?string $reason = null, ?string $result = null, ?int $version = null) {
+        $result ??= str_contains($eventName, 'DENIED') ? 'DENIED' : 'SUCCESS';
         $actorRole = null;
         if ($actorId) {
             $user = User::find($actorId);

@@ -26,6 +26,122 @@ components:
             type: array
             items:
               type: string
+    DomainError:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: object
+          required: [code, message, fields, details]
+          properties:
+            code:
+              type: string
+              example: CLIENT_CURP_EXISTS
+              enum: [CLIENT_CURP_EXISTS, CLIENT_ADDRESS_EXISTS, CLIENT_NOT_FOUND, CLIENT_SCOPE_DENIED, CLIENT_ASSIGNMENT_NOT_ACTIVE, CLIENT_BANK_ACCOUNT_INVALID, CLIENT_BANK_ACCOUNT_CONFLICT, CLIENT_PORTFOLIO_ENTRY_INVALID, CLIENT_PORTFOLIO_BALANCE_NEGATIVE, CLIENT_PORTFOLIO_ENTRY_IMMUTABLE, RESOURCE_VERSION_CONFLICT, AUTH_SCOPE_DENIED, CLIENT_VALIDATION_FAILED]
+            message: { type: string }
+            fields: { type: object, additionalProperties: true }
+            details: { type: object, additionalProperties: true }
+            request_id: { type: string, nullable: true }
+    ClientAddressInput:
+      type: object
+      required: [street, exterior_number, neighborhood, postal_code, municipality, city, state]
+      properties:
+        street: { type: string }
+        exterior_number: { type: string }
+        interior_number: { type: string, nullable: true }
+        neighborhood: { type: string }
+        postal_code: { type: string, pattern: '^\d{5}$' }
+        municipality: { type: string }
+        city: { type: string }
+        state: { type: string }
+        country: { type: string, default: MX, minLength: 2, maxLength: 2 }
+        address_proof_media_id: { type: string, format: uuid, nullable: true }
+    ClientBankAccountInput:
+      type: object
+      required: [bank_name, account_holder_name, clabe]
+      properties:
+        bank_name: { type: string }
+        account_holder_name: { type: string }
+        account_number: { type: string, nullable: true, pattern: '^\d{4,30}$' }
+        clabe: { type: string, pattern: '^\d{18}$' }
+    CreateClientRequest:
+      type: object
+      required: [first_name, first_last_name, curp, birth_date, birth_place, birth_state, birth_city, official_id_type, address, bank_account]
+      properties:
+        first_name: { type: string }
+        first_last_name: { type: string }
+        second_last_name: { type: string, nullable: true }
+        curp: { type: string, pattern: '^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$', example: LOGM900101MCLPRR01 }
+        rfc: { type: string, nullable: true, example: LOGM900101AB1 }
+        birth_date: { type: string, format: date }
+        birth_place: { type: string }
+        birth_state: { type: string }
+        birth_city: { type: string }
+        official_id_type: { type: string, enum: [INE, PASSPORT, PROFESSIONAL_LICENSE, OTHER] }
+        official_id_number: { type: string, nullable: true }
+        official_id_media_id: { type: string, format: uuid, nullable: true }
+        address: { $ref: '#/components/schemas/ClientAddressInput' }
+        bank_account: { $ref: '#/components/schemas/ClientBankAccountInput' }
+    ClientSummary:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        client_number: { type: string, example: CLI-2026-000001 }
+        full_name: { type: string }
+        curp_masked: { type: string, example: LOGM***********R01 }
+        portfolio_summary: { $ref: '#/components/schemas/PortfolioSummary' }
+        lock_version: { type: integer }
+        created_at: { type: string, format: date-time }
+    ClientDetail:
+      allOf:
+        - { $ref: '#/components/schemas/ClientSummary' }
+        - type: object
+          properties:
+            first_name: { type: string }
+            first_last_name: { type: string }
+            second_last_name: { type: string, nullable: true }
+            curp: { type: string, description: Solo se incluye con clients.view_sensitive }
+            rfc_masked: { type: string, nullable: true }
+            rfc: { type: string, nullable: true, description: Solo se incluye con clients.view_sensitive }
+            official_id_number_masked: { type: string, nullable: true }
+            official_id_number: { type: string, nullable: true, description: Solo se incluye con clients.view_sensitive }
+            address_history: { type: array, items: { type: object }, description: Solo se incluye con permiso de historial }
+            bank_account_history: { type: array, items: { $ref: '#/components/schemas/BankAccount' }, description: Solo se incluye con permiso bancario }
+            assignment_history: { type: array, items: { type: object }, description: Solo se incluye con permiso de historial }
+    BankAccount:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        bank_name: { type: string }
+        account_holder_name: { type: string }
+        account_number_masked: { type: string, nullable: true }
+        clabe_masked: { type: string, example: '**************0018' }
+        is_current: { type: boolean }
+        starts_at: { type: string, format: date-time }
+        ends_at: { type: string, format: date-time, nullable: true }
+        lock_version: { type: integer }
+    PortfolioEntry:
+      type: object
+      properties:
+        id: { type: string, format: uuid }
+        client_id: { type: string, format: uuid }
+        entry_type: { type: string, enum: [DEBT, PAYMENT, PARTIAL_PAYMENT, STATUS_UPDATE, NOTE, ADJUSTMENT_INCREASE, ADJUSTMENT_DECREASE] }
+        amount: { type: string, nullable: true, pattern: '^\d+(\.\d{4})$' }
+        informational_status: { type: string, nullable: true, enum: [PENDING, PARTIALLY_PAID, PAID] }
+        occurred_at: { type: string, format: date-time }
+        due_date: { type: string, format: date, nullable: true }
+        last_payment_at: { type: string, format: date-time, nullable: true }
+        note: { type: string, nullable: true }
+        lock_version: { type: integer }
+    PortfolioSummary:
+      type: object
+      properties:
+        current_balance: { type: string, example: '2500.0000' }
+        informational_status: { type: string, nullable: true, enum: [PENDING, PARTIALLY_PAID, PAID] }
+        last_payment_at: { type: string, format: date-time, nullable: true }
+        entries_count: { type: integer }
+        has_overdue_entries: { type: boolean }
+        is_transfer_balance_zero: { type: boolean }
 
 paths:
   /auth/invitations/inspect:
@@ -269,3 +385,203 @@ paths:
           description: Contraseña restablecida exitosamente.
         '400':
           description: Token inválido o política no cumplida.
+
+  /clients:
+    get:
+      summary: Listar clientes finales dentro del alcance efectivo
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: search, in: query, schema: { type: string } }
+        - { name: branch_id, in: query, schema: { type: string, format: uuid } }
+        - { name: distributor_id, in: query, schema: { type: string, format: uuid } }
+        - { name: portfolio_status, in: query, schema: { type: string, enum: [PENDING, PARTIALLY_PAID, PAID] } }
+        - { name: has_portfolio_balance, in: query, schema: { type: boolean } }
+        - { name: created_from, in: query, schema: { type: string, format: date } }
+        - { name: created_to, in: query, schema: { type: string, format: date } }
+        - { name: page, in: query, schema: { type: integer, minimum: 1 } }
+        - { name: per_page, in: query, schema: { type: integer, minimum: 1, maximum: 100 } }
+        - { name: sort, in: query, schema: { type: string, enum: [client_number, first_name, first_last_name, created_at] } }
+      responses:
+        '200':
+          description: Página de clientes con datos sensibles enmascarados
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/ClientSummary' } }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso de consulta, content: { application/json: { schema: { $ref: '#/components/schemas/DomainError' } } } }
+        '422': { description: Filtros inválidos, content: { application/json: { schema: { $ref: '#/components/schemas/DomainError' } } } }
+        '429': { description: Límite de solicitudes excedido }
+    post:
+      summary: Registrar un cliente final sin crear usuario
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: Idempotency-Key
+          in: header
+          required: true
+          schema: { type: string, format: uuid }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/CreateClientRequest' }
+      responses:
+        '201':
+          description: Cliente, domicilio, cuenta y asignación creados en una transacción
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ClientSummary' }
+        '401': { description: No autenticado }
+        '403': { description: Alcance denegado }
+        '409': { description: CURP, domicilio o idempotencia en conflicto, content: { application/json: { schema: { $ref: '#/components/schemas/DomainError' } } } }
+        '419': { description: Sesión expirada }
+        '422': { description: Datos inválidos }
+        '429': { description: Límite de solicitudes excedido }
+
+  /clients/{client}:
+    get:
+      summary: Consultar detalle autorizado de un cliente
+      tags: [Clients]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: client, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200':
+          description: Detalle con campos completos o enmascarados según permiso
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/ClientDetail' }
+        '401': { description: No autenticado }
+        '403': { description: Sin permiso }
+        '404': { description: Cliente inexistente o fuera de alcance }
+
+  /clients/{client}/bank-accounts:
+    parameters:
+      - { name: client, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Consultar historial bancario enmascarado
+      tags: [Client Bank Accounts]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Historial bancario autorizado
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/BankAccount' } }
+        '401': { description: No autenticado }
+        '403': { description: Fuera de alcance }
+        '404': { description: Cliente inexistente }
+    post:
+      summary: Cerrar la cuenta vigente y registrar una nueva
+      tags: [Client Bank Accounts]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              allOf:
+                - { $ref: '#/components/schemas/ClientBankAccountInput' }
+                - type: object
+                  required: [change_reason, lock_version]
+                  properties:
+                    change_reason: { type: string }
+                    lock_version: { type: integer, minimum: 1 }
+      responses:
+        '201': { description: Nueva cuenta cifrada y cuenta anterior cerrada }
+        '401': { description: No autenticado }
+        '403': { description: Solo la distribuidora responsable puede operar }
+        '409': { description: Conflicto de versión }
+        '422': { description: Cuenta inválida }
+
+  /clients/{client}/portfolio-entries:
+    parameters:
+      - { name: client, in: path, required: true, schema: { type: string, format: uuid } }
+    get:
+      summary: Listar cartera informativa y resumen derivado
+      tags: [Client Informational Portfolio]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: Movimientos y resumen sin efectos financieros en MisVales
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { type: array, items: { $ref: '#/components/schemas/PortfolioEntry' } }
+                  summary: { $ref: '#/components/schemas/PortfolioSummary' }
+        '401': { description: No autenticado }
+        '403': { description: Fuera de alcance }
+        '404': { description: Cliente inexistente }
+    post:
+      summary: Registrar un movimiento de cartera informativa
+      tags: [Client Informational Portfolio]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [entry_type, occurred_at]
+              properties:
+                entry_type: { type: string, enum: [DEBT, PAYMENT, PARTIAL_PAYMENT, STATUS_UPDATE, NOTE, ADJUSTMENT_INCREASE, ADJUSTMENT_DECREASE] }
+                amount: { type: string, nullable: true, pattern: '^\d{1,14}(\.\d{1,4})?$' }
+                informational_status: { type: string, nullable: true, enum: [PENDING, PARTIALLY_PAID, PAID] }
+                occurred_at: { type: string, format: date-time }
+                due_date: { type: string, format: date, nullable: true }
+                last_payment_at: { type: string, format: date-time, nullable: true }
+                note: { type: string, nullable: true }
+                related_voucher_id: { type: string, format: uuid, nullable: true }
+      responses:
+        '201': { description: Movimiento creado; no genera conciliación, línea ni relación }
+        '401': { description: No autenticado }
+        '403': { description: Solo la distribuidora responsable puede operar }
+        '409': { description: El movimiento produciría saldo negativo }
+        '422': { description: Movimiento inválido }
+
+  /clients/{client}/portfolio-entries/{entry}:
+    patch:
+      summary: Actualizar metadatos editables de un movimiento
+      tags: [Client Informational Portfolio]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: client, in: path, required: true, schema: { type: string, format: uuid } }
+        - { name: entry, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [lock_version]
+              properties:
+                informational_status: { type: string, nullable: true, enum: [PENDING, PARTIALLY_PAID, PAID] }
+                occurred_at: { type: string, format: date-time }
+                due_date: { type: string, format: date, nullable: true }
+                last_payment_at: { type: string, format: date-time, nullable: true }
+                note: { type: string, nullable: true }
+                lock_version: { type: integer, minimum: 1 }
+      responses:
+        '200': { description: Movimiento actualizado y versión incrementada }
+        '401': { description: No autenticado }
+        '403': { description: Fuera de alcance }
+        '404': { description: Movimiento o cliente inexistente }
+        '409': { description: RESOURCE_VERSION_CONFLICT }
+        '422': { description: Importe, tipo, cliente o distribuidora son inmutables }

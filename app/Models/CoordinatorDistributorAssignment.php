@@ -51,5 +51,8 @@ class CoordinatorDistributorAssignment extends Model
         return $this->belongsTo(Branch::class, 'branch_id');
     }
 
-
+    public function distribuidora(): BelongsTo
+    {
+        return $this->belongsTo(Distribuidora::class, 'distributor_id');
+    }
 }

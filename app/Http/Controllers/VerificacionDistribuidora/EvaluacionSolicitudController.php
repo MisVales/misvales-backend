@@ -16,16 +16,16 @@ class EvaluacionSolicitudController extends Controller {
         return new \App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource($eval);
     }
 
-    public function evaluar(EvaluarSolicitudRequest $request, string $applicationId, string $visitId) {
+    public function evaluar(EvaluarSolicitudRequest $request, string $applicationId) {
         $data = $request->validated();
         $eval = $this->evaluacionService->evaluar(
             $applicationId, 
-            $visitId, 
+            $data['visit_id'],
             ApplicationEvaluationResult::from($data['result']), 
             $data['reason'], 
             auth()->id(),
             $data['payload'] ?? null, (int) $data['lock_version']
         );
-        return response()->json(['message' => 'Evaluación registrada exitosamente.', 'data' => $eval], 201);
+        return response()->json(['message' => 'Evaluación registrada exitosamente.', 'data' => $eval]);
     }
 }

@@ -4,14 +4,21 @@ use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
+use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CategoriaController;
+use App\Http\Controllers\Api\V1\ClienteController;
 use App\Http\Controllers\Api\V1\ConfiguracionController;
 use App\Http\Controllers\Api\V1\CoordinatorAssignmentController;
+use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
+use App\Http\Controllers\Api\V1\DistribuidoraController;
 use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PeriodoCanjeController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProductoController;
+use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
@@ -161,5 +168,34 @@ Route::prefix('v1')->group(function () {
         Route::patch('redemption-periods/{id}', [PeriodoCanjeController::class, 'update']);
         Route::post('redemption-periods/{id}/publish', [PeriodoCanjeController::class, 'publish']);
         Route::post('redemption-periods/{id}/cancel', [PeriodoCanjeController::class, 'cancel']);
+
+        // Módulo 6 - Activación y administración de distribuidoras
+        Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])
+            ->middleware(['permission:distributors.activate', 'idempotency']);
+        Route::get('distributors', [DistribuidoraController::class, 'index'])
+            ->middleware('permission:distributors.view_any');
+        Route::get('distributors/{distributor}', [DistribuidoraController::class, 'show'])
+            ->middleware('permission:distributors.view');
+        Route::get('distributors/{distributor}/category-assignments', [AsignacionCategoriaDistribuidoraController::class, 'index'])
+            ->middleware('permission:distributors.view_category_history');
+        Route::post('distributors/{distributor}/category-assignments', [AsignacionCategoriaDistribuidoraController::class, 'store'])
+            ->middleware('permission:distributors.assign_category');
+        Route::post('distributors/{distributor}/activation-invitations/resend', [ReenvioInvitacionDistribuidoraController::class, 'store'])
+            ->middleware(['permission:distributors.resend_activation', 'throttle:resend_invitation']);
+
+        // Módulo 7 - Clientes finales y cartera informativa
+        Route::get('clients', [ClienteController::class, 'index'])->middleware('permission:clients.view');
+        Route::post('clients', [ClienteController::class, 'store'])->middleware(['permission:clients.create', 'idempotency']);
+        Route::get('clients/{client}', [ClienteController::class, 'show'])->middleware('permission:clients.view');
+        Route::get('clients/{client}/bank-accounts', [CuentaBancariaClienteController::class, 'index'])
+            ->middleware('permission:clients.view_bank_accounts');
+        Route::post('clients/{client}/bank-accounts', [CuentaBancariaClienteController::class, 'store'])
+            ->middleware('permission:clients.manage_bank_accounts');
+        Route::get('clients/{client}/portfolio-entries', [CarteraInformativaClienteController::class, 'index'])
+            ->middleware('permission:clients.view_portfolio');
+        Route::post('clients/{client}/portfolio-entries', [CarteraInformativaClienteController::class, 'store'])
+            ->middleware(['permission:clients.manage_portfolio', 'idempotency']);
+        Route::patch('clients/{client}/portfolio-entries/{entry}', [CarteraInformativaClienteController::class, 'update'])
+            ->middleware('permission:clients.manage_portfolio');
     });
 });

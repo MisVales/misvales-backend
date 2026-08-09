@@ -21,6 +21,18 @@ final class ProcessOrganizationOutbox
             $message->increment('attempts');
             $recipientIds = $message->payload['notify_user_ids'] ?? [];
 
+            if ($recipientIds === [] && $message->event_type === 'ORGANIZATION_SCOPE_DENIED') {
+                $recipientIds = User::query()
+                    ->where('state', 'ACTIVE')
+                    ->whereHas('roleScopes', fn ($query) => $query
+                        ->where('status', 'ACTIVE')
+                        ->whereNull('revoked_at')
+                        ->where('scope_type', 'GLOBAL')
+                        ->whereHas('role', fn ($role) => $role->where('code', 'general_manager')))
+                    ->pluck('id')
+                    ->all();
+            }
+
             User::query()
                 ->whereIn('id', $recipientIds)
                 ->each(fn (User $user) => $user->notify(
