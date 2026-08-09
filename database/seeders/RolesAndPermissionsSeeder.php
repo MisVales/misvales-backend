@@ -51,7 +51,9 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'distributors', 'action' => 'assign_category', 'code' => 'distributors.assign_category', 'description' => 'Asignar una categoría publicada'],
             ['module' => 'distributors', 'action' => 'view_category_history', 'code' => 'distributors.view_category_history', 'description' => 'Consultar el historial de categorías'],
             ['module' => 'distributors', 'action' => 'resend_activation', 'code' => 'distributors.resend_activation', 'description' => 'Reenviar una invitación de activación'],
-            ['module' => 'distributors', 'action' => 'view_initial_credit', 'code' => 'distributors.view_initial_credit', 'description' => 'Consultar la línea inicial autorizada'],
+            ['module' => 'distributors', 'action' => 'assign_coordinator', 'code' => 'distributors.assign_coordinator', 'description' => 'Reasignar coordinador de una distribuidora'],
+            ['module' => 'distributors', 'action' => 'view_assignment_history', 'code' => 'distributors.view_assignment_history', 'description' => 'Consultar historial de coordinadores'],
+            ['module' => 'distributors', 'action' => 'change_status', 'code' => 'distributors.change_status', 'description' => 'Habilitar o deshabilitar una distribuidora'],
 
             // Module 5 - Distributor verification and formal authorization
             ['module' => 'verification', 'action' => 'view_applications', 'code' => 'verification.applications.view', 'description' => 'Consultar expedientes de verificación dentro del alcance'],
@@ -152,7 +154,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'verification.authorizations.decide',
                     'distributors.view_any', 'distributors.view', 'distributors.activate',
                     'distributors.assign_category', 'distributors.view_category_history',
-                    'distributors.resend_activation', 'distributors.view_initial_credit',
+                    'distributors.resend_activation', 'distributors.assign_coordinator',
+                    'distributors.view_assignment_history', 'distributors.change_status',
                     'clients.view', 'clients.view_sensitive', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                 ]);
@@ -162,7 +165,7 @@ class RolesAndPermissionsSeeder extends Seeder
                 $this->assignPerms($role, [
                     'verification.applications.view', 'verification.visits.view',
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
-                    'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
+                    'distributors.view_assignment_history', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                 ]);
             }
@@ -173,14 +176,14 @@ class RolesAndPermissionsSeeder extends Seeder
                     'verification.visits.view', 'verification.corrections.manage',
                     'verification.evaluations.decide',
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
-                    'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
+                    'distributors.view_assignment_history', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                 ]);
             }
 
             if ($roleData['code'] === 'distributor') {
                 $this->assignPerms($role, [
-                    'distributors.view', 'distributors.view_category_history', 'distributors.view_initial_credit',
+                    'distributors.view', 'distributors.view_category_history', 'distributors.view_assignment_history',
                     'clients.view', 'clients.create', 'clients.view_bank_accounts',
                     'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
                 ]);

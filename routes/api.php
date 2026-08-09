@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
+use App\Http\Controllers\Api\V1\AsignacionCoordinadorDistribuidoraController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
@@ -13,6 +14,8 @@ use App\Http\Controllers\Api\V1\ConfiguracionController;
 use App\Http\Controllers\Api\V1\CoordinatorAssignmentController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\EstadoDistribuidoraController;
+use App\Http\Controllers\Api\V1\PreparacionActivacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PeriodoCanjeController;
@@ -214,6 +217,10 @@ Route::prefix('v1')->group(function () {
         // Módulo 6 - Activación y administración de distribuidoras
         Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])
             ->middleware(['permission:distributors.activate', 'idempotency']);
+        Route::get('distributor-activation-candidates', [PreparacionActivacionDistribuidoraController::class, 'solicitudes'])
+            ->middleware('permission:distributors.activate');
+        Route::get('distributor-categories/available', [PreparacionActivacionDistribuidoraController::class, 'categorias'])
+            ->middleware('permission:distributors.assign_category');
         Route::get('distributors', [DistribuidoraController::class, 'index'])
             ->middleware('permission:distributors.view_any');
         Route::get('distributors/{distributor}', [DistribuidoraController::class, 'show'])
@@ -222,6 +229,14 @@ Route::prefix('v1')->group(function () {
             ->middleware('permission:distributors.view_category_history');
         Route::post('distributors/{distributor}/category-assignments', [AsignacionCategoriaDistribuidoraController::class, 'store'])
             ->middleware('permission:distributors.assign_category');
+        Route::get('distributors/{distributor}/coordinator-assignments', [AsignacionCoordinadorDistribuidoraController::class, 'index'])
+            ->middleware('permission:distributors.view_assignment_history');
+        Route::post('distributors/{distributor}/coordinator-assignments', [AsignacionCoordinadorDistribuidoraController::class, 'store'])
+            ->middleware('permission:distributors.assign_coordinator');
+        Route::post('distributors/{distributor}/disable', [EstadoDistribuidoraController::class, 'deshabilitar'])
+            ->middleware('permission:distributors.change_status');
+        Route::post('distributors/{distributor}/enable', [EstadoDistribuidoraController::class, 'habilitar'])
+            ->middleware('permission:distributors.change_status');
         Route::post('distributors/{distributor}/activation-invitations/resend', [ReenvioInvitacionDistribuidoraController::class, 'store'])
             ->middleware(['permission:distributors.resend_activation', 'throttle:resend_invitation']);
 

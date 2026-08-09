@@ -83,6 +83,11 @@ class DistributorApplication extends Model
         return $this->belongsTo(User::class, 'submitted_by');
     }
 
+    public function coordinator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'coordinator_id');
+    }
+
     public function transitionTo(ApplicationStatus $newStatus, string $userId, ?string $reason = null): void
     {
         $validTransitions = [

@@ -21,9 +21,6 @@ use App\Models\Category;
 use App\Models\CategoryVersion;
 use App\Models\Distribuidora;
 use App\Models\DistributorApplication;
-use App\Models\LineaCredito;
-use App\Models\MovimientoLineaCredito;
-use App\Models\RestriccionUsoCredito;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -62,17 +59,17 @@ class ActivacionDistribuidoraApiTest extends TestCase
         $respuesta->assertSuccessful()
             ->assertJsonPath('data.application_id', $solicitud->id)
             ->assertJsonPath('data.status', 'PENDING_ACTIVATION')
-            ->assertJsonPath('data.initial_credit.total_authorized', '15000.0000')
-            ->assertJsonPath('data.initial_restriction.type', 'INITIAL_50_PERCENT');
+            ->assertJsonMissingPath('data.initial_credit')
+            ->assertJsonPath('data.origin.authorization.decision', 'AUTORIZADA');
 
         self::assertDatabaseCount('distributors', 1);
         self::assertDatabaseCount('coordinator_distributor_assignments', 1);
         self::assertDatabaseCount('distributor_category_assignments', 1);
-        self::assertDatabaseCount('credit_lines', 1);
-        self::assertDatabaseCount('credit_line_movements', 1);
-        self::assertDatabaseCount('credit_usage_restrictions', 1);
+        self::assertDatabaseCount('credit_lines', 0);
+        self::assertDatabaseCount('credit_line_movements', 0);
+        self::assertDatabaseCount('credit_usage_restrictions', 0);
         self::assertDatabaseCount('account_invitations', 1);
-        self::assertDatabaseHas('distributor_applications_m5', ['id' => $solicitud->id, 'status' => 'ACTIVE']);
+        self::assertDatabaseHas('distributor_applications_m5', ['id' => $solicitud->id, 'status' => 'AUTHORIZED_PENDING_ACTIVATION']);
 
         $usuario = User::query()->where('normalized_email', 'aspirante@example.test')->firstOrFail();
         self::assertNull($usuario->password);
@@ -87,21 +84,6 @@ class ActivacionDistribuidoraApiTest extends TestCase
             'distributor',
             $usuario->roleScopes()->with('role')->firstOrFail()->role->code,
         );
-        self::assertDatabaseHas('credit_line_movements', [
-            'type' => 'INITIAL_AUTHORIZATION',
-            'amount' => '15000.0000',
-            'balance_before' => '0.0000',
-            'balance_after' => '15000.0000',
-            'source_type' => 'DISTRIBUTOR_APPLICATION_AUTHORIZATION',
-            'source_id' => ApplicationAuthorization::query()->where('application_id', $solicitud->id)->value('id'),
-        ]);
-        self::assertDatabaseHas('credit_usage_restrictions', [
-            'type' => 'INITIAL_50_PERCENT',
-            'status' => 'ACTIVE',
-            'base_total' => '15000.0000',
-            'consumed_at' => null,
-            'voucher_id' => null,
-        ]);
         self::assertSame(64, strlen((string) AccountInvitation::query()->value('token_hash')));
         Mail::assertQueued(ActivationInvitationMail::class, 1);
     }
@@ -119,8 +101,8 @@ class ActivacionDistribuidoraApiTest extends TestCase
         }
 
         self::assertDatabaseCount('distributors', 1);
-        self::assertDatabaseCount('credit_lines', 1);
-        self::assertDatabaseCount('credit_line_movements', 1);
+        self::assertDatabaseCount('credit_lines', 0);
+        self::assertDatabaseCount('credit_line_movements', 0);
         self::assertDatabaseCount('account_invitations', 1);
         Mail::assertQueued(ActivationInvitationMail::class, 1);
     }
@@ -267,7 +249,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertDatabaseHas('outbox_events', ['event_type' => 'DISTRIBUTOR_ACCESS_ACTIVATED']);
     }
 
-    public function test_exige_visita_y_evaluacion_favorables_sin_dejar_datos_parciales(): void
+    public function test_consume_solo_la_decision_formal_de_m05_sin_reimplementar_sus_etapas(): void
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
         DB::table('application_evaluations')->where('application_id', $solicitud->id)->delete();
@@ -276,12 +258,12 @@ class ActivacionDistribuidoraApiTest extends TestCase
         $this->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/v1/distributor-applications/{$solicitud->id}/activation", [
                 'category_version_id' => $version->id,
-            ])->assertConflict()->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_NOT_APPROVED');
+            ])->assertSuccessful();
 
-        self::assertDatabaseCount('distributors', 0);
-        self::assertDatabaseMissing('users', ['normalized_email' => 'aspirante@example.test']);
+        self::assertDatabaseCount('distributors', 1);
+        self::assertDatabaseHas('users', ['normalized_email' => 'aspirante@example.test']);
         self::assertDatabaseCount('credit_lines', 0);
-        self::assertDatabaseCount('account_invitations', 0);
+        self::assertDatabaseCount('account_invitations', 1);
     }
 
     public function test_un_fallo_intermedio_revierte_toda_la_activacion(): void
@@ -414,14 +396,10 @@ class ActivacionDistribuidoraApiTest extends TestCase
 
         foreach ([
             'DISTRIBUTOR_CREATED',
-            'DISTRIBUTOR_NUMBER_ASSIGNED',
             'DISTRIBUTOR_COORDINATOR_ASSIGNED',
             'DISTRIBUTOR_CATEGORY_ASSIGNED',
-            'INITIAL_CREDIT_LINE_CREATED',
-            'INITIAL_CREDIT_RESTRICTION_CREATED',
             'DISTRIBUTOR_USER_CREATED',
-            'DISTRIBUTOR_ACTIVATION_INVITATION_SENT',
-            'EV-008', 'EV-011', 'EV-012',
+            'DISTRIBUTOR_ACTIVATION_INVITATION_GENERATED',
         ] as $evento) {
             self::assertDatabaseHas('outbox_events', ['event_type' => $evento]);
             self::assertDatabaseHas('audit_logs', ['event_name' => $evento, 'result' => 'SUCCESS']);
@@ -437,11 +415,11 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertStringNotContainsString('password', mb_strtolower($contenido));
     }
 
-    public function test_solicitud_con_evaluacion_desfavorable_nunca_se_materializa(): void
+    public function test_decision_formal_rechazada_nunca_se_materializa(): void
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
-        DB::table('application_evaluations')->where('application_id', $solicitud->id)
-            ->update(['result' => ApplicationEvaluationResult::DOES_NOT_COMPLY->value]);
+        DB::table('distributor_applications_m5')->where('id', $solicitud->id)->update(['status' => 'REJECTED']);
+        DB::table('application_authorizations')->where('application_id', $solicitud->id)->update(['decision' => 'REJECTED']);
         Sanctum::actingAs($gerente);
 
         $this->withHeader('Idempotency-Key', (string) Str::uuid())
@@ -504,18 +482,12 @@ class ActivacionDistribuidoraApiTest extends TestCase
         $asignacion = AsignacionCategoriaDistribuidora::factory()->create();
         self::assertDatabaseHas('distributor_category_assignments', ['id' => $asignacion->id]);
 
-        $linea = LineaCredito::factory()->create();
-        $movimiento = MovimientoLineaCredito::factory()->create();
-        $restriccion = RestriccionUsoCredito::factory()->create();
-        self::assertDatabaseHas('credit_lines', ['id' => $linea->id]);
-        self::assertDatabaseHas('credit_line_movements', ['id' => $movimiento->id]);
-        self::assertDatabaseHas('credit_usage_restrictions', ['id' => $restriccion->id]);
     }
 
-    public function test_conflicto_de_correo_no_revela_la_cuenta_existente(): void
+    public function test_vincula_cuenta_existente_sin_crear_una_cuenta_duplicada(): void
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
-        User::factory()->create([
+        $existente = User::factory()->create([
             'email' => 'aspirante@example.test',
             'normalized_email' => 'aspirante@example.test',
             'state' => 'ACTIVE',
@@ -527,9 +499,10 @@ class ActivacionDistribuidoraApiTest extends TestCase
                 'category_version_id' => $version->id,
             ]);
 
-        $respuesta->assertConflict()->assertJsonPath('error.code', 'DISTRIBUTOR_USER_CONFLICT');
-        self::assertStringNotContainsString('aspirante@example.test', $respuesta->getContent());
-        self::assertDatabaseCount('distributors', 0);
+        $respuesta->assertCreated()->assertJsonPath('data.user_id', $existente->id);
+        self::assertDatabaseCount('distributors', 1);
+        self::assertSame(1, User::query()->where('normalized_email', 'aspirante@example.test')->count());
+        self::assertDatabaseCount('account_invitations', 0);
     }
 
     public function test_reenvio_en_estado_activo_falla_y_se_audita(): void
@@ -614,6 +587,47 @@ class ActivacionDistribuidoraApiTest extends TestCase
         return Distribuidora::query()->where('application_id', $solicitud->id)->firstOrFail();
     }
 
+    public function test_publica_candidatos_autorizados_y_solo_categorias_disponibles(): void
+    {
+        [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
+        $borrador = Category::create(['code' => 'BORRADOR', 'status' => 'ACTIVE', 'created_by' => $gerente->id]);
+        CategoryVersion::create([
+            'category_id' => $borrador->id, 'version' => 1, 'name' => 'Borrador',
+            'profit_percentage' => '0.01', 'status' => 'DRAFT', 'effective_from' => now()->subDay(),
+            'reason' => 'No publicada', 'created_by' => $gerente->id,
+        ]);
+        Sanctum::actingAs($gerente);
+
+        $this->getJson('/api/v1/distributor-activation-candidates')
+            ->assertSuccessful()->assertJsonPath('data.0.id', $solicitud->id)
+            ->assertJsonPath('data.0.authorization.decision', 'AUTORIZADA');
+        $this->getJson('/api/v1/distributor-categories/available')
+            ->assertSuccessful()->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.category_version_id', $version->id);
+    }
+
+    public function test_reasignacion_y_cambio_de_estado_son_casos_de_uso_auditados(): void
+    {
+        [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
+        $distribuidora = $this->activar($gerente, $solicitud, $version);
+        $nuevo = $this->usuarioConRol('coordinator', $solicitud->branch_id, $gerente);
+
+        $this->postJson("/api/v1/distributors/{$distribuidora->id}/coordinator-assignments", [
+            'coordinator_id' => $nuevo->id, 'reason' => 'Reorganización', 'lock_version' => $distribuidora->lock_version,
+        ])->assertSuccessful()->assertJsonPath('data.coordinator.id', $nuevo->id);
+        $distribuidora->refresh();
+        DB::table('users')->where('id', $distribuidora->user_id)->update(['state' => 'ACTIVE']);
+        DB::table('distributors')->where('id', $distribuidora->id)->update(['status' => 'ACTIVE']);
+        $distribuidora->refresh();
+
+        $this->postJson("/api/v1/distributors/{$distribuidora->id}/disable", [
+            'reason' => 'Suspensión operativa', 'lock_version' => $distribuidora->lock_version,
+        ])->assertSuccessful()->assertJsonPath('data.status', 'DISABLED');
+        self::assertDatabaseCount('coordinator_distributor_assignments', 2);
+        self::assertDatabaseHas('audit_logs', ['event_name' => 'DISTRIBUTOR_COORDINATOR_ASSIGNED']);
+        self::assertDatabaseHas('audit_logs', ['event_name' => 'DISTRIBUTOR_STATUS_CHANGED']);
+    }
+
     private function escenarioAutorizado(string $sufijo = ''): array
     {
         $creador = User::factory()->create(['state' => 'ACTIVE']);
@@ -623,10 +637,13 @@ class ActivacionDistribuidoraApiTest extends TestCase
         ]);
         $gerente = $this->usuarioConRol('general_manager', null, $creador);
         $coordinador = $this->usuarioConRol('coordinator', $sucursal->id, $creador);
+        $datosSolicitante = ['personal_info' => [
+            'first_name' => 'Ana', 'last_name' => 'López', 'email' => "aspirante{$sufijo}@example.test",
+        ]];
         $solicitud = DistributorApplication::create([
-            'applicant_data' => ['personal_info' => [
-                'first_name' => 'Ana', 'last_name' => 'López', 'email' => "aspirante{$sufijo}@example.test",
-            ]],
+            'applicant_data' => $datosSolicitante,
+            'original_applicant_data' => $datosSolicitante,
+            'submitted_applicant_data' => $datosSolicitante,
             'status' => ApplicationStatus::AUTHORIZED_PENDING_ACTIVATION,
             'branch_id' => $sucursal->id,
             'coordinator_id' => $coordinador->id,

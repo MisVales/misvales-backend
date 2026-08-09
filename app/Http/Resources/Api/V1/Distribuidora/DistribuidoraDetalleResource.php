@@ -11,15 +11,21 @@ class DistribuidoraDetalleResource extends JsonResource
     {
         $categoria = $this->categoriaVigente?->versionCategoria;
         $coordinador = $this->coordinadorVigente?->coordinator;
-        $restriccion = $this->lineaCredito?->restricciones->firstWhere('type', 'INITIAL_50_PERCENT');
+        $datos = $this->solicitud?->applicant_data ?? [];
 
         return [
             'id' => $this->id,
             'application_id' => $this->application_id,
             'user_id' => $this->user_id,
             'distributor_number' => $this->distributor_number,
+            'full_name' => trim(implode(' ', array_filter([
+                data_get($datos, 'personal_info.first_name'),
+                data_get($datos, 'personal_info.last_name'),
+                data_get($datos, 'personal_info.second_last_name'),
+            ]))),
             'status' => $this->status->value,
             'activation_status' => $this->usuario?->state,
+            'access' => $this->usuario ? ['user_id' => $this->usuario->id, 'state' => $this->usuario->state] : null,
             'branch' => $this->sucursal ? ['id' => $this->sucursal->id, 'name' => $this->sucursal->name] : null,
             'coordinator' => $coordinador ? ['id' => $coordinador->id, 'name' => $coordinador->name] : null,
             'category' => $categoria ? [
@@ -29,26 +35,16 @@ class DistribuidoraDetalleResource extends JsonResource
                 'profit_rate' => $categoria->profit_percentage,
             ] : null,
             'category_history' => AsignacionCategoriaResource::collection($this->whenLoaded('asignacionesCategoria')),
+            'coordinator_history' => AsignacionCoordinadorResource::collection($this->whenLoaded('asignacionesCoordinador')),
             'origin' => $this->solicitud ? [
                 'application_id' => $this->solicitud->id,
                 'application_status' => $this->solicitud->status->value,
                 'authorization' => $this->solicitud->autorizacion ? [
                     'id' => $this->solicitud->autorizacion->id,
-                    'decision' => $this->solicitud->autorizacion->decision->value,
+                    'decision' => $this->solicitud->autorizacion->decision->value === 'APPROVED' ? 'AUTORIZADA' : 'RECHAZADA',
                     'authorized_at' => $this->solicitud->autorizacion->authorized_at?->toIso8601String(),
                 ] : null,
             ] : null,
-            'initial_credit' => $this->when($request->user()?->can('viewInitialCredit', $this->resource), fn () => $this->lineaCredito ? [
-                'total_authorized' => $this->lineaCredito->total_authorized,
-                'used_balance' => $this->lineaCredito->used_balance,
-                'available_balance' => $this->lineaCredito->saldoDisponible(),
-            ] : null),
-            'initial_restriction' => $this->when($request->user()?->can('viewInitialCredit', $this->resource), fn () => $restriccion ? [
-                'type' => $restriccion->type,
-                'status' => $restriccion->status->value,
-                'base_total' => $restriccion->base_total,
-                'consumed_at' => $restriccion->consumed_at?->toIso8601String(),
-            ] : null),
             'lock_version' => $this->lock_version,
             'created_at' => $this->created_at?->toIso8601String(),
             'activated_at' => $this->activated_at?->toIso8601String(),

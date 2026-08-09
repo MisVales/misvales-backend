@@ -77,9 +77,21 @@ class DistribuidoraPolicy
             && $this->esGerenteConAlcance($usuario, $distribuidora->branch_id);
     }
 
-    public function viewInitialCredit(User $usuario, Distribuidora $distribuidora): bool
+    public function assignCoordinator(User $usuario, Distribuidora $distribuidora): bool
     {
-        return $usuario->hasPermissionTo('distributors.view_initial_credit') && $this->view($usuario, $distribuidora);
+        return $usuario->hasPermissionTo('distributors.assign_coordinator')
+            && $this->esGerenteConAlcance($usuario, $distribuidora->branch_id);
+    }
+
+    public function viewCoordinatorHistory(User $usuario, Distribuidora $distribuidora): bool
+    {
+        return $usuario->hasPermissionTo('distributors.view_assignment_history') && $this->view($usuario, $distribuidora);
+    }
+
+    public function changeStatus(User $usuario, Distribuidora $distribuidora): bool
+    {
+        return $usuario->hasPermissionTo('distributors.change_status')
+            && $this->esGerenteConAlcance($usuario, $distribuidora->branch_id);
     }
 
     private function esGerenteConAlcance(User $usuario, string $sucursalId): bool
