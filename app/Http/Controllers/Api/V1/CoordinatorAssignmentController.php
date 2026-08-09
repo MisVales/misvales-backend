@@ -160,7 +160,7 @@ final class CoordinatorAssignmentController extends Controller
 
             $effectiveAt = now();
             if ($activeAssignment !== null) {
-                if ($effectiveAt->lessThanOrEqualTo($activeAssignment->valid_from)) {
+                if ($effectiveAt->lessThan($activeAssignment->valid_from->copy()->addSecond())) {
                     $effectiveAt = $activeAssignment->valid_from->copy()->addSecond();
                 }
                 $activeAssignment->forceFill([

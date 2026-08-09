@@ -2,9 +2,9 @@
 
 namespace App\Models\Concerns;
 
+use App\Exceptions\BusinessException;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
-use RuntimeException;
 
 trait HasOptimisticLocking
 {
@@ -35,14 +35,29 @@ trait HasOptimisticLocking
     /**
      * Perform a model update operation.
      */
-    protected function performUpdate(Builder $query)
+    protected function performUpdate(Builder $query): bool
     {
-        $affected = parent::performUpdate($query);
-
-        if ($affected === 0 && $this->isDirty()) {
-            throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia: El registro fue modificado por otro usuario. (Stale Data)', 409);
+        if ($this->fireModelEvent('updating') === false) {
+            return false;
         }
 
-        return $affected;
+        if ($this->usesTimestamps()) {
+            $this->updateTimestamps();
+        }
+
+        $dirty = $this->getDirtyForUpdate();
+
+        if (count($dirty) > 0) {
+            $affected = $this->setKeysForSaveQuery($query)->update($dirty);
+
+            if ($affected !== 1) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia: El registro fue modificado por otro usuario. (Stale Data)', 409);
+            }
+
+            $this->syncChanges();
+            $this->fireModelEvent('updated', false);
+        }
+
+        return true;
     }
 }

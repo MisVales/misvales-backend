@@ -2,25 +2,29 @@
 
 namespace Tests\Feature;
 
-use Illuminate\Foundation\Testing\RefreshDatabase;
-use Illuminate\Foundation\Testing\WithFaker;
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\ConfigurationDefinition;
+use App\Models\Role;
+use App\Models\User;
+use App\Models\UserRoleScope;
+use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Foundation\Testing\WithoutMiddleware;
+use Tests\TestCase;
 
 class ConfiguracionFeatureTest extends TestCase
 {
-    use RefreshDatabase, \Illuminate\Foundation\Testing\WithoutMiddleware;
+    use RefreshDatabase, WithoutMiddleware;
 
     protected function setUp(): void
     {
         parent::setUp();
-        // Setup initial data if required
+        $this->seed(RolesAndPermissionsSeeder::class);
     }
 
     public function test_crear_configuracion_con_version_draft()
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
         // Simular que completó MFA para pasar el middleware
         $this->actingAs($user);
 
@@ -40,14 +44,15 @@ class ConfiguracionFeatureTest extends TestCase
         $this->assertDatabaseHas('configuration_versions', [
             'version' => 1,
             'status' => 'DRAFT',
-            'value' => json_encode(50000.00)
+            'value' => json_encode('50000.0000'),
         ]);
     }
 
     public function test_publicar_version_cierra_version_previa()
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);
-        
+        $this->assignGeneralManager($user);
+
         $definition = ConfigurationDefinition::create([
             'key' => 'TAX_RATE',
             'name' => 'Tasa de Impuesto',
@@ -80,14 +85,27 @@ class ConfiguracionFeatureTest extends TestCase
 
         $this->actingAs($user);
 
-        $response = $this->putJson("/api/v1/configurations/{$definition->id}/versions/{$v2->id}/publish");
-        $response->dump();
+        $response = $this->postJson("/api/v1/configuration-versions/{$v2->id}/publish", [
+            'reason' => 'Increase tax',
+            'lock_version' => 0,
+        ]);
         $response->assertStatus(200);
 
         // Verificar que v2 ahora es PUBLISHED
         $this->assertEquals('PUBLISHED', $v2->fresh()->status->value);
-        
+
         // Verificar que v1 ahora tiene un effective_to que es exactamente el effective_from de v2
         $this->assertEquals($v2->fresh()->effective_from->toDateTimeString(), $v1->fresh()->effective_to->toDateTimeString());
+    }
+
+    private function assignGeneralManager(User $user): void
+    {
+        UserRoleScope::query()->create([
+            'user_id' => $user->id,
+            'role_id' => Role::query()->where('code', 'general_manager')->value('id'),
+            'scope_type' => 'GLOBAL',
+            'assigned_by_user_id' => $user->id,
+            'assigned_at' => now(),
+        ]);
     }
 }

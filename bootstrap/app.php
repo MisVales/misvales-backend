@@ -108,6 +108,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 'outcome' => 'DENIED',
                 'metadata' => ['message' => $e->getMessage(), 'path' => $request->path()],
             ]);
+
+            if ($request->is('api/*')) {
+                return response()->json(['error' => 'PERMISSION_DENIED', 'message' => 'Acceso denegado.'], 403);
+            }
         });
 
         $exceptions->renderable(function (AuthorizationException $e, Request $request) {

@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Product;
-use App\Models\ProductVersion;
 use App\Enums\BaseStatus;
 use App\Enums\VersionStatus;
-use Illuminate\Support\Facades\DB;
+use App\Exceptions\BusinessException;
+use App\Models\Product;
+use App\Models\ProductVersion;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
-use InvalidArgumentException;
-use RuntimeException;
+use Illuminate\Support\Facades\DB;
 
 class ProductoServicio
 {
@@ -31,8 +31,8 @@ class ProductoServicio
     public function crearVersion(Product $producto, array $datos, string $usuarioId): ProductVersion
     {
         $ultimaVersion = $producto->versions()->max('version') ?? 0;
-        
-        $effectiveFrom = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+
+        $effectiveFrom = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
 
         return ProductVersion::create([
             'product_id' => $producto->id,
@@ -65,48 +65,75 @@ class ProductoServicio
     {
         // Punto 64: Impedir editar una versión de producto publicada.
         if ($version->status !== VersionStatus::DRAFT) {
-            throw new \App\Exceptions\BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
+            throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
         }
 
-        $version->lock_version = $datos['lock_version'] ?? $version->lock_version;
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del producto fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
-        if (array_key_exists('name', $datos)) $version->name = $datos['name'];
-        if (array_key_exists('description', $datos)) $version->description = $datos['description'];
-        
-        if (array_key_exists('nominal_amount', $datos)) $version->nominal_amount = $this->normalizarMonto($datos['nominal_amount']);
-        if (array_key_exists('loan_commission_percentage', $datos)) $version->loan_commission_percentage = $this->normalizarPorcentaje($datos['loan_commission_percentage']);
-        if (array_key_exists('simple_interest_percentage', $datos)) $version->simple_interest_percentage = $this->normalizarPorcentaje($datos['simple_interest_percentage']);
-        if (array_key_exists('insurance_amount', $datos)) $version->insurance_amount = $this->normalizarMonto($datos['insurance_amount']);
-        if (array_key_exists('fortnights_count', $datos)) $version->fortnights_count = (int) $datos['fortnights_count'];
-        
-        if (array_key_exists('reason', $datos)) $version->reason = $datos['reason'];
+        if (array_key_exists('name', $datos)) {
+            $version->name = $datos['name'];
+        }
+        if (array_key_exists('description', $datos)) {
+            $version->description = $datos['description'];
+        }
+
+        if (array_key_exists('nominal_amount', $datos)) {
+            $version->nominal_amount = $this->normalizarMonto($datos['nominal_amount']);
+        }
+        if (array_key_exists('loan_commission_percentage', $datos)) {
+            $version->loan_commission_percentage = $this->normalizarPorcentaje($datos['loan_commission_percentage']);
+        }
+        if (array_key_exists('simple_interest_percentage', $datos)) {
+            $version->simple_interest_percentage = $this->normalizarPorcentaje($datos['simple_interest_percentage']);
+        }
+        if (array_key_exists('insurance_amount', $datos)) {
+            $version->insurance_amount = $this->normalizarMonto($datos['insurance_amount']);
+        }
+        if (array_key_exists('fortnights_count', $datos)) {
+            $version->fortnights_count = (int) $datos['fortnights_count'];
+        }
+
+        if (array_key_exists('reason', $datos)) {
+            $version->reason = $datos['reason'];
+        }
         if (array_key_exists('effective_from', $datos)) {
-            $version->effective_from = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+            $version->effective_from = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
         }
 
         $version->save();
+
         return $version;
     }
 
     public function publicarVersion(ProductVersion $version, array $datos, string $usuarioId): ProductVersion
     {
         if ($version->status !== VersionStatus::DRAFT) {
-            throw new \App\Exceptions\BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+            throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
         }
 
         // Punto 63: Impedir publicar un producto incompleto
         if (
-            is_null($version->name) || 
-            is_null($version->nominal_amount) || 
-            is_null($version->loan_commission_percentage) || 
-            is_null($version->simple_interest_percentage) || 
-            is_null($version->insurance_amount) || 
+            is_null($version->name) ||
+            is_null($version->nominal_amount) ||
+            is_null($version->loan_commission_percentage) ||
+            is_null($version->simple_interest_percentage) ||
+            is_null($version->insurance_amount) ||
             is_null($version->fortnights_count)
         ) {
-            throw new \App\Exceptions\BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto con información financiera incompleta.');
+            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto con información financiera incompleta.');
         }
 
-        $version->lock_version = $datos['lock_version'];
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del producto fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
             $versionPrevia = ProductVersion::where('product_id', $version->product_id)
@@ -117,24 +144,24 @@ class ProductoServicio
 
             if ($versionPrevia) {
                 if ($version->effective_from->lessThanOrEqualTo($versionPrevia->effective_from)) {
-                    throw new \App\Exceptions\BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
+                    throw new BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
                 }
-                
+
                 if ($version->effective_from->isPast()) {
-                    throw new \App\Exceptions\BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
+                    throw new BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
                 }
 
                 $versionPrevia->effective_to = $version->effective_from;
-                
+
                 if ($version->effective_from->isPast() || $version->effective_from->isCurrentMinute()) {
                     $versionPrevia->status = VersionStatus::INACTIVE;
                 }
-                
+
                 $versionPrevia->save();
             }
 
             $version->status = VersionStatus::PUBLISHED;
-            $version->reason .= "\n[Publicación]: " . $datos['reason'];
+            $version->reason .= "\n[Publicación]: ".$datos['reason'];
             $version->published_by = $usuarioId;
             $version->published_at = now();
             $version->save();
@@ -159,34 +186,35 @@ class ProductoServicio
         return $producto;
     }
 
-    public function resolver(string $code, ?\Carbon\Carbon $fecha = null): array
+    public function resolver(string $code, ?Carbon $fecha = null): array
     {
         $fechaConsulta = $fecha ?? now();
-        $isCurrent = !$fecha || $fechaConsulta->diffInSeconds(now()) < 5;
+        $isCurrent = ! $fecha || $fechaConsulta->diffInSeconds(now()) < 5;
 
         if ($isCurrent) {
-            return Cache::remember("producto:{$code}", $this->calcularCacheTTL(), fn() => $this->resolverDesdeBD($code, $fechaConsulta));
+            return Cache::remember("producto:{$code}", $this->calcularCacheTTL(), fn () => $this->resolverDesdeBD($code, $fechaConsulta));
         }
+
         return $this->resolverDesdeBD($code, $fechaConsulta);
     }
 
-    private function resolverDesdeBD(string $code, \Carbon\Carbon $fecha): array
+    private function resolverDesdeBD(string $code, Carbon $fecha): array
     {
         // Punto 66: Impedir utilizar productos en borrador, inactivos, vencidos o sin versión publicada
         $version = ProductVersion::whereHas('product', function ($q) use ($code) {
-                $q->where('code', $code)->where('status', BaseStatus::ACTIVE); // Excluye productos inactivos
-            })
+            $q->where('code', $code)->where('status', BaseStatus::ACTIVE); // Excluye productos inactivos
+        })
             ->where('status', VersionStatus::PUBLISHED) // Excluye DRAFT e INACTIVE (borradores y descartados)
             ->where('effective_from', '<=', $fecha) // Inicio vigente
             ->where(function ($q) use ($fecha) {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $fecha); // Fin vigente (no vencidos)
+                    ->orWhere('effective_to', '>', $fecha); // Fin vigente (no vencidos)
             })
             ->orderBy('effective_from', 'desc')
             ->first();
 
-        if (!$version) {
-            throw new \App\Exceptions\BusinessException('PRODUCT_VERSION_NOT_PUBLISHED', "No existe una versión publicada y vigente para el producto activo: {$code} (Punto 66)");
+        if (! $version) {
+            throw new BusinessException('PRODUCT_VERSION_NOT_PUBLISHED', "No existe una versión publicada y vigente para el producto activo: {$code} (Punto 66)");
         }
 
         return [
@@ -206,7 +234,7 @@ class ProductoServicio
         ];
     }
 
-    private function calcularCacheTTL(): \Carbon\Carbon
+    private function calcularCacheTTL(): Carbon
     {
         $proximaVersion = ProductVersion::where('status', VersionStatus::PUBLISHED)
             ->where('effective_from', '>', now())

@@ -2,14 +2,14 @@
 
 namespace App\Services;
 
-use App\Models\Category;
-use App\Models\CategoryVersion;
 use App\Enums\BaseStatus;
 use App\Enums\VersionStatus;
-use Illuminate\Support\Facades\DB;
+use App\Exceptions\BusinessException;
+use App\Models\Category;
+use App\Models\CategoryVersion;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
-use InvalidArgumentException;
-use RuntimeException;
+use Illuminate\Support\Facades\DB;
 
 class CategoriaServicio
 {
@@ -31,8 +31,8 @@ class CategoriaServicio
     public function crearVersion(Category $categoria, array $datos, string $usuarioId): CategoryVersion
     {
         $ultimaVersion = $categoria->versions()->max('version') ?? 0;
-        
-        $effectiveFrom = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+
+        $effectiveFrom = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
 
         return CategoryVersion::create([
             'category_id' => $categoria->id,
@@ -56,32 +56,49 @@ class CategoriaServicio
     {
         // Punto 53: Impedir editar una versión de categoría publicada.
         if ($version->status !== VersionStatus::DRAFT) {
-            throw new \App\Exceptions\BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
+            throw new BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
         }
 
-        $version->lock_version = $datos['lock_version'] ?? $version->lock_version;
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la categoría fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
-        if (array_key_exists('name', $datos)) $version->name = $datos['name'];
-        if (array_key_exists('description', $datos)) $version->description = $datos['description'];
+        if (array_key_exists('name', $datos)) {
+            $version->name = $datos['name'];
+        }
+        if (array_key_exists('description', $datos)) {
+            $version->description = $datos['description'];
+        }
         if (array_key_exists('profit_percentage', $datos)) {
             $version->profit_percentage = $this->normalizarPorcentaje($datos['profit_percentage']);
         }
-        if (array_key_exists('reason', $datos)) $version->reason = $datos['reason'];
+        if (array_key_exists('reason', $datos)) {
+            $version->reason = $datos['reason'];
+        }
         if (array_key_exists('effective_from', $datos)) {
-            $version->effective_from = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+            $version->effective_from = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
         }
 
         $version->save();
+
         return $version;
     }
 
     public function publicarVersion(CategoryVersion $version, array $datos, string $usuarioId): CategoryVersion
     {
         if ($version->status !== VersionStatus::DRAFT) {
-            throw new \App\Exceptions\BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+            throw new BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
         }
 
-        $version->lock_version = $datos['lock_version'];
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la categoría fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
             $versionPrevia = CategoryVersion::where('category_id', $version->category_id)
@@ -92,24 +109,24 @@ class CategoriaServicio
 
             if ($versionPrevia) {
                 if ($version->effective_from->lessThanOrEqualTo($versionPrevia->effective_from)) {
-                    throw new \App\Exceptions\BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
+                    throw new BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
                 }
-                
+
                 if ($version->effective_from->isPast()) {
-                    throw new \App\Exceptions\BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
+                    throw new BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
                 }
 
                 $versionPrevia->effective_to = $version->effective_from;
-                
+
                 if ($version->effective_from->isPast() || $version->effective_from->isCurrentMinute()) {
                     $versionPrevia->status = VersionStatus::INACTIVE;
                 }
-                
+
                 $versionPrevia->save();
             }
 
             $version->status = VersionStatus::PUBLISHED;
-            $version->reason .= "\n[Publicación]: " . $datos['reason'];
+            $version->reason .= "\n[Publicación]: ".$datos['reason'];
             $version->published_by = $usuarioId;
             $version->published_at = now();
             $version->save();
@@ -134,34 +151,35 @@ class CategoriaServicio
         return $categoria;
     }
 
-    public function resolver(string $code, ?\Carbon\Carbon $fecha = null): array
+    public function resolver(string $code, ?Carbon $fecha = null): array
     {
         $fechaConsulta = $fecha ?? now();
-        $isCurrent = !$fecha || $fechaConsulta->diffInSeconds(now()) < 5;
+        $isCurrent = ! $fecha || $fechaConsulta->diffInSeconds(now()) < 5;
 
         if ($isCurrent) {
-            return Cache::remember("categoria:{$code}", $this->calcularCacheTTL(), fn() => $this->resolverDesdeBD($code, $fechaConsulta));
+            return Cache::remember("categoria:{$code}", $this->calcularCacheTTL(), fn () => $this->resolverDesdeBD($code, $fechaConsulta));
         }
+
         return $this->resolverDesdeBD($code, $fechaConsulta);
     }
 
-    private function resolverDesdeBD(string $code, \Carbon\Carbon $fecha): array
+    private function resolverDesdeBD(string $code, Carbon $fecha): array
     {
         // Punto 55: Impedir utilizar una categoría sin versión publicada y vigente
         $version = CategoryVersion::whereHas('category', function ($q) use ($code) {
-                $q->where('code', $code)->where('status', BaseStatus::ACTIVE);
-            })
+            $q->where('code', $code)->where('status', BaseStatus::ACTIVE);
+        })
             ->where('status', VersionStatus::PUBLISHED)
             ->where('effective_from', '<=', $fecha)
             ->where(function ($q) use ($fecha) {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $fecha);
+                    ->orWhere('effective_to', '>', $fecha);
             })
             ->orderBy('effective_from', 'desc')
             ->first();
 
-        if (!$version) {
-            throw new \App\Exceptions\BusinessException('CATEGORY_VERSION_NOT_PUBLISHED', "No existe una versión publicada y vigente para la categoría activa: {$code} (Punto 55)");
+        if (! $version) {
+            throw new BusinessException('CATEGORY_VERSION_NOT_PUBLISHED', "No existe una versión publicada y vigente para la categoría activa: {$code} (Punto 55)");
         }
 
         return [
@@ -177,7 +195,7 @@ class CategoriaServicio
         ];
     }
 
-    private function calcularCacheTTL(): \Carbon\Carbon
+    private function calcularCacheTTL(): Carbon
     {
         $proximaVersion = CategoryVersion::where('status', VersionStatus::PUBLISHED)
             ->where('effective_from', '>', now())

@@ -2,12 +2,15 @@
 
 namespace App\Services;
 
+use App\Enums\BaseStatus;
+use App\Enums\ConfigurationValueType;
+use App\Enums\VersionStatus;
+use App\Exceptions\BusinessException;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
-use App\Enums\BaseStatus;
-use App\Enums\VersionStatus;
+use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use InvalidArgumentException;
 
 class ConfiguracionServicio
 {
@@ -38,11 +41,12 @@ class ConfiguracionServicio
 
     private function normalizarValor(mixed $valor, string $tipo): mixed
     {
-        $enumTipo = \App\Enums\ConfigurationValueType::tryFrom($tipo);
+        $enumTipo = ConfigurationValueType::tryFrom($tipo);
+
         return match ($enumTipo) {
-            \App\Enums\ConfigurationValueType::DECIMAL,
-            \App\Enums\ConfigurationValueType::PERCENTAGE => number_format((float) $valor, 4, '.', ''), // Previene floats en JSON y da 4 decimales
-            \App\Enums\ConfigurationValueType::INTEGER => (int) $valor,
+            ConfigurationValueType::DECIMAL,
+            ConfigurationValueType::PERCENTAGE => number_format((float) $valor, 4, '.', ''), // Previene floats en JSON y da 4 decimales
+            ConfigurationValueType::INTEGER => (int) $valor,
             default => $valor,
         };
     }
@@ -50,9 +54,9 @@ class ConfiguracionServicio
     public function crearVersion(ConfigurationDefinition $configuracion, array $datos, string $usuarioId): ConfigurationVersion
     {
         $ultimaVersion = $configuracion->versions()->max('version') ?? 0;
-        
+
         // Interpretar effective_from en Monterrey y guardar en UTC (Puntos 17 y 18)
-        $effectiveFrom = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+        $effectiveFrom = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
 
         return ConfigurationVersion::create([
             'configuration_definition_id' => $configuracion->id,
@@ -62,6 +66,7 @@ class ConfiguracionServicio
             'effective_from' => $effectiveFrom,
             'reason' => $datos['reason'],
             'created_by' => $usuarioId,
+            'lock_version' => 0,
         ]);
     }
 
@@ -69,7 +74,14 @@ class ConfiguracionServicio
     {
         // Punto 32: Impedir modificar directamente una versión publicada.
         if ($version->status !== VersionStatus::DRAFT) {
-            throw new \App\Exceptions\BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
+            throw new BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
+        }
+
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
         }
 
         if (array_key_exists('value', $datos)) {
@@ -79,37 +91,45 @@ class ConfiguracionServicio
             $version->reason = $datos['reason'];
         }
         if (isset($datos['effective_from'])) {
-            $version->effective_from = \Carbon\Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+            $version->effective_from = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
         }
 
         $version->save();
+
         return $version;
     }
 
     public function desactivarVersion(ConfigurationVersion $version, string $usuarioId): ConfigurationVersion
     {
         $version->status = VersionStatus::INACTIVE;
-        
+
         // Si estaba publicada y ya había iniciado, cerramos su vigencia en este momento exacto
-        if (!$version->effective_to && $version->effective_from && $version->effective_from->isPast()) {
+        if (! $version->effective_to && $version->effective_from && $version->effective_from->isPast()) {
             $version->effective_to = now();
         }
 
         $version->save();
 
         // Punto 42: Invalidar la caché
-        \Illuminate\Support\Facades\Cache::forget('configuraciones:todas_vigentes');
-        \Illuminate\Support\Facades\Cache::forget("configuracion:{$version->definition->key}");
+        Cache::forget('configuraciones:todas_vigentes');
+        Cache::forget("configuracion:{$version->definition->key}");
 
         return $version;
     }
 
-    public function publicarVersion(ConfigurationVersion $version, string $usuarioId): ConfigurationVersion
+    public function publicarVersion(ConfigurationVersion $version, array $datos, string $usuarioId): ConfigurationVersion
     {
         $statusValue = $version->status instanceof VersionStatus ? $version->status->value : $version->status;
-        
+
         if ($statusValue !== VersionStatus::DRAFT->value) {
-            throw new \App\Exceptions\BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+            throw new BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+        }
+
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
         }
 
         return DB::transaction(function () use ($version, $usuarioId) {
@@ -119,28 +139,29 @@ class ConfiguracionServicio
             $versionPrevia = ConfigurationVersion::where('configuration_definition_id', $version->configuration_definition_id)
                 ->where('status', VersionStatus::PUBLISHED)
                 ->whereNull('effective_to')
+                ->lockForUpdate()
                 ->first();
 
             if ($versionPrevia) {
                 // Validar que no haya traslapes ilógicos (Punto 29 y 30)
                 if ($version->effective_from->lessThanOrEqualTo($versionPrevia->effective_from)) {
-                    throw new \App\Exceptions\BusinessException('CONFIGURATION_VALIDITY_OVERLAP', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
+                    throw new BusinessException('CONFIGURATION_VALIDITY_OVERLAP', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
                 }
 
                 // Punto 35: Impedir cambios retroactivos en la capa de negocio
                 if ($version->effective_from->isPast()) {
-                    throw new \App\Exceptions\BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
+                    throw new BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
                 }
 
                 // La versión previa se cierra en el momento que inicia la nueva (Punto 34)
                 $versionPrevia->effective_to = $version->effective_from;
-                
+
                 // Si la nueva versión aplica inmediatamente, la previa pasa a INACTIVE.
                 // Si la nueva versión es a futuro, la previa se queda PUBLISHED hasta que llegue la fecha (Punto 31)
                 if ($version->effective_from->isPast() || $version->effective_from->isCurrentMinute()) {
                     $versionPrevia->status = VersionStatus::INACTIVE;
                 }
-                
+
                 $versionPrevia->save();
             }
 
@@ -148,17 +169,17 @@ class ConfiguracionServicio
             $version->published_by = $usuarioId;
             $version->published_at = $now;
             $version->save();
-            
+
             // Punto 87: Publicar evento en Outbox (misma transacción)
-            \App\Services\OutboxService::publish('ConfigurationPublished', [
+            OutboxService::publish('ConfigurationPublished', [
                 'configuration_key' => $version->definition->key,
                 'version_id' => $version->id,
                 'published_by' => $usuarioId,
             ]);
 
             // Punto 42: Invalidar caché manualmente cuando se publica o desactiva algo
-            \Illuminate\Support\Facades\Cache::forget('configuraciones:todas_vigentes');
-            \Illuminate\Support\Facades\Cache::forget("configuracion:{$version->definition->key}");
+            Cache::forget('configuraciones:todas_vigentes');
+            Cache::forget("configuracion:{$version->definition->key}");
 
             return $version;
         });
@@ -167,16 +188,16 @@ class ConfiguracionServicio
     /**
      * Resuelve el valor de una configuración en un momento específico (Punto 36 y 38)
      */
-    public function resolver(string $key, ?\Carbon\Carbon $fecha = null): array
+    public function resolver(string $key, ?Carbon $fecha = null): array
     {
         $fechaConsulta = $fecha ?? now();
-        $isCurrent = !$fecha || $fechaConsulta->diffInSeconds(now()) < 5;
+        $isCurrent = ! $fecha || $fechaConsulta->diffInSeconds(now()) < 5;
 
         // Punto 41: Caché solo para vigentes actuales
         if ($isCurrent) {
-            return \Illuminate\Support\Facades\Cache::remember(
-                "configuracion:{$key}", 
-                $this->calcularCacheTTL(), 
+            return Cache::remember(
+                "configuracion:{$key}",
+                $this->calcularCacheTTL(),
                 fn () => $this->resolverDesdeBD($key, $fechaConsulta)
             );
         }
@@ -184,22 +205,22 @@ class ConfiguracionServicio
         return $this->resolverDesdeBD($key, $fechaConsulta);
     }
 
-    private function resolverDesdeBD(string $key, \Carbon\Carbon $fecha): array
+    private function resolverDesdeBD(string $key, Carbon $fecha): array
     {
         $version = ConfigurationVersion::whereHas('definition', function ($q) use ($key) {
-                $q->where('key', $key)->where('status', BaseStatus::ACTIVE);
-            })
+            $q->where('key', $key)->where('status', BaseStatus::ACTIVE);
+        })
             ->where('status', VersionStatus::PUBLISHED)
             ->where('effective_from', '<=', $fecha)
             ->where(function ($q) use ($fecha) {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $fecha);
+                    ->orWhere('effective_to', '>', $fecha);
             })
             ->orderBy('effective_from', 'desc')
             ->first();
 
-        if (!$version) {
-            throw new \App\Exceptions\BusinessException('CONFIGURATION_NOT_FOUND', "No se encontró una versión publicada y vigente para la configuración: {$key}");
+        if (! $version) {
+            throw new BusinessException('CONFIGURATION_NOT_FOUND', "No se encontró una versión publicada y vigente para la configuración: {$key}");
         }
 
         return [
@@ -217,15 +238,15 @@ class ConfiguracionServicio
     /**
      * Obtiene todas las configuraciones vigentes en un momento dado (Punto 37 y 38)
      */
-    public function obtenerVigentes(?\Carbon\Carbon $fecha = null): array
+    public function obtenerVigentes(?Carbon $fecha = null): array
     {
         $fechaConsulta = $fecha ?? now();
-        $isCurrent = !$fecha || $fechaConsulta->diffInSeconds(now()) < 5;
+        $isCurrent = ! $fecha || $fechaConsulta->diffInSeconds(now()) < 5;
 
         if ($isCurrent) {
-            return \Illuminate\Support\Facades\Cache::remember(
-                'configuraciones:todas_vigentes', 
-                $this->calcularCacheTTL(), 
+            return Cache::remember(
+                'configuraciones:todas_vigentes',
+                $this->calcularCacheTTL(),
                 fn () => $this->obtenerVigentesDesdeBD($fechaConsulta)
             );
         }
@@ -233,7 +254,7 @@ class ConfiguracionServicio
         return $this->obtenerVigentesDesdeBD($fechaConsulta);
     }
 
-    private function obtenerVigentesDesdeBD(\Carbon\Carbon $fecha): array
+    private function obtenerVigentesDesdeBD(Carbon $fecha): array
     {
         $versiones = ConfigurationVersion::with('definition')
             ->whereHas('definition', function ($q) {
@@ -243,7 +264,7 @@ class ConfiguracionServicio
             ->where('effective_from', '<=', $fecha)
             ->where(function ($q) use ($fecha) {
                 $q->whereNull('effective_to')
-                  ->orWhere('effective_to', '>', $fecha);
+                    ->orWhere('effective_to', '>', $fecha);
             })
             ->orderBy('effective_from', 'desc')
             ->get()
@@ -267,10 +288,10 @@ class ConfiguracionServicio
     }
 
     /**
-     * Calcula el tiempo de vida de la caché (TTL) garantizando la invalidación automática 
+     * Calcula el tiempo de vida de la caché (TTL) garantizando la invalidación automática
      * cuando una versión programada a futuro deba entrar en vigor (Punto 42).
      */
-    private function calcularCacheTTL(): \Carbon\Carbon
+    private function calcularCacheTTL(): Carbon
     {
         $proximaVersion = ConfigurationVersion::where('status', VersionStatus::PUBLISHED)
             ->where('effective_from', '>', now())

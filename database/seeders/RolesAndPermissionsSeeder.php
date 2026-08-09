@@ -39,6 +39,11 @@ class RolesAndPermissionsSeeder extends Seeder
             // Assignments Module
             ['module' => 'assignments', 'action' => 'manage', 'code' => 'assignments.manage', 'description' => 'Asignar distribuidoras a coordinadores y reasignar'],
 
+            // Configurations and catalogs module
+            ['module' => 'catalogs', 'action' => 'view_published', 'code' => 'catalogs.view_published', 'description' => 'Consultar configuraciones y catálogos publicados'],
+            ['module' => 'catalogs', 'action' => 'view_history', 'code' => 'catalogs.view_history', 'description' => 'Consultar versiones históricas de configuraciones y catálogos'],
+            ['module' => 'catalogs', 'action' => 'manage', 'code' => 'catalogs.manage', 'description' => 'Crear, modificar y publicar configuraciones y catálogos'],
+
             // Audit Module
             ['module' => 'audit', 'action' => 'view', 'code' => 'audit.view', 'description' => 'Ver auditoría y eventos de seguridad'],
         ];
@@ -79,7 +84,7 @@ class RolesAndPermissionsSeeder extends Seeder
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
                 $permissionCodes = $roleData['code'] === 'branch_manager'
                     ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'distributor_applications.view', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
-                    : ['users.view', 'roles.view', 'branches.view', 'distributor_applications.view'];
+                    : ['users.view', 'roles.view', 'branches.view', 'catalogs.view_published', 'catalogs.view_history', 'distributor_applications.view'];
                 $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
                 $syncData = [];
 

@@ -2,7 +2,14 @@
 
 namespace App\Providers;
 
+use App\Models\Category;
+use App\Models\CategoryVersion;
+use App\Models\ConfigurationDefinition;
+use App\Models\ConfigurationVersion;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Product;
+use App\Models\ProductVersion;
+use App\Models\RedemptionPeriod;
 use App\Models\SolicitudDistribuidora;
 use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
 use App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository;
@@ -25,6 +32,7 @@ use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentBranchR
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentOrganizationAssignmentRepository;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\EloquentPersonnelReadRepository;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
+use App\Observers\VersionObserver;
 use App\Policies\BranchPolicy;
 use App\Policies\CoordinatorAssignmentPolicy;
 use App\Policies\SolicitudDistribuidoraPolicy;
@@ -61,6 +69,14 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(BranchRecord::class, BranchPolicy::class);
         Gate::policy(CoordinatorDistributorAssignment::class, CoordinatorAssignmentPolicy::class);
         Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
+
+        ConfigurationDefinition::observe(VersionObserver::class);
+        ConfigurationVersion::observe(VersionObserver::class);
+        Category::observe(VersionObserver::class);
+        CategoryVersion::observe(VersionObserver::class);
+        Product::observe(VersionObserver::class);
+        ProductVersion::observe(VersionObserver::class);
+        RedemptionPeriod::observe(VersionObserver::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
