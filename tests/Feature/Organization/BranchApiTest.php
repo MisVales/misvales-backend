@@ -7,11 +7,13 @@ use App\Http\Middleware\TrackSessionActivity;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use App\Modules\Organization\Application\Branches\AddressValidator;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Tests\Fakes\FakeAddressValidator;
 use Tests\TestCase;
 
 final class BranchApiTest extends TestCase
@@ -24,6 +26,7 @@ final class BranchApiTest extends TestCase
 
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
+        $this->app->instance(AddressValidator::class, new FakeAddressValidator);
     }
 
     public function test_general_manager_can_create_a_branch(): void
@@ -32,18 +35,19 @@ final class BranchApiTest extends TestCase
         Sanctum::actingAs($manager);
 
         $response = $this->postJson('/api/v1/branches', [
-            'code' => 'trc-02',
             'name' => 'Sucursal Torreón Norte',
+            'address' => 'Blvd. Independencia 100, Torreón, Coahuila, 27000',
         ]);
 
         $response
             ->assertCreated()
-            ->assertJsonPath('data.code', 'TRC-02')
+            ->assertJsonPath('data.address', 'Blvd. Independencia 100, Torreón, Coahuila, 27000')
             ->assertJsonPath('data.status', 'ACTIVE')
             ->assertJsonPath('data.lock_version', 0);
+        $this->assertMatchesRegularExpression('/\ASUC-\d{3,}\z/', $response->json('data.code'));
 
         $this->assertDatabaseHas('branches', [
-            'code' => 'TRC-02',
+            'code' => $response->json('data.code'),
             'created_by' => $manager->id,
         ]);
     }
@@ -56,8 +60,8 @@ final class BranchApiTest extends TestCase
         Sanctum::actingAs($branchManager);
 
         $this->postJson('/api/v1/branches', [
-            'code' => 'TRC-02',
             'name' => 'Sucursal Torreón Norte',
+            'address' => 'Blvd. Independencia 100, Torreón, Coahuila, 27000',
         ])->assertForbidden();
 
         $this->assertDatabaseMissing('branches', ['code' => 'TRC-02']);
@@ -93,8 +97,8 @@ final class BranchApiTest extends TestCase
             ->assertJsonCount(2, 'data');
 
         $this->postJson('/api/v1/branches', [
-            'code' => 'TRC-03',
             'name' => 'Sucursal Torreón Sur',
+            'address' => 'Av. Juárez 200, Torreón, Coahuila, 27000',
         ])->assertForbidden();
     }
 
@@ -106,15 +110,15 @@ final class BranchApiTest extends TestCase
 
         $this->withHeader('If-Match', '"0"')
             ->patchJson("/api/v1/branches/{$branch->id}", [
-                'code' => 'TRC-01',
                 'name' => 'Sucursal Torreón Centro Renovada',
+                'address' => 'Av. Hidalgo 300, Torreón, Coahuila, 27000',
             ])
             ->assertOk()
             ->assertJsonPath('data.lock_version', 1);
 
         $this->patchJson("/api/v1/branches/{$branch->id}", [
-            'code' => 'TRC-01',
             'name' => 'Cambio obsoleto',
+            'address' => 'Av. Hidalgo 301, Torreón, Coahuila, 27000',
             'lock_version' => 0,
         ])
             ->assertConflict()

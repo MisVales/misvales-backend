@@ -3,6 +3,7 @@
 namespace Tests\Unit\Modules\Organization\Domain\Branches;
 
 use App\Modules\Organization\Domain\Branches\Branch;
+use App\Modules\Organization\Domain\Branches\ValidatedAddress;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchCode;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchName;
@@ -27,15 +28,19 @@ final class BranchTest extends TestCase
         $branch = $this->newBranch();
 
         $branch->updateDetails(
-            BranchCode::fromString('TRC-02'),
             BranchName::fromString('Sucursal Torreón Norte'),
+            $this->address('Av. Hidalgo 300, Torreón, Coahuila, 27000'),
         );
 
-        self::assertSame('TRC-02', $branch->code()->value());
+        self::assertSame('TRC-01', $branch->code()->value());
         self::assertSame('Sucursal Torreón Norte', $branch->name()->value());
+        self::assertSame('Av. Hidalgo 300, Torreón, Coahuila, 27000', $branch->address()?->formatted);
         self::assertSame(1, $branch->lockVersion());
 
-        $branch->updateDetails($branch->code(), $branch->name());
+        $branch->updateDetails(
+            $branch->name(),
+            $this->address('Av. Hidalgo 300, Torreón, Coahuila, 27000'),
+        );
 
         self::assertSame(1, $branch->lockVersion());
     }
@@ -71,6 +76,7 @@ final class BranchTest extends TestCase
             id: BranchId::fromString('019fcbec-4ba4-7721-bf39-c9729fb0bd67'),
             code: BranchCode::fromString('TRC-01'),
             name: BranchName::fromString('Sucursal Torreón Centro'),
+            address: $this->address(),
             headquarters: false,
             status: BranchStatus::ACTIVE,
             lockVersion: -1,
@@ -83,7 +89,13 @@ final class BranchTest extends TestCase
             id: BranchId::fromString('019fcbec-4ba4-7721-bf39-c9729fb0bd67'),
             code: BranchCode::fromString('TRC-01'),
             name: BranchName::fromString('Sucursal Torreón Centro'),
+            address: $this->address(),
             headquarters: $headquarters,
         );
+    }
+
+    private function address(string $formatted = 'Blvd. Independencia 100, Torreón, Coahuila, 27000'): ValidatedAddress
+    {
+        return new ValidatedAddress($formatted, 'validation-id', 'place-id', 25.5428, -103.4068);
     }
 }

@@ -20,6 +20,8 @@ final class BranchMapperTest extends TestCase
             'id' => '019fcbec-4ba4-7721-bf39-c9729fb0bd67',
             'code' => 'TOR-MATRIZ',
             'name' => 'Sucursal Matriz Torreón',
+            'address' => 'Blvd. Independencia 100, Torreón, Coahuila, 27000',
+            'address_validation_id' => 'validation-id',
             'is_headquarters' => true,
             'status' => 'ACTIVE',
             'lock_version' => 3,
@@ -30,6 +32,7 @@ final class BranchMapperTest extends TestCase
         self::assertSame('019fcbec-4ba4-7721-bf39-c9729fb0bd67', $branch->id()->value());
         self::assertSame('TOR-MATRIZ', $branch->code()->value());
         self::assertSame('Sucursal Matriz Torreón', $branch->name()->value());
+        self::assertSame('Blvd. Independencia 100, Torreón, Coahuila, 27000', $branch->address()?->formatted);
         self::assertTrue($branch->isHeadquarters());
         self::assertSame(BranchStatus::ACTIVE, $branch->status());
         self::assertSame(3, $branch->lockVersion());
@@ -50,6 +53,12 @@ final class BranchMapperTest extends TestCase
             'id' => '019fcbec-4ba4-7721-bf39-c9729fb0bd67',
             'code' => 'TRC-02',
             'name' => 'Sucursal Torreón Norte',
+            'address' => null,
+            'address_validation_id' => null,
+            'address_place_id' => null,
+            'address_latitude' => null,
+            'address_longitude' => null,
+            'address_validated_at' => null,
             'is_headquarters' => false,
             'status' => 'INACTIVE',
             'lock_version' => 2,
