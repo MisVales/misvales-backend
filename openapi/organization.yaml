@@ -41,7 +41,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
     post:
       tags: [Branches]
-      summary: Crea una sucursal
+      summary: Crea una sucursal activa con código automático y dirección validada por Google Maps
       x-permission: branches.create
       requestBody:
         required: true
@@ -61,6 +61,7 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /branches/{id}:
     parameters:
       - $ref: '#/components/parameters/BranchId'
@@ -81,7 +82,7 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
     patch:
       tags: [Branches]
-      summary: Modifica código y nombre con control optimista
+      summary: Modifica nombre y dirección validada con control optimista
       x-permission: branches.update
       requestBody:
         required: true
@@ -101,11 +102,12 @@ paths:
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
         '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
   /branches/{id}/activate:
     post:
       tags: [Branches]
       summary: Activa una sucursal
-      x-permission: branches.activate
+      x-permission: branches.manage_state
       parameters:
         - $ref: '#/components/parameters/BranchId'
       requestBody:
@@ -122,7 +124,7 @@ paths:
     post:
       tags: [Branches]
       summary: Desactiva una sucursal sin asignaciones activas
-      x-permission: branches.deactivate
+      x-permission: branches.manage_state
       parameters:
         - $ref: '#/components/parameters/BranchId'
       requestBody:
@@ -281,6 +283,99 @@ paths:
         '403': { $ref: '#/components/responses/Forbidden' }
         '404': { $ref: '#/components/responses/NotFound' }
         '409': { $ref: '#/components/responses/Conflict' }
+  /assignments/distributors:
+    get:
+      tags: [Assignments]
+      summary: Lista distribuidoras activas disponibles en una sucursal autorizada
+      x-permission: branches.view
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Distribuidoras activas de la sucursal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DistributorCandidate' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /assignments/coordinator-distributor:
+    get:
+      tags: [Assignments]
+      summary: Lista asignaciones vigentes o históricas de distribuidoras a coordinadores
+      x-permission: branches.view
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: include_history
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Asignaciones coordinador-distribuidora
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CoordinatorDistributorAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Assignments]
+      summary: Asigna o reasigna una distribuidora conservando la vigencia anterior
+      x-permission: assignments.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCoordinatorDistributorAssignment' }
+      responses:
+        '201':
+          description: Asignación creada o reasignada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data: { $ref: '#/components/schemas/CoordinatorDistributorAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /assignments/coordinator-distributor/{assignmentId}:
+    delete:
+      tags: [Assignments]
+      summary: Retira una asignación sin borrar historial; una distribuidora activa debe reasignarse
+      x-permission: assignments.manage
+      parameters:
+        - $ref: '#/components/parameters/AssignmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [end_reason]
+              properties:
+                end_reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Asignación retirada
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
 components:
   securitySchemes:
     bearerAuth:
@@ -327,18 +422,20 @@ components:
         id: { type: string, format: uuid }
         code: { type: string, maxLength: 20 }
         name: { type: string, maxLength: 150 }
+        address: { type: [string, 'null'], maxLength: 500 }
         is_headquarters: { type: boolean }
         status: { $ref: '#/components/schemas/BranchStatus' }
         lock_version: { type: integer, minimum: 0 }
+        active_personnel_count: { type: integer, minimum: 0 }
         created_at: { type: string, format: date-time }
         updated_at: { type: [string, 'null'], format: date-time }
     StoreBranch:
       type: object
       additionalProperties: false
-      required: [code, name]
+      required: [name, address]
       properties:
-        code: { type: string, minLength: 2, maxLength: 20 }
         name: { type: string, minLength: 2, maxLength: 150 }
+        address: { type: string, minLength: 5, maxLength: 500 }
     UpdateBranch:
       allOf:
         - $ref: '#/components/schemas/StoreBranch'
@@ -402,6 +499,50 @@ components:
       properties:
         message: { type: string }
         assignment: { $ref: '#/components/schemas/Assignment' }
+    DistributorCandidate:
+      type: object
+      required: [id, application_number, status, branch, coordinator]
+      properties:
+        id: { type: string, format: uuid }
+        application_number: { type: string }
+        status: { type: string, const: ACTIVE }
+        branch:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+        coordinator:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: [string, 'null'] }
+        applicant:
+          type: object
+          properties:
+            full_name: { type: [string, 'null'] }
+    CoordinatorDistributorAssignment:
+      type: object
+      required: [id, coordinator_id, distributor_id, branch_id, valid_from, status]
+      properties:
+        id: { type: string, format: uuid }
+        coordinator_id: { type: string, format: uuid }
+        distributor_id: { type: string, format: uuid }
+        branch_id: { type: string, format: uuid }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: [string, 'null'], format: date-time }
+        status: { type: string, enum: [ACTIVE, REASSIGNED, ENDED] }
+        assignment_reason: { type: [string, 'null'] }
+        end_reason: { type: [string, 'null'] }
+        coordinator: { type: object }
+        distributor: { oneOf: [{ $ref: '#/components/schemas/DistributorCandidate' }, { type: 'null' }] }
+    StoreCoordinatorDistributorAssignment:
+      type: object
+      additionalProperties: false
+      required: [coordinator_id, distributor_id, branch_id]
+      properties:
+        coordinator_id: { type: string, format: uuid }
+        distributor_id: { type: string, format: uuid }
+        branch_id: { type: string, format: uuid }
+        assignment_reason: { type: [string, 'null'], maxLength: 500 }
     PaginationMeta:
       type: object
       properties:
@@ -429,7 +570,7 @@ components:
       properties:
         code:
           type: string
-          enum: [VALIDATION_ERROR, BRANCH_NOT_FOUND, DUPLICATE_BRANCH_CODE, BRANCH_INACTIVE, HEADQUARTERS_BRANCH_PROTECTED, BRANCH_HAS_ACTIVE_ASSIGNMENTS, USER_NOT_ASSIGNABLE, ROLE_SCOPE_NOT_ALLOWED, DUPLICATE_ACTIVE_ASSIGNMENT, INVALID_ORGANIZATION_SCOPE, ORGANIZATION_SCOPE_DENIED, VERSION_CONFLICT, ASSIGNMENT_NOT_FOUND, ASSIGNMENT_ALREADY_CLOSED]
+          enum: [VALIDATION_ERROR, BRANCH_NOT_FOUND, DUPLICATE_BRANCH_CODE, BRANCH_INACTIVE, HEADQUARTERS_BRANCH_PROTECTED, BRANCH_HAS_ACTIVE_ASSIGNMENTS, USER_NOT_ASSIGNABLE, ROLE_SCOPE_NOT_ALLOWED, DUPLICATE_ACTIVE_ASSIGNMENT, INVALID_ORGANIZATION_SCOPE, ORGANIZATION_SCOPE_DENIED, VERSION_CONFLICT, ASSIGNMENT_NOT_FOUND, ASSIGNMENT_ALREADY_CLOSED, COORDINATOR_NOT_ACTIVE_IN_BRANCH, DISTRIBUTOR_BRANCH_MISMATCH, ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR, INVALID_BRANCH_ADDRESS, ADDRESS_VALIDATION_UNAVAILABLE]
         message: { type: string }
         fields: { type: object }
         details: { type: object }
@@ -465,6 +606,11 @@ components:
           schema: { $ref: '#/components/schemas/Error' }
     ValidationError:
       description: Solicitud inválida
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServiceUnavailable:
+      description: Google Maps Address Validation no está disponible o no está configurado
       content:
         application/json:
           schema: { $ref: '#/components/schemas/Error' }
