@@ -2,12 +2,12 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
 use App\Models\AccountInvitation;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Validator;
-use Illuminate\Validation\Rules\Password;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use PragmaRX\Google2FA\Google2FA;
 use Tests\TestCase;
 
@@ -32,15 +32,15 @@ class AuthModuleUnitTest extends TestCase
     {
         $inputEmail = ' UsEr.NaME@GMAIL.COM ';
         $normalized = strtolower(trim($inputEmail));
-        
+
         $this->assertEquals('user.name@gmail.com', $normalized);
     }
 
     public function test_totp_generation_and_validation()
     {
-        $google2fa = new Google2FA();
+        $google2fa = new Google2FA;
         $secret = $google2fa->generateSecretKey();
-        
+
         $code = $google2fa->getCurrentOtp($secret);
         $isValid = $google2fa->verifyKey($secret, $code);
 
@@ -49,7 +49,7 @@ class AuthModuleUnitTest extends TestCase
 
     public function test_recovery_codes_hashing()
     {
-        $rawCode = strtolower(Str::random(4) . '-' . Str::random(4));
+        $rawCode = strtolower(Str::random(4).'-'.Str::random(4));
         $hash = hash('sha256', $rawCode);
 
         $this->assertNotEquals($rawCode, $hash);
@@ -66,7 +66,7 @@ class AuthModuleUnitTest extends TestCase
             'state' => 'ACTIVE',
             'expires_at' => now()->addDay(),
             'created_by_user_id' => $user->id,
-            'attempt_count' => 0
+            'attempt_count' => 0,
         ]);
 
         $this->assertTrue($invitation->isValid());

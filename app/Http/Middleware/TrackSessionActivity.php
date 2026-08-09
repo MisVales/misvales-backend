@@ -2,11 +2,11 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\AuthSession;
+use App\Services\Auth\SessionPolicyService;
 use Closure;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
-use App\Models\AuthSession;
-use App\Services\Auth\SessionPolicyService;
 
 class TrackSessionActivity
 {
@@ -20,7 +20,7 @@ class TrackSessionActivity
     /**
      * Handle an incoming request.
      *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
+     * @param  Closure(Request): (Response)  $next
      */
     public function handle(Request $request, Closure $next): Response
     {
@@ -29,7 +29,7 @@ class TrackSessionActivity
 
         if ($user && $token) {
             $tokenHash = hash('sha256', $request->bearerToken());
-            
+
             $session = AuthSession::where('session_identifier_hash', $tokenHash)->first();
 
             if ($session) {
@@ -39,22 +39,24 @@ class TrackSessionActivity
                 // 1. Verificar Expiración Absoluta
                 if ($session->expires_at && $session->expires_at->isPast()) {
                     $this->revokeSession($session, $token, 'ABSOLUTE_TIMEOUT');
+
                     return response()->json(['error' => 'INVALID_SESSION', 'message' => 'La sesión ha expirado.'], 401);
                 }
 
                 // 2. Verificar Inactividad (Punto 26)
                 if ($session->last_activity_at) {
                     $minutesInactive = $session->last_activity_at->diffInMinutes($now);
-                    
+
                     if ($minutesInactive > $policy['inactivity']) {
                         $this->revokeSession($session, $token, 'INACTIVITY_TIMEOUT');
+
                         return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Sesión cerrada por inactividad.'], 401);
                     }
                 }
 
                 // 3. Actualizar Actividad Controlada (Throttling)
                 // Solo guardamos en base de datos si han pasado más de 2 minutos para no matar el I/O
-                if (!$session->last_activity_at || $session->last_activity_at->diffInMinutes($now) >= 2) {
+                if (! $session->last_activity_at || $session->last_activity_at->diffInMinutes($now) >= 2) {
                     $session->last_activity_at = $now;
                     $session->save();
                 }
@@ -73,7 +75,7 @@ class TrackSessionActivity
             'revoked_at' => now(),
             'revocation_reason' => $reason,
         ]);
-        
+
         $accessToken->delete();
     }
 }

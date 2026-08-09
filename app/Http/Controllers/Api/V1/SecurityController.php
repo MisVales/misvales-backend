@@ -3,21 +3,29 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\ReauthenticatesMfa;
+use App\Mail\Security\SecurityAlertMail;
 use App\Models\AuthSession;
 use App\Models\MfaCredential;
 use App\Models\MfaRecoveryCode;
+use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\SessionPolicyService;
+use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rules\Password;
 use PragmaRX\Google2FA\Google2FA;
 
 class SecurityController extends Controller
 {
+    use ReauthenticatesMfa;
+
     /**
      * POST /api/v1/me/security/password
      * Punto 30: Cambio de contraseña con reautenticación.
@@ -26,18 +34,18 @@ class SecurityController extends Controller
     {
         $request->validate([
             'current_password' => 'required|string',
-            'new_password' => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::min(12)->mixedCase()->numbers()->symbols()],
+            'new_password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->symbols()],
             'totp_code' => 'nullable|string|size:6',
         ]);
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
         }
 
         // Validación de Reautenticación MFA Sensible
-        $reauthResult = $this->requireMfaReauth($request, $user, $policyService, $mfaService);
+        $reauthResult = $this->requireMfaReauth($request);
         if ($reauthResult !== true) {
             return $reauthResult;
         }
@@ -51,21 +59,21 @@ class SecurityController extends Controller
         $this->revokeOtherSessions($request);
 
         // Registrar evento
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'PASSWORD_CHANGE',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
             'user_id' => $user->id,
         ]);
-        
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Contraseña Modificada',
                 'La contraseña de tu cuenta ha sido modificada con éxito.',
                 [
                     'ip' => $request->ip(),
-                    'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                    'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                     'time' => now()->toDateTimeString(),
                 ]
             )
@@ -87,12 +95,14 @@ class SecurityController extends Controller
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
         }
 
-        $reauthResult = $this->requireMfaReauth($request, $user, $policyService, $mfaService);
-        if ($reauthResult !== true) return $reauthResult;
+        $reauthResult = $this->requireMfaReauth($request);
+        if ($reauthResult !== true) {
+            return $reauthResult;
+        }
 
         // Revocar/Eliminar viejos códigos
         MfaRecoveryCode::where('user_id', $user->id)->delete();
@@ -102,7 +112,7 @@ class SecurityController extends Controller
         $insertData = [];
 
         for ($i = 0; $i < 10; $i++) {
-            $code = strtolower(Str::random(4) . '-' . Str::random(4));
+            $code = strtolower(Str::random(4).'-'.Str::random(4));
             $plainCodes[] = $code;
             $insertData[] = [
                 'id' => Str::uuid(),
@@ -114,22 +124,22 @@ class SecurityController extends Controller
         }
 
         MfaRecoveryCode::insert($insertData);
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'RECOVERY_CODES_REGENERATED',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',
             'user_id' => $user->id,
         ]);
-        
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Códigos de Recuperación Regenerados',
                 'Tus códigos de recuperación de emergencia han sido regenerados. Los códigos anteriores ya no son válidos.',
                 [
                     'ip' => $request->ip(),
-                    'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                    'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                     'time' => now()->toDateTimeString(),
                 ]
             )
@@ -148,7 +158,7 @@ class SecurityController extends Controller
     public function totpSetup(Request $request)
     {
         $user = $request->user();
-        $google2fa = new Google2FA();
+        $google2fa = new Google2FA;
         $secret = $google2fa->generateSecretKey();
 
         // Guardar temporalmente el nuevo secreto en caché (15 min)
@@ -181,55 +191,56 @@ class SecurityController extends Controller
 
         $user = $request->user();
 
-        if (!Hash::check($request->current_password, $user->password)) {
+        if (! Hash::check($request->current_password, $user->password)) {
             return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
         }
 
         $cacheKey = "totp_reconfig_{$user->id}";
         $newSecret = Cache::get($cacheKey);
 
-        if (!$newSecret) {
+        if (! $newSecret) {
             return response()->json(['message' => 'La sesión de reconfiguración expiró. Vuelva a solicitar el código QR.'], 400);
         }
 
         // Validar el NUEVO código
-        $google2fa = new Google2FA();
+        $google2fa = new Google2FA;
         $valid = $google2fa->verifyKey($newSecret, $request->new_totp_code, config('mfa.totp.window', 1));
 
-        if (!$valid) {
+        if (! $valid) {
             return response()->json(['message' => 'El código del nuevo autenticador es incorrecto.'], 400);
         }
 
         // Si es válido, reemplazamos la credencial anterior
         $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
-        
-        if (!$mfaCredential) {
+
+        if (! $mfaCredential) {
             $mfaCredential = new MfaCredential(['user_id' => $user->id, 'type' => 'TOTP']);
         }
 
         $mfaCredential->secret_ciphertext = Crypt::encryptString($newSecret);
-        $mfaCredential->is_active = true;
+        $mfaCredential->confirmed_at = now();
+        $mfaCredential->revoked_at = null;
         $mfaCredential->last_used_at = now();
         $mfaCredential->save();
 
         Cache::forget($cacheKey);
 
         // Registrar evento
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'MFA_RECONFIGURED',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',
             'user_id' => $user->id,
         ]);
-        
-        \Illuminate\Support\Facades\Mail::to($user->email)->queue(
-            new \App\Mail\Security\SecurityAlertMail(
+
+        Mail::to($user->email)->queue(
+            new SecurityAlertMail(
                 $user,
                 'Segundo Factor de Autenticación Modificado',
                 'Tu aplicación de autenticación (TOTP) ha sido reconfigurada exitosamente.',
                 [
                     'ip' => $request->ip(),
-                    'device' => app(\App\Services\Audit\SecurityAuditService::class)->parseDevice($request->userAgent()),
+                    'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
                     'time' => now()->toDateTimeString(),
                 ]
             )
@@ -239,45 +250,35 @@ class SecurityController extends Controller
     }
 
     /**
-     * Helper Privado: Ejecuta la validación de la política MFA Reauth
-     * @return bool|\Illuminate\Http\JsonResponse True si aprueba, JSON Response si falla o requiere reauth.
+     * POST /api/v1/me/security/totp/validate-current
+     * Valida el TOTP actual y contraseña antes de permitir reconfigurar.
      */
-    private function requireMfaReauth(Request $request, $user, SessionPolicyService $policyService, MfaService $mfaService)
+    public function validateCurrentTotp(Request $request)
     {
-        $tokenHash = hash('sha256', $request->bearerToken());
-        $session = AuthSession::where('session_identifier_hash', $tokenHash)->first();
+        $request->validate([
+            'current_password' => 'required|string',
+            'totp_code' => 'required|string|size:6',
+        ]);
 
-        if (!$session) return response()->json(['message' => 'Sesión no encontrada.'], 401);
+        $user = $request->user();
 
-        $policy = $policyService->getPolicyForUser($user);
-
-        // Si no han pasado suficientes minutos, no pedimos MFA
-        if ($session->mfa_verified_at && $session->mfa_verified_at->diffInMinutes(now()) <= $policy['mfa_reauth']) {
-            return true;
+        if (! Hash::check($request->current_password, $user->password)) {
+            return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
         }
 
-        // Si superó el tiempo, se requiere código MFA en la petición actual
-        if (!$request->totp_code) {
-            return response()->json([
-                'mfa_required' => true,
-                'message' => 'Por seguridad, ingrese un código TOTP actual para confirmar esta acción.',
-            ], 403);
+        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
+        if (!$mfaCredential) {
+            return response()->json(['message' => 'No tienes TOTP configurado.'], 400);
         }
 
-        // Validar el código TOTP provisto
-        $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
-        if (!$mfaCredential) return response()->json(['message' => 'No hay configuración MFA activa.'], 403);
-
-        $secret = Crypt::decryptString($mfaCredential->secret_ciphertext);
+        $secret = \Illuminate\Support\Facades\Crypt::decryptString($mfaCredential->secret_ciphertext);
+        $mfaService = new MfaService();
+        
         if (!$mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
-            return response()->json(['message' => 'El código autenticador es incorrecto o expirado.'], 401);
+            return response()->json(['message' => 'El código de autenticador es incorrecto.'], 401);
         }
 
-        // Actualizamos la marca de tiempo de MFA en la sesión
-        $session->mfa_verified_at = now();
-        $session->save();
-
-        return true;
+        return response()->json(['message' => 'Validación exitosa.']);
     }
 
     /**
@@ -299,5 +300,99 @@ class SecurityController extends Controller
             ]);
             DB::table('personal_access_tokens')->where('token', $session->getRawOriginal('session_identifier_hash'))->delete();
         }
+    }
+
+    /**
+     * GET /api/v1/me/security/passkeys
+     */
+    public function passkeys(Request $request)
+    {
+        $passkeys = MfaCredential::where('user_id', $request->user()->id)
+            ->where('type', 'PASSKEY')
+            ->get(['id', 'created_at', 'last_used_at']);
+        
+        return response()->json($passkeys);
+    }
+
+    /**
+     * POST /api/v1/me/security/passkeys/options
+     */
+    public function passkeyOptions(Request $request, WebAuthnService $webAuthnService)
+    {
+        $options = $webAuthnService->generateRegistrationOptions($request->user());
+        $cacheKey = "passkey_setup_user_" . $request->user()->id;
+        Cache::put($cacheKey, serialize($options), now()->addMinutes(10));
+        return response($webAuthnService->serializeOptions($options))->header('Content-Type', 'application/json');
+    }
+
+    /**
+     * POST /api/v1/me/security/passkeys/register
+     */
+    public function passkeyRegister(Request $request, WebAuthnService $webAuthnService)
+    {
+        $request->validate([
+            'clientDataJSON' => 'required|string',
+            'attestationObject' => 'required|string',
+        ]);
+
+        $user = $request->user();
+        $cacheKey = "passkey_setup_user_" . $user->id;
+        $cachedOptions = Cache::get($cacheKey);
+        
+        if (! $cachedOptions) {
+            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+        }
+
+        $options = unserialize($cachedOptions);
+
+        try {
+            $credentialData = $webAuthnService->verifyRegistration(
+                $request->clientDataJSON,
+                $request->attestationObject,
+                $options
+            );
+
+            MfaCredential::create([
+                'user_id' => $user->id,
+                'type' => 'PASSKEY',
+                'credential_identifier' => base64_encode($credentialData->credentialId),
+                'public_key' => base64_encode($credentialData->credentialPublicKey ?? ''),
+                'aaguid' => (string) $credentialData->aaguid,
+                'sign_count' => 0,
+                'confirmed_at' => now(),
+            ]);
+
+            Cache::forget($cacheKey);
+
+            return response()->json(['message' => 'Passkey registrado correctamente.']);
+        } catch (\Exception $e) {
+            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: '.$e->getMessage()], 400);
+        }
+    }
+
+    /**
+     * DELETE /api/v1/me/security/passkeys/{id}
+     */
+    public function deletePasskey(Request $request, $id)
+    {
+        $user = $request->user();
+        
+        $passkey = MfaCredential::where('user_id', $user->id)
+            ->where('type', 'PASSKEY')
+            ->where('id', $id)
+            ->firstOrFail();
+
+        // Validar que siempre quede al menos 1 método MFA o 1 Passkey.
+        $totalMfa = MfaCredential::where('user_id', $user->id)
+            ->whereIn('type', ['PASSKEY', 'TOTP'])
+            ->count();
+
+        if ($totalMfa <= 1) {
+            return response()->json(['error' => 'LAST_MFA_METHOD', 'message' => 'No puedes eliminar esta llave de acceso porque es tu único método de autenticación.'], 400);
+        }
+
+        $passkey->delete();
+
+        return response()->json(['message' => 'Llave de acceso eliminada correctamente.']);
     }
 }

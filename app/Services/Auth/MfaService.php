@@ -11,26 +11,25 @@ class MfaService
      * Verifica un código TOTP contra un secreto.
      * Incluye prevención de Replay Attacks (códigos ya usados).
      *
-     * @param string $secret El secreto TOTP (ya desencriptado)
-     * @param string $code El código de 6 dígitos introducido por el usuario
-     * @param string $userId El ID del usuario intentando usar el código
-     * @param int $window Ventana de tolerancia para clock drift (1 = +- 30 segundos)
-     * @return bool
+     * @param  string  $secret  El secreto TOTP (ya desencriptado)
+     * @param  string  $code  El código de 6 dígitos introducido por el usuario
+     * @param  string  $userId  El ID del usuario intentando usar el código
+     * @param  int  $window  Ventana de tolerancia para clock drift (1 = +- 30 segundos)
      */
     public function verifyTotp(string $secret, string $code, string $userId, int $window = 1): bool
     {
         // 1. Prevención de Replay Attack
         // Revisar si este usuario ya usó este código exitosamente en los últimos 2 minutos
         $cacheKey = "totp_used_{$userId}_{$code}";
-        
+
         if (Cache::has($cacheKey)) {
             return false; // El código ya fue "quemado"
         }
 
         // 2. Validación estándar RFC 6238
-        $google2fa = new Google2FA();
+        $google2fa = new Google2FA;
         $google2fa->setWindow($window);
-        
+
         $isValid = $google2fa->verifyKey($secret, $code);
 
         // 3. Si es válido, "quemarlo" en la caché

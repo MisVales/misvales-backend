@@ -16,8 +16,10 @@ class ProgressiveLockoutService
             // Extraemos el timestamp de expiración guardado como valor
             $expiresAt = Cache::get($lockKey);
             $remaining = $expiresAt - time();
+
             return $remaining > 0 ? $remaining : null;
         }
+
         return null;
     }
 

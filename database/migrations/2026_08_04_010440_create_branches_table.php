@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -32,7 +32,7 @@ return new class extends Migration
 
         // Restricción: status solo admite ACTIVE o INACTIVE
         DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'));");
-        DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);");
+        DB::statement('ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);');
 
         // Triggers para proteger la sucursal matriz
         // 1. No puede eliminarse físicamente
@@ -47,11 +47,11 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql;
         ");
-        DB::statement("
+        DB::statement('
             CREATE TRIGGER check_headquarters_deletion
             BEFORE DELETE ON branches
             FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deletion();
-        ");
+        ');
 
         // 2. No puede desactivarse
         DB::statement("
@@ -65,11 +65,11 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql;
         ");
-        DB::statement("
+        DB::statement('
             CREATE TRIGGER check_headquarters_deactivation
             BEFORE UPDATE ON branches
             FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deactivation();
-        ");
+        ');
     }
 
     /**
@@ -77,11 +77,11 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement("DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;");
-        DB::statement("DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();");
-        
-        DB::statement("DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;");
-        DB::statement("DROP FUNCTION IF EXISTS prevent_headquarters_deletion();");
+        DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');
+        DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();');
+
+        DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;');
+        DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deletion();');
 
         Schema::dropIfExists('branches');
     }

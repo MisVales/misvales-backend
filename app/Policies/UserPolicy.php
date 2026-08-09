@@ -19,12 +19,35 @@ class UserPolicy
 
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('users.read');
+        return $user->hasPermissionTo('users.view');
     }
 
     public function view(User $user, User $model): bool
     {
-        return $user->hasPermissionTo('users.read');
+        if (! $user->hasPermissionTo('users.view')) {
+            return false;
+        }
+
+        $activeScopes = $user->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at');
+
+        if ((clone $activeScopes)
+            ->where('scope_type', 'GLOBAL')
+            ->whereHas('role', fn ($roles) => $roles->whereIn('code', ['general_manager', 'admin']))
+            ->exists()) {
+            return true;
+        }
+
+        $branchIds = (clone $activeScopes)
+            ->where('scope_type', 'BRANCH')
+            ->pluck('branch_id');
+
+        return $model->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at')
+            ->whereIn('branch_id', $branchIds)
+            ->exists();
     }
 
     public function create(User $user): bool
@@ -39,6 +62,6 @@ class UserPolicy
 
     public function manage(User $user): bool
     {
-        return $user->hasPermissionTo('users.manage');
+        return $user->hasPermissionTo('users.manage_state');
     }
 }

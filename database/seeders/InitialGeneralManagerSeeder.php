@@ -2,10 +2,13 @@
 
 namespace Database\Seeders;
 
+use Carbon\Carbon;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
+use App\Models\User;
+use App\Mail\ActivationInvitationMail;
 
 class InitialGeneralManagerSeeder extends Seeder
 {
@@ -20,8 +23,8 @@ class InitialGeneralManagerSeeder extends Seeder
             // 1. Crear o recuperar el rol GENERAL_MANAGER
             $roleCode = 'general_manager';
             $role = DB::table('roles')->where('code', $roleCode)->first();
-            
-            if (!$role) {
+
+            if (! $role) {
                 $roleId = Str::uuid()->toString();
                 DB::table('roles')->insert([
                     'id' => $roleId,
@@ -36,7 +39,7 @@ class InitialGeneralManagerSeeder extends Seeder
             }
 
             $managerEnabled = env('INITIAL_GENERAL_MANAGER_ENABLED', false);
-            if (!$managerEnabled) {
+            if (! $managerEnabled) {
                 return; // Skip if not enabled
             }
 
@@ -44,19 +47,19 @@ class InitialGeneralManagerSeeder extends Seeder
             $managerName = env('INITIAL_GENERAL_MANAGER_NAME');
             $managerEmail = env('INITIAL_GENERAL_MANAGER_EMAIL');
 
-            if (!$managerName || !$managerEmail) {
+            if (! $managerName || ! $managerEmail) {
                 throw new \Exception('Se requieren las variables de entorno INITIAL_GENERAL_MANAGER_NAME e INITIAL_GENERAL_MANAGER_EMAIL para inicializar el sistema.');
             }
 
             $user = DB::table('users')->where('email', $managerEmail)->first();
-            
-            if (!$user) {
+
+            if (! $user) {
                 $userId = Str::uuid()->toString();
                 DB::table('users')->insert([
                     'id' => $userId,
                     'name' => $managerName,
                     'email' => $managerEmail,
-                    'normalized_email' => strtoupper($managerEmail),
+                    'normalized_email' => strtolower(trim($managerEmail)),
                     'state' => 'PENDING_ACTIVATION',
                     'password' => null,
                     'email_verified_at' => null,
@@ -70,8 +73,8 @@ class InitialGeneralManagerSeeder extends Seeder
             // 3. Crear o recuperar la sucursal matriz
             $branchCode = 'MATRIZ';
             $branch = DB::table('branches')->where('code', $branchCode)->first();
-            
-            if (!$branch) {
+
+            if (! $branch) {
                 $branchId = Str::uuid()->toString();
                 DB::table('branches')->insert([
                     'id' => $branchId,
@@ -92,21 +95,21 @@ class InitialGeneralManagerSeeder extends Seeder
                 ->where('user_id', $user->id)
                 ->where('role_id', $role->id)
                 ->where('status', 'ACTIVE')
-                ->whereNull('valid_to')
+                ->whereNull('revoked_at')
                 ->exists();
 
-            if (!$scopeExists) {
+            if (! $scopeExists) {
                 DB::table('user_role_scopes')->insert([
                     'id' => Str::uuid()->toString(),
                     'user_id' => $user->id,
                     'role_id' => $role->id,
-                    'branch_id' => $branch->id,
+                    'branch_id' => null,
                     'scope_type' => 'GLOBAL',
-                    'valid_from' => $now,
-                    'valid_to' => null,
+                    'assigned_at' => $now,
+                    'revoked_at' => null,
                     'status' => 'ACTIVE',
-                    'assigned_by' => $user->id,
-                    'reason' => 'Bootstrap inicial del sistema',
+                    'assigned_by_user_id' => $user->id,
+                    'assignment_reason' => 'Bootstrap inicial del sistema',
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
@@ -119,7 +122,7 @@ class InitialGeneralManagerSeeder extends Seeder
                 ->where('expires_at', '>', $now)
                 ->exists();
 
-            if (!$invitationExists && $user->state === 'PENDING_ACTIVATION') {
+            if (! $invitationExists && $user->state === 'PENDING_ACTIVATION') {
                 $token = Str::random(40);
                 DB::table('account_invitations')->insert([
                     'id' => Str::uuid()->toString(),
@@ -133,7 +136,15 @@ class InitialGeneralManagerSeeder extends Seeder
                     'created_at' => $now,
                     'updated_at' => $now,
                 ]);
-                dump("Generated Token: " . $token);
+                
+                // Enviar el correo automáticamente
+                $userModel = User::find($user->id);
+                if ($userModel) {
+                    Mail::to($userModel->email)->send(new ActivationInvitationMail($userModel, $token));
+                    dump('Invitation email sent to: ' . $userModel->email);
+                } else {
+                    dump('Generated Token: '.$token);
+                }
             }
         });
     }

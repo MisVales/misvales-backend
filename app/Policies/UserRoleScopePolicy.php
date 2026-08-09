@@ -9,15 +9,27 @@ class UserRoleScopePolicy
 {
     public function before(User $user, string $ability)
     {
-        if ($user->state !== 'ACTIVE') return false;
+        if ($user->state !== 'ACTIVE') {
+            return false;
+        }
     }
 
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('roles.assign');
+        return $user->hasPermissionTo('roles.assign') || $user->hasPermissionTo('branches.view');
     }
 
     public function create(User $user): bool
+    {
+        return $user->hasPermissionTo('roles.assign');
+    }
+
+    public function updateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('roles.assign');
+    }
+
+    public function endAny(User $user): bool
     {
         return $user->hasPermissionTo('roles.assign');
     }

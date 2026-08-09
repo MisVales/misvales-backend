@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -35,8 +35,8 @@ return new class extends Migration
             WHERE status = 'PUBLISHED' AND effective_to IS NULL;
         ");
 
-        DB::statement("ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_version CHECK (version > 0);");
-        DB::statement("ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);");
+        DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_version CHECK (version > 0);');
+        DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);');
         DB::statement("ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'INACTIVE'));");
         DB::statement("ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_published_consistency CHECK (
             (status = 'PUBLISHED' AND published_by IS NOT NULL AND published_at IS NOT NULL)

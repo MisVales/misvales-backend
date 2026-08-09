@@ -2,10 +2,14 @@
 
 namespace App\Console\Commands;
 
+use App\Mail\ActivationInvitationMail;
+use App\Models\AccountInvitation;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use Database\Seeders\HeadquartersBranchSeeder;
 use Illuminate\Console\Command;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class BootstrapGeneralManager extends Command
@@ -29,8 +33,9 @@ class BootstrapGeneralManager extends Command
      */
     public function handle()
     {
-        if (!env('INITIAL_GENERAL_MANAGER_ENABLED', false)) {
+        if (! env('INITIAL_GENERAL_MANAGER_ENABLED', true)) {
             $this->info('General Manager bootstrap is disabled in .env.');
+
             return;
         }
 
@@ -39,6 +44,7 @@ class BootstrapGeneralManager extends Command
 
         if (empty($email) || empty($name)) {
             $this->error('Missing INITIAL_GENERAL_MANAGER_EMAIL or INITIAL_GENERAL_MANAGER_NAME in .env.');
+
             return;
         }
 
@@ -55,8 +61,9 @@ class BootstrapGeneralManager extends Command
 
         $role = Role::where('code', 'general_manager')->first();
 
-        if (!$role) {
+        if (! $role) {
             $this->error('The general_manager role does not exist. Please run the roles seeder first.');
+
             return;
         }
 
@@ -65,25 +72,27 @@ class BootstrapGeneralManager extends Command
             'user_id' => $user->id,
             'role_id' => $role->id,
             'branch_id' => null, // Alcance global
-            'valid_to' => null,
+            'revoked_at' => null,
             'status' => 'ACTIVE',
         ], [
             'scope_type' => 'GLOBAL',
-            'valid_from' => now(),
-            'assigned_by' => $user->id,
-            'reason' => 'Bootstrap inicial del sistema',
+            'assigned_at' => now(),
+            'assigned_by_user_id' => $user->id,
+            'assignment_reason' => 'Bootstrap inicial del sistema',
         ]);
+
+        app(HeadquartersBranchSeeder::class)->run($user->id);
 
         // Generar invitación (Punto 11)
         // Revisamos si ya tiene una invitación activa para no generar basura
-        $invitation = \App\Models\AccountInvitation::where('user_id', $user->id)
+        $invitation = AccountInvitation::where('user_id', $user->id)
             ->whereIn('state', ['ACTIVE', 'PREPARED'])
             ->first();
 
-        if (!$invitation) {
-            $rawToken = \Illuminate\Support\Str::random(40);
-            
-            \App\Models\AccountInvitation::create([
+        if (! $invitation) {
+            $rawToken = Str::random(40);
+
+            AccountInvitation::create([
                 'user_id' => $user->id,
                 'created_by_user_id' => $user->id, // El sistema/él mismo
                 'purpose' => 'ACCOUNT_ACTIVATION',
@@ -93,7 +102,7 @@ class BootstrapGeneralManager extends Command
             ]);
 
             // Enviar correo (Punto 12)
-            \Illuminate\Support\Facades\Mail::to($user->email)->send(new \App\Mail\ActivationInvitationMail($user, $rawToken));
+            Mail::to($user->email)->send(new ActivationInvitationMail($user, $rawToken));
             $this->info("Invitation generated and email sent to [{$email}]!");
         } else {
             $this->warn("User [{$email}] already has an active invitation.");

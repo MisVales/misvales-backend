@@ -3,7 +3,11 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
+use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
 use Illuminate\Http\Request;
+use InvalidArgumentException;
 
 class MeController extends Controller
 {
@@ -11,14 +15,15 @@ class MeController extends Controller
      * GET /api/v1/me
      * Devuelve la identidad del usuario, alcances y permisos efectivos.
      */
-    public function show(Request $request)
+    public function show(Request $request, OrganizationAssignmentRules $assignmentRules)
     {
         $user = $request->user();
 
         // Cargar los alcances (scopes) con sus respectivos roles y permisos
         $user->load(['roleScopes' => function ($query) {
-            // Solo alcances no revocados
-            $query->whereNull('revoked_at')
+            // Solo alcances activos y no vencidos
+            $query->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
                 ->with(['role' => function ($roleQuery) {
                     $roleQuery->with('permissions');
                 }]);
@@ -28,14 +33,32 @@ class MeController extends Controller
         $effectivePermissions = [];
 
         foreach ($user->roleScopes as $scope) {
-            if (!$scope->role) continue;
+            if (! $scope->role) {
+                continue;
+            }
+
+            try {
+                $organizationScope = OrganizationScope::fromString($scope->scope_type);
+                $assignmentRules->assertRoleAllowsScope($scope->role->code, $organizationScope);
+            } catch (InvalidArgumentException|RoleScopeNotAllowed) {
+                // Una asignación estructuralmente inválida no concede
+                // capacidades efectivas ni se anuncia al cliente.
+                continue;
+            }
+
+            if (($organizationScope === OrganizationScope::BRANCH && $scope->branch_id === null)
+                || ($organizationScope === OrganizationScope::GLOBAL && $scope->branch_id !== null)) {
+                continue;
+            }
 
             $rolePermissions = $scope->role->permissions->pluck('code')->toArray();
-            
+
             $scopes[] = [
                 'role' => $scope->role->code,
                 'role_name' => $scope->role->name,
                 'branch_id' => $scope->branch_id,
+                'scope_type' => $scope->scope_type,
+                'scope_id' => $scope->scope_id,
                 'permissions' => $rolePermissions,
             ];
 

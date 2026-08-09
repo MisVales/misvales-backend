@@ -3,14 +3,20 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\ReauthenticatesMfa;
+use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use App\Services\Audit\SecurityAuditService;
+use App\Services\Auth\RoleAssignmentPolicyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
 class UserAssignmentController extends Controller
 {
+    use ReauthenticatesMfa;
+
     /**
      * GET /api/v1/users/{id}/assignments
      * Punto 35: Listar asignaciones activas de un usuario
@@ -24,6 +30,7 @@ class UserAssignmentController extends Controller
 
         $assignments = UserRoleScope::with(['role', 'assignedBy'])
             ->where('user_id', $userId)
+            ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->get();
 
@@ -34,7 +41,7 @@ class UserAssignmentController extends Controller
      * POST /api/v1/users/{id}/assignments
      * Punto 35 y 36: Asignar un rol y sucursal a un usuario con validaciones profundas.
      */
-    public function store(Request $request, string $userId, \App\Services\Auth\RoleAssignmentPolicyService $policyService)
+    public function store(Request $request, string $userId, RoleAssignmentPolicyService $policyService)
     {
         Gate::authorize('create', UserRoleScope::class);
 
@@ -45,16 +52,16 @@ class UserAssignmentController extends Controller
             'branch_id' => 'nullable|uuid', // Nullable significa alcance global
         ]);
 
-        $role = \App\Models\Role::findOrFail($request->role_id);
+        $role = Role::findOrFail($request->role_id);
 
         // Validación Avanzada (Punto 36)
         $validationResult = $policyService->validateAssignment(
-            $request->user(), 
-            $user, 
-            $role, 
+            $request->user(),
+            $user,
+            $role,
             $request->branch_id
         );
-        
+
         if ($validationResult !== true) {
             return response()->json(['message' => $validationResult], 403);
         }
@@ -63,6 +70,7 @@ class UserAssignmentController extends Controller
         $exists = UserRoleScope::where('user_id', $user->id)
             ->where('role_id', $request->role_id)
             ->where('branch_id', $request->branch_id)
+            ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->exists();
 
@@ -77,9 +85,11 @@ class UserAssignmentController extends Controller
             'branch_id' => $request->branch_id,
             'assigned_by_user_id' => $request->user()->id,
             'assigned_at' => now(),
+            'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
+            'status' => 'ACTIVE',
         ]);
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ROLE_ASSIGNED',
             'severity' => 'INFO',
             'outcome' => 'SUCCESS',
@@ -92,7 +102,7 @@ class UserAssignmentController extends Controller
 
         return response()->json([
             'message' => 'Asignación creada exitosamente.',
-            'assignment' => $assignment->load('role')
+            'assignment' => $assignment->load('role'),
         ], 201);
     }
 
@@ -104,17 +114,24 @@ class UserAssignmentController extends Controller
     {
         $assignment = UserRoleScope::where('id', $assignmentId)
             ->where('user_id', $userId)
+            ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->firstOrFail();
 
         Gate::authorize('delete', $assignment);
 
+        $reauthResult = $this->requireMfaReauth($request);
+        if ($reauthResult !== true) {
+            return $reauthResult;
+        }
+
         $assignment->revoked_at = now();
         $assignment->revoked_by_user_id = $request->user()->id;
         $assignment->revocation_reason = 'REVOKED_BY_ADMIN';
+        $assignment->status = 'REVOKED';
         $assignment->save();
-        
-        app(\App\Services\Audit\SecurityAuditService::class)->log($request, [
+
+        app(SecurityAuditService::class)->log($request, [
             'event_type' => 'ROLE_REVOKED',
             'severity' => 'WARNING',
             'outcome' => 'SUCCESS',

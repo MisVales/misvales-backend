@@ -2,16 +2,16 @@
 
 namespace Tests\Feature;
 
-use App\Models\User;
-use App\Models\Role;
-use App\Models\Permission;
 use App\Models\AuthSession;
+use App\Models\Permission;
+use App\Models\Role;
 use App\Models\SecurityEvent;
+use App\Models\User;
+use App\Services\Audit\SecurityAuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Tests\TestCase;
-use App\Services\Audit\SecurityAuditService;
-use Illuminate\Http\Request;
 
 class AuthModuleIntegrationTest extends TestCase
 {
@@ -24,7 +24,7 @@ class AuthModuleIntegrationTest extends TestCase
             'name' => 'SUPER_ADMIN',
             'code' => 'SUPER_ADMIN',
             'default_scope' => 'GLOBAL',
-            'level' => 100
+            'level' => 100,
         ]);
 
         $permission = Permission::create([
@@ -33,7 +33,7 @@ class AuthModuleIntegrationTest extends TestCase
             'code' => 'sys.manage',
             'module' => 'System',
             'action' => 'manage',
-            'description' => 'System manage'
+            'description' => 'System manage',
         ]);
 
         $role->permissions()->attach($permission->id, ['id' => Str::uuid(), 'granted_at' => now()]);
@@ -57,16 +57,16 @@ class AuthModuleIntegrationTest extends TestCase
             'ip_address' => '127.0.0.1',
             'user_agent' => 'TestAgent',
             'last_activity_at' => now(),
-            'expires_at' => now()->addMinutes(60)
+            'expires_at' => now()->addMinutes(60),
         ]);
 
         $this->assertDatabaseHas('auth_sessions', [
             'user_id' => $user->id,
-            'ip_address' => '127.0.0.1'
+            'ip_address' => '127.0.0.1',
         ]);
-        
+
         $session->update(['revoked_at' => now(), 'revocation_reason' => 'MANUAL_LOGOUT']);
-        
+
         $this->assertNotNull($session->fresh()->revoked_at);
     }
 
@@ -84,14 +84,14 @@ class AuthModuleIntegrationTest extends TestCase
             'severity' => 'WARNING',
             'outcome' => 'FAILURE',
             'user_id' => $user->id,
-            'metadata' => ['reason' => 'Invalid password']
+            'metadata' => ['reason' => 'Invalid password'],
         ]);
 
         $this->assertDatabaseHas('security_events', [
             'event_type' => 'LOGIN_FAILED',
             'severity' => 'WARNING',
             'outcome' => 'FAILURE',
-            'user_id' => $user->id
+            'user_id' => $user->id,
         ]);
 
         $event = SecurityEvent::first();

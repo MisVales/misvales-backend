@@ -10,22 +10,24 @@ class RolePolicy
 {
     public function before(User $user, string $ability)
     {
-        if ($user->state !== 'ACTIVE') return false;
+        if ($user->state !== 'ACTIVE') {
+            return false;
+        }
     }
 
     public function viewAny(User $user): bool
     {
-        return $user->hasPermissionTo('roles.manage');
+        return $user->hasPermissionTo('roles.view');
     }
 
     public function view(User $user, Role $role): bool
     {
-        return $user->hasPermissionTo('roles.manage');
+        return $user->hasPermissionTo('roles.view');
     }
 
     public function updatePermissions(User $user, Role $role): Response
     {
-        if (!$user->hasPermissionTo('roles.manage')) {
+        if (! $user->hasPermissionTo('roles.manage_permissions')) {
             return Response::deny('No tiene permiso para administrar roles.');
         }
 

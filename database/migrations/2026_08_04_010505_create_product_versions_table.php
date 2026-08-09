@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -39,14 +39,14 @@ return new class extends Migration
             WHERE status = 'PUBLISHED' AND effective_to IS NULL;
         ");
 
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_version CHECK (version > 0);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_commission CHECK (loan_commission_rate >= 0 AND loan_commission_rate <= 1);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_interest CHECK (interest_rate_per_fortnight >= 0 AND interest_rate_per_fortnight <= 1);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_insurance CHECK (insurance_amount >= 0);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights CHECK (fortnights > 0);");
-        DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);");
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_version CHECK (version > 0);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_commission CHECK (loan_commission_rate >= 0 AND loan_commission_rate <= 1);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_interest CHECK (interest_rate_per_fortnight >= 0 AND interest_rate_per_fortnight <= 1);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_insurance CHECK (insurance_amount >= 0);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights CHECK (fortnights > 0);');
+        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);');
         DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'INACTIVE'));");
     }
 

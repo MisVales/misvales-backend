@@ -1,0 +1,616 @@
+openapi: 3.1.0
+info:
+  title: MisVales — Organización, sucursales y personal
+  version: 2.0.0
+  description: Contrato HTTP del Módulo 2. Todas las operaciones requieren sesión activa y MFA completado.
+servers:
+  - url: /api/v1
+security:
+  - bearerAuth: []
+tags:
+  - name: Branches
+  - name: Personnel
+  - name: Assignments
+paths:
+  /branches:
+    get:
+      tags: [Branches]
+      summary: Lista sucursales dentro del alcance efectivo
+      x-permission: branches.view
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/BranchStatus' }
+        - name: search
+          in: query
+          schema: { type: string, maxLength: 150 }
+        - name: sort
+          in: query
+          schema: { type: string, enum: [code, name, status, created_at], default: created_at }
+        - name: direction
+          in: query
+          schema: { type: string, enum: [asc, desc], default: desc }
+      responses:
+        '200':
+          description: Página de sucursales
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/PaginatedBranches' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+    post:
+      tags: [Branches]
+      summary: Crea una sucursal activa con código automático y dirección validada por Google Maps
+      x-permission: branches.create
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreBranch' }
+      responses:
+        '201':
+          description: Sucursal creada
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data: { $ref: '#/components/schemas/Branch' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /branches/{id}:
+    parameters:
+      - $ref: '#/components/parameters/BranchId'
+    get:
+      tags: [Branches]
+      summary: Consulta una sucursal dentro del alcance efectivo
+      x-permission: branches.view
+      responses:
+        '200':
+          description: Detalle de sucursal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Branch' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    patch:
+      tags: [Branches]
+      summary: Modifica nombre y dirección validada con control optimista
+      x-permission: branches.update
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/UpdateBranch' }
+      responses:
+        '200':
+          description: Sucursal modificada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data: { $ref: '#/components/schemas/Branch' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+        '503': { $ref: '#/components/responses/ServiceUnavailable' }
+  /branches/{id}/activate:
+    post:
+      tags: [Branches]
+      summary: Activa una sucursal
+      x-permission: branches.manage_state
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BranchResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /branches/{id}/deactivate:
+    post:
+      tags: [Branches]
+      summary: Desactiva una sucursal sin asignaciones activas
+      x-permission: branches.manage_state
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/VersionRequest' }
+      responses:
+        '200': { $ref: '#/components/responses/BranchResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /branches/{id}/personnel:
+    get:
+      tags: [Personnel]
+      summary: Lista personal activo de una sucursal autorizada
+      x-permission: branches.view
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/RoleIdQuery'
+        - name: state
+          in: query
+          schema: { $ref: '#/components/schemas/UserState' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonnelPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /branches/{id}/assignments:
+    get:
+      tags: [Assignments]
+      summary: Lista asignaciones activas o históricas de una sucursal
+      x-permission: branches.view
+      parameters:
+        - $ref: '#/components/parameters/BranchId'
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - $ref: '#/components/parameters/RoleIdQuery'
+        - name: status
+          in: query
+          schema: { $ref: '#/components/schemas/AssignmentStatus' }
+        - name: include_history
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200': { $ref: '#/components/responses/PersonnelPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /personnel:
+    get:
+      tags: [Personnel]
+      summary: Lista personal conforme al alcance efectivo
+      x-permission: branches.view
+      parameters:
+        - $ref: '#/components/parameters/Page'
+        - $ref: '#/components/parameters/PerPage'
+        - name: branch_id
+          in: query
+          schema: { type: string, format: uuid }
+        - $ref: '#/components/parameters/RoleIdQuery'
+        - name: user_state
+          in: query
+          schema: { $ref: '#/components/schemas/UserState' }
+        - name: assignment_status
+          in: query
+          schema: { $ref: '#/components/schemas/AssignmentStatus' }
+      responses:
+        '200': { $ref: '#/components/responses/PersonnelPage' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+  /users/{userId}/assignments:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+    get:
+      tags: [Assignments]
+      summary: Lista asignaciones efectivas; el historial es optativo para compatibilidad
+      x-permission: branches.view
+      parameters:
+        - name: include_history
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Asignaciones visibles dentro del alcance del actor
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: '#/components/schemas/Assignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+    post:
+      tags: [Assignments]
+      summary: Asigna rol y alcance; una reasignación cierra la vigencia anterior
+      x-permission: roles.assign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreAssignment' }
+      responses:
+        '201':
+          description: Asignación creada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssignmentResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /users/{userId}/assignments/{assignmentId}:
+    parameters:
+      - $ref: '#/components/parameters/UserId'
+      - $ref: '#/components/parameters/AssignmentId'
+    patch:
+      tags: [Assignments]
+      summary: Modifica únicamente vigencia inicial o motivo de una asignación activa
+      x-permission: roles.assign
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              minProperties: 1
+              additionalProperties: false
+              properties:
+                assigned_at: { type: string, format: date-time }
+                assignment_reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Asignación actualizada
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/AssignmentResponse' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    delete:
+      tags: [Assignments]
+      summary: Cierra lógicamente una asignación
+      x-permission: roles.assign
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Asignación revocada
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '404': { $ref: '#/components/responses/NotFound' }
+        '409': { $ref: '#/components/responses/Conflict' }
+  /assignments/distributors:
+    get:
+      tags: [Assignments]
+      summary: Lista distribuidoras activas disponibles en una sucursal autorizada
+      x-permission: branches.view
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+      responses:
+        '200':
+          description: Distribuidoras activas de la sucursal
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/DistributorCandidate' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /assignments/coordinator-distributor:
+    get:
+      tags: [Assignments]
+      summary: Lista asignaciones vigentes o históricas de distribuidoras a coordinadores
+      x-permission: branches.view
+      parameters:
+        - name: branch_id
+          in: query
+          required: true
+          schema: { type: string, format: uuid }
+        - name: include_history
+          in: query
+          schema: { type: boolean, default: false }
+      responses:
+        '200':
+          description: Asignaciones coordinador-distribuidora
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items: { $ref: '#/components/schemas/CoordinatorDistributorAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+    post:
+      tags: [Assignments]
+      summary: Asigna o reasigna una distribuidora conservando la vigencia anterior
+      x-permission: assignments.manage
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/StoreCoordinatorDistributorAssignment' }
+      responses:
+        '201':
+          description: Asignación creada o reasignada
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  data: { $ref: '#/components/schemas/CoordinatorDistributorAssignment' }
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+  /assignments/coordinator-distributor/{assignmentId}:
+    delete:
+      tags: [Assignments]
+      summary: Retira una asignación sin borrar historial; una distribuidora activa debe reasignarse
+      x-permission: assignments.manage
+      parameters:
+        - $ref: '#/components/parameters/AssignmentId'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [end_reason]
+              properties:
+                end_reason: { type: string, minLength: 1, maxLength: 500 }
+      responses:
+        '200':
+          description: Asignación retirada
+        '403': { $ref: '#/components/responses/Forbidden' }
+        '409': { $ref: '#/components/responses/Conflict' }
+        '422': { $ref: '#/components/responses/ValidationError' }
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: Sanctum
+  parameters:
+    Page:
+      name: page
+      in: query
+      schema: { type: integer, minimum: 1, default: 1 }
+    PerPage:
+      name: per_page
+      in: query
+      schema: { type: integer, minimum: 1, maximum: 100, default: 15 }
+    BranchId:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    UserId:
+      name: userId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    AssignmentId:
+      name: assignmentId
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+    RoleIdQuery:
+      name: role_id
+      in: query
+      schema: { type: string, format: uuid }
+  schemas:
+    BranchStatus: { type: string, enum: [ACTIVE, INACTIVE] }
+    AssignmentStatus: { type: string, enum: [ACTIVE, ENDED, REVOKED] }
+    OrganizationScope: { type: string, enum: [GLOBAL, BRANCH, ASSIGNED, SELF] }
+    UserState: { type: string, enum: [INVITED, PENDING_ACTIVATION, ACTIVE, BLOCKED, DISABLED] }
+    Branch:
+      type: object
+      required: [id, code, name, is_headquarters, status, lock_version]
+      properties:
+        id: { type: string, format: uuid }
+        code: { type: string, maxLength: 20 }
+        name: { type: string, maxLength: 150 }
+        address: { type: [string, 'null'], maxLength: 500 }
+        is_headquarters: { type: boolean }
+        status: { $ref: '#/components/schemas/BranchStatus' }
+        lock_version: { type: integer, minimum: 0 }
+        active_personnel_count: { type: integer, minimum: 0 }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: [string, 'null'], format: date-time }
+    StoreBranch:
+      type: object
+      additionalProperties: false
+      required: [name, address]
+      properties:
+        name: { type: string, minLength: 2, maxLength: 150 }
+        address: { type: string, minLength: 5, maxLength: 500 }
+    UpdateBranch:
+      allOf:
+        - $ref: '#/components/schemas/StoreBranch'
+        - $ref: '#/components/schemas/VersionRequest'
+    VersionRequest:
+      type: object
+      required: [lock_version]
+      properties:
+        lock_version: { type: integer, minimum: 0 }
+    Assignment:
+      type: object
+      required: [id, user_id, role_id, scope_type, status, assigned_at]
+      properties:
+        id: { type: string, format: uuid }
+        user_id: { type: string, format: uuid }
+        role_id: { type: string, format: uuid }
+        branch_id: { type: [string, 'null'], format: uuid }
+        scope_type: { $ref: '#/components/schemas/OrganizationScope' }
+        status: { $ref: '#/components/schemas/AssignmentStatus' }
+        assigned_at: { type: string, format: date-time }
+        assignment_reason: { type: [string, 'null'], maxLength: 500 }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        revocation_reason: { type: [string, 'null'] }
+    Personnel:
+      type: object
+      required: [assignment_id, user, role, scope, assignment_status, assigned_at]
+      properties:
+        assignment_id: { type: string, format: uuid }
+        user:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: string }
+            email: { type: string, format: email }
+            state: { $ref: '#/components/schemas/UserState' }
+        role:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            code: { type: string }
+            name: { type: string }
+        branch_id: { type: [string, 'null'], format: uuid }
+        scope: { $ref: '#/components/schemas/OrganizationScope' }
+        assignment_status: { $ref: '#/components/schemas/AssignmentStatus' }
+        assigned_at: { type: string, format: date-time }
+        assignment_reason: { type: [string, 'null'] }
+        revoked_at: { type: [string, 'null'], format: date-time }
+        revocation_reason: { type: [string, 'null'] }
+    StoreAssignment:
+      type: object
+      additionalProperties: false
+      required: [role_id]
+      properties:
+        role_id: { type: string, format: uuid }
+        branch_id: { type: [string, 'null'], format: uuid }
+        scope: { $ref: '#/components/schemas/OrganizationScope' }
+        assigned_at: { type: string, format: date-time }
+        assignment_reason: { type: [string, 'null'], maxLength: 500 }
+    AssignmentResponse:
+      type: object
+      properties:
+        message: { type: string }
+        assignment: { $ref: '#/components/schemas/Assignment' }
+    DistributorCandidate:
+      type: object
+      required: [id, application_number, status, branch, coordinator]
+      properties:
+        id: { type: string, format: uuid }
+        application_number: { type: string }
+        status: { type: string, const: ACTIVE }
+        branch:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+        coordinator:
+          type: object
+          properties:
+            id: { type: string, format: uuid }
+            name: { type: [string, 'null'] }
+        applicant:
+          type: object
+          properties:
+            full_name: { type: [string, 'null'] }
+    CoordinatorDistributorAssignment:
+      type: object
+      required: [id, coordinator_id, distributor_id, branch_id, valid_from, status]
+      properties:
+        id: { type: string, format: uuid }
+        coordinator_id: { type: string, format: uuid }
+        distributor_id: { type: string, format: uuid }
+        branch_id: { type: string, format: uuid }
+        valid_from: { type: string, format: date-time }
+        valid_to: { type: [string, 'null'], format: date-time }
+        status: { type: string, enum: [ACTIVE, REASSIGNED, ENDED] }
+        assignment_reason: { type: [string, 'null'] }
+        end_reason: { type: [string, 'null'] }
+        coordinator: { type: object }
+        distributor: { oneOf: [{ $ref: '#/components/schemas/DistributorCandidate' }, { type: 'null' }] }
+    StoreCoordinatorDistributorAssignment:
+      type: object
+      additionalProperties: false
+      required: [coordinator_id, distributor_id, branch_id]
+      properties:
+        coordinator_id: { type: string, format: uuid }
+        distributor_id: { type: string, format: uuid }
+        branch_id: { type: string, format: uuid }
+        assignment_reason: { type: [string, 'null'], maxLength: 500 }
+    PaginationMeta:
+      type: object
+      properties:
+        current_page: { type: integer }
+        per_page: { type: integer }
+        total: { type: integer }
+        last_page: { type: integer }
+    PaginatedBranches:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Branch' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    PaginatedPersonnel:
+      type: object
+      properties:
+        data:
+          type: array
+          items: { $ref: '#/components/schemas/Personnel' }
+        meta: { $ref: '#/components/schemas/PaginationMeta' }
+    Error:
+      type: object
+      required: [code, message, fields, details, request_id]
+      properties:
+        code:
+          type: string
+          enum: [VALIDATION_ERROR, BRANCH_NOT_FOUND, DUPLICATE_BRANCH_CODE, BRANCH_INACTIVE, HEADQUARTERS_BRANCH_PROTECTED, BRANCH_HAS_ACTIVE_ASSIGNMENTS, USER_NOT_ASSIGNABLE, ROLE_SCOPE_NOT_ALLOWED, DUPLICATE_ACTIVE_ASSIGNMENT, INVALID_ORGANIZATION_SCOPE, ORGANIZATION_SCOPE_DENIED, VERSION_CONFLICT, ASSIGNMENT_NOT_FOUND, ASSIGNMENT_ALREADY_CLOSED, COORDINATOR_NOT_ACTIVE_IN_BRANCH, DISTRIBUTOR_BRANCH_MISMATCH, ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR, INVALID_BRANCH_ADDRESS, ADDRESS_VALIDATION_UNAVAILABLE]
+        message: { type: string }
+        fields: { type: object }
+        details: { type: object }
+        request_id: { type: [string, 'null'] }
+  responses:
+    BranchResponse:
+      description: Estado actualizado
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              data: { $ref: '#/components/schemas/Branch' }
+    PersonnelPage:
+      description: Página de personal o asignaciones
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/PaginatedPersonnel' }
+    Forbidden:
+      description: Permiso o alcance organizacional denegado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    NotFound:
+      description: Recurso no encontrado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    Conflict:
+      description: Conflicto de estado, unicidad o versión
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ValidationError:
+      description: Solicitud inválida
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }
+    ServiceUnavailable:
+      description: Google Maps Address Validation no está disponible o no está configurado
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/Error' }

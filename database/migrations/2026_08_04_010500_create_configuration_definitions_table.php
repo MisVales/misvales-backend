@@ -2,8 +2,8 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -27,7 +27,7 @@ return new class extends Migration
             $table->index(['status', 'key']);
         });
 
-        DB::statement("ALTER TABLE configuration_definitions ADD CONSTRAINT chk_cd_lock_version CHECK (lock_version >= 0);");
+        DB::statement('ALTER TABLE configuration_definitions ADD CONSTRAINT chk_cd_lock_version CHECK (lock_version >= 0);');
         DB::statement("ALTER TABLE configuration_definitions ADD CONSTRAINT chk_cd_value_type CHECK (value_type IN ('INTEGER', 'DECIMAL', 'PERCENTAGE', 'BOOLEAN', 'STRING', 'TIME', 'TIMEZONE', 'DURATION', 'JSON'));");
         DB::statement("ALTER TABLE configuration_definitions ADD CONSTRAINT chk_cd_status CHECK (status IN ('ACTIVE', 'INACTIVE'));");
     }
