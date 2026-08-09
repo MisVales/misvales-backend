@@ -35,4 +35,8 @@ return [
         ],
     ],
 
+    'google_maps' => [
+        'address_validation_key' => env('GOOGLE_MAPS_ADDRESS_VALIDATION_API_KEY'),
+    ],
+
 ];

@@ -10,7 +10,9 @@ use App\Modules\Organization\Application\Branches\UseCases\DeactivateBranch;
 use App\Modules\Organization\Application\Branches\UseCases\GetBranch;
 use App\Modules\Organization\Application\Branches\UseCases\ListBranches;
 use App\Modules\Organization\Application\Branches\UseCases\UpdateBranch;
+use App\Modules\Organization\Domain\Branches\Branch;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
+use App\Modules\Organization\Presentation\Http\Requests\ChangeBranchStatusCompatibilityRequest;
 use App\Modules\Organization\Presentation\Http\Requests\ChangeBranchStatusRequest;
 use App\Modules\Organization\Presentation\Http\Requests\ListBranchesRequest;
 use App\Modules\Organization\Presentation\Http\Requests\StoreBranchRequest;
@@ -47,12 +49,12 @@ final class BranchController extends Controller
 
         $branch = $useCase->handle(
             id: Str::uuid()->toString(),
-            code: $request->validated('code'),
             name: $request->validated('name'),
+            address: $request->validated('address'),
             actorId: $request->user()->id,
         );
 
-        return response()->json(['data' => BranchResource::fromDomain($branch)], 201);
+        return response()->json(['data' => $this->resource($branch)], 201);
     }
 
     public function show(Request $request, string $id, GetBranch $useCase): JsonResponse
@@ -61,7 +63,7 @@ final class BranchController extends Controller
 
         $branch = $useCase->handle($id, $request->user()->id);
 
-        return response()->json(['data' => BranchResource::fromDomain($branch)]);
+        return response()->json(['data' => $this->resource($branch)]);
     }
 
     public function update(UpdateBranchRequest $request, string $id, UpdateBranch $useCase): JsonResponse
@@ -70,13 +72,13 @@ final class BranchController extends Controller
 
         $branch = $useCase->handle(
             branchId: $id,
-            code: $request->validated('code'),
             name: $request->validated('name'),
+            address: $request->validated('address'),
             expectedVersion: $request->integer('lock_version'),
             actorId: $request->user()->id,
         );
 
-        return response()->json(['data' => BranchResource::fromDomain($branch)]);
+        return response()->json(['data' => $this->resource($branch)]);
     }
 
     public function activate(ChangeBranchStatusRequest $request, string $id, ActivateBranch $useCase): JsonResponse
@@ -89,7 +91,7 @@ final class BranchController extends Controller
             actorId: $request->user()->id,
         );
 
-        return response()->json(['data' => BranchResource::fromDomain($branch)]);
+        return response()->json(['data' => $this->resource($branch)]);
     }
 
     public function deactivate(ChangeBranchStatusRequest $request, string $id, DeactivateBranch $useCase): JsonResponse
@@ -102,6 +104,50 @@ final class BranchController extends Controller
             actorId: $request->user()->id,
         );
 
-        return response()->json(['data' => BranchResource::fromDomain($branch)]);
+        return response()->json(['data' => $this->resource($branch)]);
+    }
+
+    public function changeStatus(
+        ChangeBranchStatusCompatibilityRequest $request,
+        string $id,
+        GetBranch $getBranch,
+        ActivateBranch $activateBranch,
+        DeactivateBranch $deactivateBranch,
+    ): JsonResponse {
+        $status = $request->validated('status');
+
+        if ($status === 'ACTIVE') {
+            Gate::authorize('activateAny', BranchRecord::class);
+        } else {
+            Gate::authorize('deactivateAny', BranchRecord::class);
+        }
+
+        $expectedVersion = $request->validated('lock_version');
+        if ($expectedVersion === null) {
+            $expectedVersion = $getBranch->handle($id, $request->user()->id)->lockVersion();
+        }
+
+        $branch = $status === 'ACTIVE'
+            ? $activateBranch->handle($id, $expectedVersion, $request->user()->id)
+            : $deactivateBranch->handle($id, $expectedVersion, $request->user()->id);
+
+        return response()->json(['data' => $this->resource($branch)]);
+    }
+
+    /** @return array<string, mixed> */
+    private function resource(Branch $branch): array
+    {
+        $record = BranchRecord::query()
+            ->withCount(['personnelAssignments as active_personnel_count' => fn ($assignments) => $assignments
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')])
+            ->findOrFail($branch->id()->value());
+
+        return [
+            ...BranchResource::fromDomain($branch),
+            'active_personnel_count' => (int) $record->getAttribute('active_personnel_count'),
+            'created_at' => $record->created_at?->toISOString(),
+            'updated_at' => $record->updated_at?->toISOString(),
+        ];
     }
 }

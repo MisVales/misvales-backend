@@ -2,15 +2,14 @@
 
 namespace App\Modules\Organization\Application\Branches\UseCases;
 
+use App\Modules\Organization\Application\Branches\AddressValidator;
 use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
 use App\Modules\Organization\Domain\Assignments\Exceptions\OrganizationScopeDenied;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationScopeResolver;
 use App\Modules\Organization\Domain\Branches\Branch;
 use App\Modules\Organization\Domain\Branches\Exceptions\BranchNotFound;
 use App\Modules\Organization\Domain\Branches\Exceptions\BranchVersionConflict;
-use App\Modules\Organization\Domain\Branches\Exceptions\DuplicateBranchCode;
 use App\Modules\Organization\Domain\Branches\Repositories\BranchRepository;
-use App\Modules\Organization\Domain\Branches\ValueObjects\BranchCode;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchName;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
@@ -23,12 +22,13 @@ final readonly class UpdateBranch
         private BranchRepository $branches,
         private OrganizationScopeResolver $scopeResolver,
         private OrganizationEventPublisher $events,
+        private AddressValidator $addressValidator,
     ) {}
 
     public function handle(
         string $branchId,
-        string $code,
         string $name,
+        string $address,
         int $expectedVersion,
         string $actorId,
     ): Branch {
@@ -43,15 +43,14 @@ final readonly class UpdateBranch
             throw new BranchVersionConflict($branchId, $expectedVersion);
         }
 
-        $newCode = BranchCode::fromString($code);
-        $branchWithCode = $this->branches->findByCode($newCode);
-
-        if ($branchWithCode !== null && ! $branchWithCode->id()->equals($branch->id())) {
-            throw new DuplicateBranchCode($newCode->value());
-        }
-
-        $previous = ['code' => $branch->code()->value(), 'name' => $branch->name()->value()];
-        $branch->updateDetails($newCode, BranchName::fromString($name));
+        $previous = [
+            'name' => $branch->name()->value(),
+            'address' => $branch->address()?->formatted,
+        ];
+        $branch->updateDetails(
+            BranchName::fromString($name),
+            $this->addressValidator->validate($address),
+        );
 
         if ($branch->lockVersion() !== $expectedVersion) {
             $this->branches->save($branch, $actorId, $expectedVersion);
@@ -64,7 +63,10 @@ final readonly class UpdateBranch
                 branchId: $branch->id()->value(),
                 details: [
                     'previous' => $previous,
-                    'current' => ['code' => $branch->code()->value(), 'name' => $branch->name()->value()],
+                    'current' => [
+                        'name' => $branch->name()->value(),
+                        'address' => $branch->address()?->formatted,
+                    ],
                 ],
             ));
         }

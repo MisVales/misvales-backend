@@ -16,6 +16,9 @@ final class EloquentBranchReadRepository implements BranchReadRepository
         EffectiveOrganizationScope $scope,
     ): PaginatedBranches {
         $query = BranchRecord::query()
+            ->withCount(['personnelAssignments as active_personnel_count' => fn ($assignments) => $assignments
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')])
             ->when(! $scope->isGlobal(), fn ($query) => $query->whereIn('id', $scope->branchIds()))
             ->when($criteria->status !== null, fn ($query) => $query->where('status', $criteria->status))
             ->when($criteria->search !== null, function ($query) use ($criteria): void {
@@ -36,9 +39,11 @@ final class EloquentBranchReadRepository implements BranchReadRepository
                 id: $record->getAttribute('id'),
                 code: $record->getAttribute('code'),
                 name: $record->getAttribute('name'),
+                address: $record->getAttribute('address'),
                 isHeadquarters: (bool) $record->getAttribute('is_headquarters'),
                 status: $record->getAttribute('status'),
                 lockVersion: (int) $record->getAttribute('lock_version'),
+                activePersonnelCount: (int) $record->getAttribute('active_personnel_count'),
                 createdAt: $record->getAttribute('created_at')->toISOString(),
                 updatedAt: $record->getAttribute('updated_at')?->toISOString(),
             ))

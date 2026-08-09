@@ -24,7 +24,30 @@ class UserPolicy
 
     public function view(User $user, User $model): bool
     {
-        return $user->hasPermissionTo('users.view');
+        if (! $user->hasPermissionTo('users.view')) {
+            return false;
+        }
+
+        $activeScopes = $user->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at');
+
+        if ((clone $activeScopes)
+            ->where('scope_type', 'GLOBAL')
+            ->whereHas('role', fn ($roles) => $roles->whereIn('code', ['general_manager', 'admin']))
+            ->exists()) {
+            return true;
+        }
+
+        $branchIds = (clone $activeScopes)
+            ->where('scope_type', 'BRANCH')
+            ->pluck('branch_id');
+
+        return $model->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at')
+            ->whereIn('branch_id', $branchIds)
+            ->exists();
     }
 
     public function create(User $user): bool

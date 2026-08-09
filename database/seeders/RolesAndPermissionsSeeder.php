@@ -1,5 +1,7 @@
 <?php
+
 namespace Database\Seeders;
+
 use App\Models\Permission;
 use App\Models\Role;
 use Illuminate\Database\Seeder;
@@ -76,8 +78,8 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
                 $permissionCodes = $roleData['code'] === 'branch_manager'
-                    ? ['branches.view', 'roles.assign', 'distributor_applications.view', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
-                    : ['branches.view', 'distributor_applications.view'];
+                    ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'distributor_applications.view', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
+                    : ['users.view', 'roles.view', 'branches.view', 'distributor_applications.view'];
                 $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
                 $syncData = [];
 
@@ -112,7 +114,8 @@ class RolesAndPermissionsSeeder extends Seeder
         }
     }
 
-    private function assignPerms(Role $role, array $codes) {
+    private function assignPerms(Role $role, array $codes)
+    {
         $permissions = Permission::whereIn('code', $codes)->get();
         $syncData = [];
         foreach ($permissions as $perm) {

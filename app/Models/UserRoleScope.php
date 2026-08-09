@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -54,6 +55,11 @@ class UserRoleScope extends Model
     public function role(): BelongsTo
     {
         return $this->belongsTo(Role::class);
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(BranchRecord::class, 'branch_id');
     }
 
     public function assignedBy(): BelongsTo

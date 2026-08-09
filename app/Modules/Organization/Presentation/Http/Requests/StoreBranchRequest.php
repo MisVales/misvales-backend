@@ -13,8 +13,8 @@ final class StoreBranchRequest extends OrganizationFormRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:20', 'regex:/\A[A-Za-z0-9][A-Za-z0-9_-]*\z/'],
             'name' => ['required', 'string', 'max:150'],
+            'address' => ['required', 'string', 'max:500'],
         ];
     }
 }

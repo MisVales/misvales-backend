@@ -15,6 +15,7 @@ final class Branch
         private readonly BranchId $id,
         private BranchCode $code,
         private BranchName $name,
+        private ?ValidatedAddress $address,
         private readonly bool $headquarters,
         private BranchStatus $status,
         private int $lockVersion,
@@ -29,11 +30,13 @@ final class Branch
         BranchCode $code,
         BranchName $name,
         bool $headquarters = false,
+        ?ValidatedAddress $address = null,
     ): self {
         return new self(
             id: $id,
             code: $code,
             name: $name,
+            address: $address,
             headquarters: $headquarters,
             status: BranchStatus::ACTIVE,
             lockVersion: 0,
@@ -47,18 +50,19 @@ final class Branch
         bool $headquarters,
         BranchStatus $status,
         int $lockVersion,
+        ?ValidatedAddress $address = null,
     ): self {
-        return new self($id, $code, $name, $headquarters, $status, $lockVersion);
+        return new self($id, $code, $name, $address, $headquarters, $status, $lockVersion);
     }
 
-    public function updateDetails(BranchCode $code, BranchName $name): void
+    public function updateDetails(BranchName $name, ValidatedAddress $address): void
     {
-        if ($this->code->equals($code) && $this->name->equals($name)) {
+        if ($this->name->equals($name) && $this->address?->formatted === $address->formatted) {
             return;
         }
 
-        $this->code = $code;
         $this->name = $name;
+        $this->address = $address;
         $this->incrementVersion();
     }
 
@@ -99,6 +103,11 @@ final class Branch
     public function name(): BranchName
     {
         return $this->name;
+    }
+
+    public function address(): ?ValidatedAddress
+    {
+        return $this->address;
     }
 
     public function isHeadquarters(): bool

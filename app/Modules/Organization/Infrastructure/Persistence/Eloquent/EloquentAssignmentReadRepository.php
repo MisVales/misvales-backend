@@ -14,7 +14,7 @@ final class EloquentAssignmentReadRepository implements AssignmentReadRepository
         ?EffectiveOrganizationScope $scope = null,
     ): array {
         $query = UserRoleScope::query()
-            ->with(['role', 'assignedBy'])
+            ->with(['role', 'branch', 'assignedBy'])
             ->where('user_id', $userId)
             ->when(
                 $scope !== null && ! $scope->isGlobal(),

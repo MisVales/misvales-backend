@@ -6,6 +6,26 @@ use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\TraceRequest;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\SolicitudDistribuidora;
+use App\Models\UserRoleScope;
+use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
+use App\Modules\Organization\Domain\Assignments\Exceptions\AssignmentAlreadyClosed;
+use App\Modules\Organization\Domain\Assignments\Exceptions\AssignmentNotFound;
+use App\Modules\Organization\Domain\Assignments\Exceptions\DuplicateActiveAssignment;
+use App\Modules\Organization\Domain\Assignments\Exceptions\InvalidOrganizationAssignment;
+use App\Modules\Organization\Domain\Assignments\Exceptions\OrganizationScopeDenied;
+use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
+use App\Modules\Organization\Domain\Assignments\Exceptions\UserNotAssignable;
+use App\Modules\Organization\Domain\Branches\Exceptions\AddressValidationUnavailable;
+use App\Modules\Organization\Domain\Branches\Exceptions\BranchHasActiveAssignments;
+use App\Modules\Organization\Domain\Branches\Exceptions\BranchInactive;
+use App\Modules\Organization\Domain\Branches\Exceptions\BranchNotFound;
+use App\Modules\Organization\Domain\Branches\Exceptions\BranchVersionConflict;
+use App\Modules\Organization\Domain\Branches\Exceptions\DuplicateBranchCode;
+use App\Modules\Organization\Domain\Branches\Exceptions\HeadquartersBranchProtected;
+use App\Modules\Organization\Domain\Branches\Exceptions\InvalidBranchAddress;
+use App\Modules\Organization\Domain\Events\OrganizationEvent;
+use App\Modules\Organization\Domain\Events\OrganizationEventType;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\SolicitudDistribuidora\AuditorSolicitudDistribuidora;
 use Illuminate\Auth\Access\AuthorizationException;
@@ -16,12 +36,11 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
-
-use Illuminate\Validation\ValidationException;
-use App\Models\SolicitudDistribuidora;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -55,7 +74,7 @@ return Application::configure(basePath: dirname(__DIR__))
             ]], $status);
         };
 
-        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, \Illuminate\Http\Request $request) {
+        $exceptions->render(function (ModelNotFoundException $e, Request $request) {
             if ($request->is('api/*')) {
                 $model = $e->getModel();
                 if (str_contains($model, 'Category')) {
@@ -64,6 +83,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 if (str_contains($model, 'Product')) {
                     return response()->json(['error' => 'PRODUCT_NOT_FOUND', 'message' => 'Producto inexistente.'], 404);
                 }
+
                 return response()->json(['error' => 'RESOURCE_NOT_FOUND', 'message' => 'Recurso inexistente.'], 404);
             }
         });
@@ -230,6 +250,76 @@ return Application::configure(basePath: dirname(__DIR__))
                 'La solicitud no existe o no está dentro del alcance autorizado.',
                 404,
             );
+        });
+
+        $exceptions->renderable(function (Throwable $e, Request $request) {
+            $organizationError = match (true) {
+                $e instanceof OrganizationScopeDenied => ['ORGANIZATION_SCOPE_DENIED', 403],
+                $e instanceof BranchNotFound => ['BRANCH_NOT_FOUND', 404],
+                $e instanceof AssignmentNotFound => ['ASSIGNMENT_NOT_FOUND', 404],
+                $e instanceof BranchVersionConflict => ['VERSION_CONFLICT', 409],
+                $e instanceof DuplicateBranchCode => ['DUPLICATE_BRANCH_CODE', 409],
+                $e instanceof HeadquartersBranchProtected => ['HEADQUARTERS_BRANCH_PROTECTED', 409],
+                $e instanceof BranchHasActiveAssignments => ['BRANCH_HAS_ACTIVE_ASSIGNMENTS', 409],
+                $e instanceof BranchInactive => ['BRANCH_INACTIVE', 409],
+                $e instanceof AssignmentAlreadyClosed => ['ASSIGNMENT_ALREADY_CLOSED', 409],
+                $e instanceof DuplicateActiveAssignment => ['DUPLICATE_ACTIVE_ASSIGNMENT', 409],
+                $e instanceof RoleScopeNotAllowed => ['ROLE_SCOPE_NOT_ALLOWED', 422],
+                $e instanceof UserNotAssignable => ['USER_NOT_ASSIGNABLE', 422],
+                $e instanceof InvalidOrganizationAssignment => ['INVALID_ORGANIZATION_ASSIGNMENT', 422],
+                $e instanceof InvalidBranchAddress => ['INVALID_BRANCH_ADDRESS', 422],
+                $e instanceof AddressValidationUnavailable => ['ADDRESS_VALIDATION_UNAVAILABLE', 503],
+                default => null,
+            };
+
+            if ($organizationError === null || ! $request->is('api/v1/*')) {
+                return null;
+            }
+
+            [$code, $status] = $organizationError;
+
+            if ($e instanceof OrganizationScopeDenied && $request->user() !== null) {
+                try {
+                    $branchId = $request->route('id')
+                        ?? $request->route('branch')
+                        ?? $request->input('branch_id')
+                        ?? $request->query('branch_id');
+                    $generalManagerIds = UserRoleScope::query()
+                        ->select('user_role_scopes.user_id')
+                        ->join('roles', 'roles.id', '=', 'user_role_scopes.role_id')
+                        ->where('roles.code', 'general_manager')
+                        ->where('user_role_scopes.scope_type', 'GLOBAL')
+                        ->where('user_role_scopes.status', 'ACTIVE')
+                        ->whereNull('user_role_scopes.revoked_at')
+                        ->pluck('user_id')
+                        ->unique()
+                        ->values()
+                        ->all();
+
+                    app(OrganizationEventPublisher::class)->publish(new OrganizationEvent(
+                        id: Str::uuid()->toString(),
+                        type: OrganizationEventType::ORGANIZATION_SCOPE_DENIED,
+                        aggregateType: 'organization_scope',
+                        aggregateId: is_string($branchId) ? $branchId : $request->user()->id,
+                        actorId: $request->user()->id,
+                        branchId: is_string($branchId) ? $branchId : null,
+                        reason: $e->getMessage(),
+                        details: ['method' => $request->method(), 'path' => $request->path()],
+                        notifyUserIds: $generalManagerIds,
+                        outcome: 'DENIED',
+                    ));
+                } catch (Throwable) {
+                    // La auditoría de alcance nunca debe ocultar la respuesta de autorización.
+                }
+            }
+
+            return response()->json([
+                'code' => $code,
+                'message' => $e->getMessage(),
+                'fields' => (object) [],
+                'details' => (object) [],
+                'request_id' => $request->attributes->get('request_id'),
+            ], $status);
         });
 
         $exceptions->renderable(function (AuthenticationException $e, Request $request) {

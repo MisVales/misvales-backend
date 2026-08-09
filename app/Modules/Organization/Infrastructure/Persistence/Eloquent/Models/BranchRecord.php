@@ -3,9 +3,11 @@
 namespace App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models;
 
 use App\Models\User;
+use App\Models\UserRoleScope;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class BranchRecord extends Model
 {
@@ -17,6 +19,12 @@ final class BranchRecord extends Model
         'id',
         'code',
         'name',
+        'address',
+        'address_validation_id',
+        'address_place_id',
+        'address_latitude',
+        'address_longitude',
+        'address_validated_at',
         'is_headquarters',
         'status',
         'lock_version',
@@ -29,6 +37,9 @@ final class BranchRecord extends Model
         return [
             'is_headquarters' => 'boolean',
             'lock_version' => 'integer',
+            'address_latitude' => 'decimal:7',
+            'address_longitude' => 'decimal:7',
+            'address_validated_at' => 'immutable_datetime',
         ];
     }
 
@@ -40,5 +51,10 @@ final class BranchRecord extends Model
     public function updater(): BelongsTo
     {
         return $this->belongsTo(User::class, 'updated_by');
+    }
+
+    public function personnelAssignments(): HasMany
+    {
+        return $this->hasMany(UserRoleScope::class, 'branch_id');
     }
 }

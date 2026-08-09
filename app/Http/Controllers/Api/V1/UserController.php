@@ -9,8 +9,13 @@ use App\Mail\Security\SecurityAlertMail;
 use App\Models\AccountInvitation;
 use App\Models\AuthSession;
 use App\Models\MfaCredential;
+use App\Models\Role;
 use App\Models\User;
+use App\Models\UserRoleScope;
+use App\Modules\Organization\Domain\Assignments\Exceptions\OrganizationScopeDenied;
+use App\Modules\Organization\Domain\Assignments\Services\OrganizationScopeResolver;
 use App\Services\Audit\SecurityAuditService;
+use App\Services\Auth\RoleAssignmentPolicyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -28,7 +33,24 @@ class UserController extends Controller
     {
         Gate::authorize('viewAny', User::class);
 
-        $query = User::with('roleScopes.role');
+        $scope = app(OrganizationScopeResolver::class)->resolve($request->user()->id);
+        $requestedBranchId = $request->input('branch_id');
+
+        if (is_string($requestedBranchId) && ! $scope->allows($requestedBranchId)) {
+            throw new OrganizationScopeDenied;
+        }
+
+        $query = User::with([
+            'roleScopes' => fn ($roleScopes) => $roleScopes
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->with(['role', 'branch']),
+        ])->when(! $scope->isGlobal(), function ($users) use ($scope): void {
+            $users->whereHas('roleScopes', fn ($roleScopes) => $roleScopes
+                ->whereIn('branch_id', $scope->branchIds())
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at'));
+        });
 
         if ($request->has('search')) {
             $search = strtolower(trim($request->search));
@@ -54,14 +76,16 @@ class UserController extends Controller
             });
         }
 
-        return response()->json($query->paginate(15));
+        $perPage = max(1, min((int) $request->input('per_page', 15), 100));
+
+        return response()->json($query->paginate($perPage));
     }
 
     /**
      * POST /api/v1/users
      * Crea el usuario y opcionalmente le asigna un rol y envía la invitación.
      */
-    public function store(Request $request, \App\Services\Auth\RoleAssignmentPolicyService $policyService)
+    public function store(Request $request, RoleAssignmentPolicyService $policyService)
     {
         Gate::authorize('create', User::class);
 
@@ -98,8 +122,8 @@ class UserController extends Controller
             if ($request->filled('role_id')) {
                 $roleInput = $request->role_id;
                 $role = Str::isUuid($roleInput)
-                    ? \App\Models\Role::where('id', $roleInput)->firstOrFail()
-                    : \App\Models\Role::where('code', $roleInput)->firstOrFail();
+                    ? Role::where('id', $roleInput)->firstOrFail()
+                    : Role::where('code', $roleInput)->firstOrFail();
 
                 $validationResult = $policyService->validateAssignment(
                     $request->user(),
@@ -109,10 +133,10 @@ class UserController extends Controller
                 );
 
                 if ($validationResult !== true) {
-                    abort(403, 'Error al asignar rol: ' . $validationResult);
+                    abort(403, 'Error al asignar rol: '.$validationResult);
                 }
 
-                $assignment = \App\Models\UserRoleScope::create([
+                $assignment = UserRoleScope::create([
                     'id' => Str::uuid(),
                     'user_id' => $user->id,
                     'role_id' => $role->id,
@@ -170,7 +194,7 @@ class UserController extends Controller
      */
     public function show(Request $request, string $id)
     {
-        $user = User::with(['roleScopes.role'])->findOrFail($id);
+        $user = User::with(['roleScopes.role', 'roleScopes.branch'])->findOrFail($id);
         Gate::authorize('view', $user);
 
         $user->mfa_status = MfaCredential::where('user_id', $user->id)

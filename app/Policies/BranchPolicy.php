@@ -2,16 +2,14 @@
 
 namespace App\Policies;
 
-use App\Models\Branch;
 use App\Models\User;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 
-class BranchPolicy
+final class BranchPolicy
 {
-    public function before(User $user, string $ability)
+    public function before(User $user, string $ability): ?bool
     {
-        if ($user->state !== 'ACTIVE') {
-            return false;
-        }
+        return $user->state === 'ACTIVE' ? null : false;
     }
 
     public function viewAny(User $user): bool
@@ -19,54 +17,43 @@ class BranchPolicy
         return $user->hasPermissionTo('branches.view');
     }
 
-    public function view(User $user, Branch $branch): bool
+    public function view(User $user, BranchRecord $branch): bool
     {
-        if (!$user->hasPermissionTo('branches.view')) {
-            return false;
-        }
-
-        return $user->hasScopeForBranch($branch->id);
+        return $this->viewAny($user) && $user->hasScopeForBranch($branch->id);
     }
 
     public function create(User $user): bool
     {
-        // General Manager with global scope and branches.create permission
-        if (!$user->hasPermissionTo('branches.create')) {
-            return false;
-        }
+        return $user->hasPermissionTo('branches.create') && $this->isGeneralManager($user);
+    }
 
-        // Only users with GLOBAL scope can create branches
+    public function updateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('branches.update') && $this->isGeneralManager($user);
+    }
+
+    public function activateAny(User $user): bool
+    {
+        return $user->hasPermissionTo('branches.manage_state') && $this->isGeneralManager($user);
+    }
+
+    public function deactivateAny(User $user): bool
+    {
+        return $this->activateAny($user);
+    }
+
+    public function managePersonnel(User $user, BranchRecord $branch): bool
+    {
+        return $user->hasPermissionTo('roles.assign') && $user->hasScopeForBranch($branch->id);
+    }
+
+    private function isGeneralManager(User $user): bool
+    {
         return $user->roleScopes()
             ->where('status', 'ACTIVE')
             ->whereNull('revoked_at')
             ->where('scope_type', 'GLOBAL')
+            ->whereHas('role', fn ($query) => $query->where('code', 'general_manager'))
             ->exists();
-    }
-
-    public function update(User $user, Branch $branch): bool
-    {
-        if (!$user->hasPermissionTo('branches.update')) {
-            return false;
-        }
-
-        return $user->hasScopeForBranch($branch->id);
-    }
-
-    public function manageState(User $user, Branch $branch): bool
-    {
-        if (!$user->hasPermissionTo('branches.manage_state')) {
-            return false;
-        }
-
-        return $user->hasScopeForBranch($branch->id);
-    }
-
-    public function managePersonnel(User $user, Branch $branch): bool
-    {
-        if (!$user->hasPermissionTo('roles.assign')) {
-            return false;
-        }
-
-        return $user->hasScopeForBranch($branch->id);
     }
 }
