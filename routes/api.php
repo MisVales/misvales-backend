@@ -1,11 +1,11 @@
 <?php
 
+use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
-use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
-use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
 use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\ClienteController;
