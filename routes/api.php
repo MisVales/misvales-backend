@@ -102,5 +102,46 @@ Route::prefix('v1')->group(function () {
         Route::get('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'index']);
         Route::post('assignments/coordinator-distributor', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'store']);
         Route::delete('assignments/coordinator-distributor/{assignment}', [\App\Http\Controllers\Api\V1\CoordinatorAssignmentController::class, 'destroy']);
+
+        // Módulo 03 - Configuraciones y Catálogos
+        // Configuraciones
+        Route::get('configurations', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'index']);
+        Route::get('configurations/{key}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'show']);
+        Route::get('configurations/{key}/versions', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'getVersionsByKey']);
+        Route::post('configurations/{key}/versions', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'storeVersionByKey']);
+        Route::get('configuration-versions/{id}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'showVersion']);
+        Route::patch('configuration-versions/{id}', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'updateVersion']);
+        Route::post('configuration-versions/{id}/publish', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'publishVersion']);
+        Route::post('configuration-versions/{id}/deactivate', [\App\Http\Controllers\Api\V1\ConfiguracionController::class, 'deactivateVersion']);
+
+        // Categorías
+        Route::get('categories', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'index']);
+        Route::post('categories', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'store']);
+        Route::get('categories/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'show']);
+        Route::get('categories/{id}/versions', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'getVersions']);
+        Route::post('categories/{id}/versions', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'storeVersion']);
+        Route::get('category-versions/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'showVersion']);
+        Route::patch('category-versions/{id}', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'updateVersion']);
+        Route::post('category-versions/{id}/publish', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'publishVersion']);
+        Route::post('categories/{id}/deactivate', [\App\Http\Controllers\Api\V1\CategoriaController::class, 'deactivateCategory']);
+
+        // Productos
+        Route::get('products', [\App\Http\Controllers\Api\V1\ProductoController::class, 'index']);
+        Route::post('products', [\App\Http\Controllers\Api\V1\ProductoController::class, 'store']);
+        Route::get('products/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'show']);
+        Route::get('products/{id}/versions', [\App\Http\Controllers\Api\V1\ProductoController::class, 'getVersions']);
+        Route::post('products/{id}/versions', [\App\Http\Controllers\Api\V1\ProductoController::class, 'storeVersion']);
+        Route::get('product-versions/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'showVersion']);
+        Route::patch('product-versions/{id}', [\App\Http\Controllers\Api\V1\ProductoController::class, 'updateVersion']);
+        Route::post('product-versions/{id}/publish', [\App\Http\Controllers\Api\V1\ProductoController::class, 'publishVersion']);
+        Route::post('products/{id}/deactivate', [\App\Http\Controllers\Api\V1\ProductoController::class, 'deactivateProduct']);
+
+        // Periodos de canje
+        Route::get('redemption-periods', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'index']);
+        Route::post('redemption-periods', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'store']);
+        Route::get('redemption-periods/{id}', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'show']);
+        Route::patch('redemption-periods/{id}', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'update']);
+        Route::post('redemption-periods/{id}/publish', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'publish']);
+        Route::post('redemption-periods/{id}/cancel', [\App\Http\Controllers\Api\V1\PeriodoCanjeController::class, 'cancel']);
     });
 });

@@ -62,6 +62,7 @@ class ConfiguracionServicio
             'effective_from' => $effectiveFrom,
             'reason' => $datos['reason'],
             'created_by' => $usuarioId,
+            'lock_version' => 0,
         ]);
     }
 
@@ -70,6 +71,13 @@ class ConfiguracionServicio
         // Punto 32: Impedir modificar directamente una versión publicada.
         if ($version->status !== VersionStatus::DRAFT) {
             throw new \App\Exceptions\BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
+        }
+
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
         }
 
         if (array_key_exists('value', $datos)) {
@@ -104,12 +112,19 @@ class ConfiguracionServicio
         return $version;
     }
 
-    public function publicarVersion(ConfigurationVersion $version, string $usuarioId): ConfigurationVersion
+    public function publicarVersion(ConfigurationVersion $version, array $datos, string $usuarioId): ConfigurationVersion
     {
         $statusValue = $version->status instanceof VersionStatus ? $version->status->value : $version->status;
         
         if ($statusValue !== VersionStatus::DRAFT->value) {
             throw new \App\Exceptions\BusinessException('CONFIGURATION_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+        }
+
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
         }
 
         return DB::transaction(function () use ($version, $usuarioId) {
@@ -119,6 +134,7 @@ class ConfiguracionServicio
             $versionPrevia = ConfigurationVersion::where('configuration_definition_id', $version->configuration_definition_id)
                 ->where('status', VersionStatus::PUBLISHED)
                 ->whereNull('effective_to')
+                ->lockForUpdate()
                 ->first();
 
             if ($versionPrevia) {

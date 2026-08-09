@@ -5,7 +5,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use App\Enums\VerificationVisitStatus;
 use App\Enums\VerificationVisitResult;
-use App\Traits\HasOptimisticLocking;
+use App\Models\Concerns\HasOptimisticLocking;
 
 class VerificationVisit extends Model {
     use \Illuminate\Database\Eloquent\Factories\HasFactory;

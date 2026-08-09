@@ -59,7 +59,12 @@ class CategoriaServicio
             throw new \App\Exceptions\BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en estado DRAFT pueden ser modificadas directamente.');
         }
 
-        $version->lock_version = $datos['lock_version'] ?? $version->lock_version;
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la categoría fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
         if (array_key_exists('name', $datos)) $version->name = $datos['name'];
         if (array_key_exists('description', $datos)) $version->description = $datos['description'];
@@ -81,7 +86,12 @@ class CategoriaServicio
             throw new \App\Exceptions\BusinessException('CATEGORY_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
         }
 
-        $version->lock_version = $datos['lock_version'];
+        if (array_key_exists('lock_version', $datos)) {
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la categoría fue modificada por otro usuario.');
+            }
+            $version->lock_version++;
+        }
 
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
             $versionPrevia = CategoryVersion::where('category_id', $version->category_id)

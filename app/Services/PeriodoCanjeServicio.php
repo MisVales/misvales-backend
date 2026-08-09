@@ -39,7 +39,12 @@ class PeriodoCanjeServicio
             throw new \App\Exceptions\BusinessException('VERSION_NOT_EDITABLE', 'No se puede modificar un periodo de canje que ya ha iniciado o pasado.');
         }
 
-        $periodo->lock_version = $datos['lock_version'] ?? $periodo->lock_version;
+        if (array_key_exists('lock_version', $datos)) {
+            if ($periodo->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
+            }
+            $periodo->lock_version++;
+        }
 
         if (array_key_exists('name', $datos)) $periodo->name = $datos['name'];
         if (array_key_exists('description', $datos)) $periodo->description = $datos['description'];
@@ -68,7 +73,12 @@ class PeriodoCanjeServicio
         }
 
         return DB::transaction(function () use ($periodo, $datos, $usuarioId) {
-            $periodo->lock_version = $datos['lock_version'];
+            if (array_key_exists('lock_version', $datos)) {
+                if ($periodo->lock_version !== (int) $datos['lock_version']) {
+                    throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
+                }
+                $periodo->lock_version++;
+            }
 
             // Punto 70: Impedir periodos de canje publicados con traslapes.
             $traslape = RedemptionPeriod::where('status', RedemptionPeriodStatus::PUBLISHED)
@@ -107,7 +117,12 @@ class PeriodoCanjeServicio
             throw new \App\Exceptions\BusinessException('INVALID_VALIDITY', 'No se puede cancelar un periodo que ya ha iniciado. Solo aplica a periodos futuros.');
         }
 
-        $periodo->lock_version = $datos['lock_version'];
+        if (array_key_exists('lock_version', $datos)) {
+            if ($periodo->lock_version !== (int) $datos['lock_version']) {
+                throw new \App\Exceptions\BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
+            }
+            $periodo->lock_version++;
+        }
         $periodo->status = RedemptionPeriodStatus::CANCELLED;
         $periodo->reason .= "\n[Cancelación]: " . $datos['reason'];
         $periodo->closed_by = $usuarioId;
