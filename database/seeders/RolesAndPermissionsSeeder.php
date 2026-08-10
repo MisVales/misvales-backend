@@ -71,6 +71,25 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'distributor_applications', 'action' => 'create', 'code' => 'distributor_applications.create', 'description' => 'Crear solicitud de distribuidora'],
             ['module' => 'distributor_applications', 'action' => 'update', 'code' => 'distributor_applications.update', 'description' => 'Editar solicitud de distribuidora en borrador'],
             ['module' => 'distributor_applications', 'action' => 'submit', 'code' => 'distributor_applications.submit', 'description' => 'Enviar a revisión la solicitud de distribuidora'],
+
+            // Credit Lines Module
+            ['module' => 'credit_lines', 'action' => 'view_own', 'code' => 'credit_lines.view_own', 'description' => 'Consultar su propia línea'],
+            ['module' => 'credit_lines', 'action' => 'view_assigned', 'code' => 'credit_lines.view_assigned', 'description' => 'Consultar líneas de sus distribuidoras'],
+            ['module' => 'credit_lines', 'action' => 'view_branch', 'code' => 'credit_lines.view_branch', 'description' => 'Consultar líneas de su sucursal'],
+            ['module' => 'credit_lines', 'action' => 'view_global', 'code' => 'credit_lines.view_global', 'description' => 'Consultar líneas globalmente'],
+            ['module' => 'credit_lines', 'action' => 'view_movements_own', 'code' => 'credit_line_movements.view_own', 'description' => 'Consultar movimientos propios'],
+            ['module' => 'credit_lines', 'action' => 'view_movements_assigned', 'code' => 'credit_line_movements.view_assigned', 'description' => 'Consultar movimientos asignados'],
+            ['module' => 'credit_lines', 'action' => 'view_movements_branch', 'code' => 'credit_line_movements.view_branch', 'description' => 'Consultar movimientos de sucursal'],
+            ['module' => 'credit_lines', 'action' => 'view_movements_global', 'code' => 'credit_line_movements.view_global', 'description' => 'Consultar movimientos globalmente'],
+            ['module' => 'credit_lines', 'action' => 'create_increase_own', 'code' => 'credit_increase_requests.create_own', 'description' => 'Crear solicitudes propias'],
+            ['module' => 'credit_lines', 'action' => 'view_requests_own', 'code' => 'credit_increase_requests.view_own', 'description' => 'Consultar solicitudes propias'],
+            ['module' => 'credit_lines', 'action' => 'view_requests_assigned', 'code' => 'credit_increase_requests.view_assigned', 'description' => 'Consultar solicitudes asignadas'],
+            ['module' => 'credit_lines', 'action' => 'view_requests_branch', 'code' => 'credit_increase_requests.view_branch', 'description' => 'Consultar solicitudes de sucursal'],
+            ['module' => 'credit_lines', 'action' => 'view_requests_global', 'code' => 'credit_increase_requests.view_global', 'description' => 'Consultar solicitudes globalmente'],
+            ['module' => 'credit_lines', 'action' => 'preauthorize_assigned', 'code' => 'credit_increase_requests.preauthorize_assigned', 'description' => 'Preautorizar solicitudes asignadas'],
+            ['module' => 'credit_lines', 'action' => 'reject_assigned', 'code' => 'credit_increase_requests.reject_assigned', 'description' => 'Rechazar operativamente solicitudes asignadas'],
+            ['module' => 'credit_lines', 'action' => 'decide_branch', 'code' => 'credit_increase_requests.decide_branch', 'description' => 'Decidir solicitudes de sucursal'],
+            ['module' => 'credit_lines', 'action' => 'decide_global', 'code' => 'credit_increase_requests.decide_global', 'description' => 'Decidir solicitudes globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -149,6 +168,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.resend_activation', 'distributors.view_initial_credit',
                     'clients.view', 'clients.view_sensitive', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
+                    'credit_lines.view_branch', 'credit_line_movements.view_branch',
+                    'credit_increase_requests.view_branch', 'credit_increase_requests.decide_branch',
                 ]);
             }
 
@@ -157,6 +178,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
                     'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
+                    'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                 ]);
             }
 
@@ -165,6 +187,9 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
                     'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
+                    'credit_lines.view_assigned', 'credit_line_movements.view_assigned',
+                    'credit_increase_requests.view_assigned', 'credit_increase_requests.preauthorize_assigned',
+                    'credit_increase_requests.reject_assigned',
                 ]);
             }
 
@@ -173,6 +198,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view', 'distributors.view_category_history', 'distributors.view_initial_credit',
                     'clients.view', 'clients.create', 'clients.view_bank_accounts',
                     'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
+                    'credit_lines.view_own', 'credit_line_movements.view_own', 
+                    'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                 ]);
             }
         }

@@ -26,7 +26,7 @@ class EnforceIdempotency
         $cachedResponse = Cache::get($cacheKey);
         if ($cachedResponse) {
             if (! is_array($cachedResponse) || ! hash_equals($cachedResponse['fingerprint'], $huella)) {
-                return $this->error($request, 'IDEMPOTENCY_KEY_REUSED', 'La clave idempotente ya fue utilizada con otro contenido.', 409);
+                return $this->error($request, 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD', 'La clave idempotente ya fue utilizada con otro contenido.', 409);
             }
 
             $response = unserialize($cachedResponse['response']);

@@ -22,4 +22,32 @@ class LineaCreditoFactory extends Factory
             'lock_version' => 1,
         ];
     }
+
+    public function withActiveInitialRestriction(): self
+    {
+        return $this->has(
+            \App\Models\RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
+                return [
+                    'type' => 'INITIAL_50_PERCENT',
+                    'status' => 'ACTIVE',
+                    'base_total' => $linea->total_authorized,
+                ];
+            }),
+            'restricciones'
+        );
+    }
+
+    public function withActivePostIncreaseRestriction(): self
+    {
+        return $this->has(
+            \App\Models\RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
+                return [
+                    'type' => 'POST_INCREASE_50_PERCENT',
+                    'status' => 'ACTIVE',
+                    'base_total' => $linea->total_authorized,
+                ];
+            }),
+            'restricciones'
+        );
+    }
 }

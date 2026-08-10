@@ -79,6 +79,24 @@ return Application::configure(basePath: dirname(__DIR__))
         $exceptions->render(function (ModelNotFoundException $e, Request $request) {
             if ($request->is('api/*')) {
                 $model = $e->getModel();
+                if ($request->is('api/v1/credit-lines*') || str_contains($model, 'LineaCredito')) {
+                    return response()->json(['error' => [
+                        'code' => 'CREDIT_LINE_NOT_FOUND',
+                        'message' => 'La línea de crédito solicitada no existe o no se encuentra dentro del alcance permitido.',
+                        'fields' => (object) [],
+                        'details' => (object) [],
+                        'request_id' => $request->attributes->get('request_id'),
+                    ]], 404);
+                }
+                if ($request->is('api/v1/credit-increase-requests*') || str_contains($model, 'SolicitudIncrementoLinea')) {
+                    return response()->json(['error' => [
+                        'code' => 'CREDIT_INCREASE_REQUEST_NOT_FOUND',
+                        'message' => 'La solicitud de incremento no existe o no se encuentra dentro del alcance permitido.',
+                        'fields' => (object) [],
+                        'details' => (object) [],
+                        'request_id' => $request->attributes->get('request_id'),
+                    ]], 404);
+                }
                 if ($request->is('api/v1/clients*')) {
                     return response()->json(['error' => [
                         'code' => 'CLIENT_NOT_FOUND',
@@ -188,6 +206,35 @@ return Application::configure(basePath: dirname(__DIR__))
                 ]], 403);
             }
 
+            if ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*')) {
+                try {
+                    if ($request->user()) {
+                        $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
+                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                            'EV-SCOPE-VIOLATION',
+                            str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
+                            is_string($routeId) ? $routeId : null,
+                            null,
+                            $request->user(),
+                            null,
+                            [],
+                            [],
+                            $e->getMessage(),
+                            'DENIED',
+                            'v1.0.0'
+                        );
+                    }
+                } catch (\Throwable $th) {}
+
+                return response()->json(['error' => [
+                    'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_SCOPE_DENIED' : 'CREDIT_INCREASE_SCOPE_DENIED',
+                    'message' => 'El recurso no está dentro del alcance autorizado.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 403);
+            }
+
             return response()->json(['error' => 'PERMISSION_DENIED', 'message' => 'Acceso denegado.'], 403);
         });
 
@@ -246,6 +293,68 @@ return Application::configure(basePath: dirname(__DIR__))
                 $e->getMessage(),
                 409,
             );
+        });
+
+        $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, Request $request) {
+            if ($e->getStatusCode() === 409 && ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*'))) {
+                try {
+                    if ($request->user()) {
+                        $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
+                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                            'EV-CONCURRENCY',
+                            str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
+                            is_string($routeId) ? $routeId : null,
+                            null,
+                            $request->user(),
+                            null,
+                            [],
+                            [],
+                            $e->getMessage(),
+                            'CONFLICT',
+                            'v1.0.0'
+                        );
+                    }
+                } catch (\Throwable $th) {}
+                
+                return response()->json(['error' => [
+                    'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_VERSION_CONFLICT' : 'CREDIT_INCREASE_REQUEST_VERSION_CONFLICT',
+                    'message' => $e->getMessage(),
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 409);
+            }
+        });
+
+        $exceptions->renderable(function (\Illuminate\Database\QueryException $e, Request $request) {
+            if ($e->getCode() === '23505' && ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*'))) {
+                try {
+                    if ($request->user()) {
+                        $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
+                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                            'EV-CONCURRENCY',
+                            str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
+                            is_string($routeId) ? $routeId : null,
+                            null,
+                            $request->user(),
+                            null,
+                            [],
+                            [],
+                            'Violación de restricción única por concurrencia. ' . $e->getMessage(),
+                            'CONFLICT',
+                            'v1.0.0'
+                        );
+                    }
+                } catch (\Throwable $th) {}
+                
+                return response()->json(['error' => [
+                    'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_VERSION_CONFLICT' : 'CREDIT_INCREASE_REQUEST_VERSION_CONFLICT',
+                    'message' => 'La operación fue rechazada porque otra petición concurrente ya fue procesada.',
+                    'fields' => (object) [],
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 409);
+            }
         });
 
         $exceptions->renderable(function (ModelNotFoundException $e, Request $request) use ($distributorError) {

@@ -1,0 +1,349 @@
+openapi: 3.0.3
+info:
+  title: MisVales - Módulo de Crédito e Incrementos (Módulo 08)
+  version: 1.0.0
+  description: >
+    API para la consulta de líneas de crédito, movimientos y ciclo de vida de las solicitudes de incremento.
+    Incluye MFA requerido para acciones sensibles y manejo de concurrencia e idempotencia.
+servers:
+  - url: /api/v1
+security:
+  - cookieAuth: []
+  - bearerAuth: []
+
+paths:
+  /distributors/{id}/credit-line:
+    get:
+      summary: Consultar línea de crédito de una distribuidora
+      tags:
+        - Líneas de Crédito
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Línea de crédito consultada exitosamente.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LineaCreditoResponse'
+        '403':
+          description: Fuera de alcance autorizado (CREDIT_LINE_SCOPE_DENIED)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/DomainError'
+        '404':
+          description: Línea no encontrada (CREDIT_LINE_NOT_FOUND)
+
+  /distributors/{id}/credit-line/movements:
+    get:
+      summary: Consultar movimientos de la línea de crédito
+      tags:
+        - Líneas de Crédito
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: query
+          name: page
+          schema:
+            type: integer
+        - in: query
+          name: per_page
+          schema:
+            type: integer
+        - in: query
+          name: sort
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Lista paginada de movimientos.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MovimientosPaginated'
+        '403':
+          description: Fuera de alcance autorizado (CREDIT_LINE_SCOPE_DENIED)
+
+  /distributors/{id}/credit-increase-requests:
+    post:
+      summary: Crear solicitud de incremento de crédito
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - requested_amount
+                - request_reason
+                - lock_version
+              properties:
+                requested_amount:
+                  type: string
+                  example: "5000.0000"
+                request_reason:
+                  type: string
+                lock_version:
+                  type: integer
+      responses:
+        '201':
+          description: Solicitud creada exitosamente.
+        '400':
+          description: Errores de validación o estado (CREDIT_LINE_INCONSISTENT)
+        '403':
+          description: Permisos denegados (CREDIT_INCREASE_SCOPE_DENIED)
+        '409':
+          description: Conflicto de versión (CREDIT_LINE_VERSION_CONFLICT) o Idempotencia (IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD)
+
+  /credit-increase-requests:
+    get:
+      summary: Listar solicitudes de incremento
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: query
+          name: request_number
+          schema:
+            type: string
+        - in: query
+          name: status
+          schema:
+            type: string
+        - in: query
+          name: requested_from
+          schema:
+            type: string
+            format: date
+        - in: query
+          name: page
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: Lista paginada de solicitudes.
+
+  /credit-increase-requests/{id}:
+    get:
+      summary: Consultar detalle de solicitud
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Detalle de la solicitud.
+        '403':
+          description: Fuera de alcance autorizado (CREDIT_INCREASE_SCOPE_DENIED)
+        '404':
+          description: Solicitud no encontrada (CREDIT_INCREASE_REQUEST_NOT_FOUND)
+
+  /credit-increase-requests/{id}/preauthorize:
+    post:
+      summary: Preautorizar solicitud por coordinador
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - recommended_amount
+                - reason
+                - lock_version
+              properties:
+                recommended_amount:
+                  type: string
+                  example: "4000.0000"
+                reason:
+                  type: string
+                lock_version:
+                  type: integer
+      responses:
+        '200':
+          description: Solicitud preautorizada.
+        '400':
+          description: Importe o estado inválido (CREDIT_INCREASE_RECOMMENDATION_INVALID)
+        '409':
+          description: Conflicto de versión (CREDIT_INCREASE_REQUEST_VERSION_CONFLICT)
+
+  /credit-increase-requests/{id}/reject-by-coordinator:
+    post:
+      summary: Rechazar solicitud por coordinador
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - reason
+                - lock_version
+              properties:
+                reason:
+                  type: string
+                lock_version:
+                  type: integer
+      responses:
+        '200':
+          description: Solicitud rechazada.
+        '409':
+          description: Conflicto de versión.
+
+  /credit-increase-requests/{id}/manager-decision:
+    post:
+      summary: Decisión gerencial (Aprobar o Rechazar)
+      tags:
+        - Solicitudes de Incremento
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: string
+            format: uuid
+        - in: header
+          name: Idempotency-Key
+          required: true
+          schema:
+            type: string
+            format: uuid
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - decision
+                - reason
+                - lock_version
+              properties:
+                decision:
+                  type: string
+                  enum: [APPROVE_REQUESTED, APPROVE_LOWER, REJECT]
+                authorized_amount:
+                  type: string
+                  example: "3000.0000"
+                  description: Requerido si decision es APPROVE_LOWER
+                reason:
+                  type: string
+                lock_version:
+                  type: integer
+      responses:
+        '200':
+          description: Decisión registrada y montos actualizados.
+        '400':
+          description: Monto o estado inválido (CREDIT_INCREASE_AUTHORIZED_AMOUNT_INVALID)
+        '409':
+          description: Conflicto de versión o restricción activa (CREDIT_USAGE_RESTRICTION_ACTIVE, CREDIT_INCREASE_REQUEST_VERSION_CONFLICT)
+
+components:
+  securitySchemes:
+    cookieAuth:
+      type: apiKey
+      in: cookie
+      name: XSRF-TOKEN
+    bearerAuth:
+      type: http
+      scheme: bearer
+  schemas:
+    LineaCreditoResponse:
+      type: object
+      properties:
+        data:
+          type: object
+          properties:
+            id:
+              type: string
+              format: uuid
+            distributor_id:
+              type: string
+              format: uuid
+            total_authorized:
+              type: string
+            used_balance:
+              type: string
+            available_balance:
+              type: string
+            lock_version:
+              type: integer
+    MovimientosPaginated:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            type: object
+            properties:
+              sequence:
+                type: integer
+              type:
+                type: string
+              amount:
+                type: string
+        meta:
+          type: object
+    DomainError:
+      type: object
+      properties:
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+            fields:
+              type: object
+            details:
+              type: object
+            request_id:
+              type: string

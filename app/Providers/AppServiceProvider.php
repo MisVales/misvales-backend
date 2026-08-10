@@ -52,6 +52,19 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->singleton(\App\Services\Credito\GeneradorFolioIncremento::class, function ($app) {
+            return new \App\Services\Credito\GeneradorFolioIncremento();
+        });
+
+        $this->app->singleton(\App\Services\Credito\ServicioEstadoIncremento::class, function ($app) {
+            return new \App\Services\Credito\ServicioEstadoIncremento();
+        });
+
+        $this->app->bind(
+            \App\Contracts\Credito\VerificadorDisponibilidadCredito::class,
+            \App\Services\Credito\ServicioVerificadorDisponibilidadCredito::class
+        );
+
         $this->app->bind(AssignmentReadRepository::class, EloquentAssignmentReadRepository::class);
         $this->app->bind(OrganizationEventPublisher::class, DatabaseOrganizationEventPublisher::class);
         $this->app->bind(OrganizationIdentityAccess::class, EloquentOrganizationIdentityAccess::class);

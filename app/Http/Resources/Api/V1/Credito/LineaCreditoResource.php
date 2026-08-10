@@ -2,6 +2,9 @@
 
 namespace App\Http\Resources\Api\V1\Credito;
 
+use App\Models\SolicitudIncrementoLinea;
+use App\Services\Credito\CalculadorSaldoCredito;
+use App\Services\Credito\EvaluadorReglaCincuenta;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -9,16 +12,60 @@ class LineaCreditoResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $calculador = app(CalculadorSaldoCredito::class);
+        $evaluador = app(EvaluadorReglaCincuenta::class);
+
+        $saldos = $calculador->calcular($this->total_authorized, $this->used_balance);
+        $restriccionVigente = $this->restricciones()
+            ->whereIn('status', ['ACTIVE', 'RESERVED'])
+            ->first();
+            
+        $reglaCincuenta = $evaluador->evaluar($restriccionVigente, $saldos['available_balance']);
+        
+        $ultimoMovimiento = $this->movimientos()
+            ->orderBy('sequence', 'desc')
+            ->first();
+
         return [
-            'id' => $this->resource['id'] ?? $this->id,
-            'distributor_id' => $this->resource['distributor_id'] ?? $this->distributor_id,
-            'balances' => [
-                'authorized_amount' => (string) ($this->resource['saldos']['monto_autorizado'] ?? $this->authorized_amount),
-                'used_balance' => (string) ($this->resource['saldos']['saldo_utilizado'] ?? $this->used_balance),
-                'restricted_amount' => (string) ($this->resource['saldos']['monto_restringido'] ?? '0.00'),
-                'available_balance' => (string) ($this->resource['saldos']['saldo_disponible'] ?? '0.00'),
+            'id' => $this->id,
+            'distributor' => [
+                'id' => $this->distribuidora->id,
+                'distributor_number' => $this->distribuidora->distributor_number ?? '',
+                'full_name' => trim("{$this->distribuidora->first_name} {$this->distribuidora->last_name}"),
             ],
-            'active_restrictions' => RestriccionUsoCreditoResource::collection($this->when(isset($this->resource['restricciones_activas']), $this->resource['restricciones_activas'] ?? collect())),
+            'total_authorized' => $saldos['total_authorized'],
+            'used_balance' => $saldos['used_balance'],
+            'available_balance' => $saldos['available_balance'],
+            'restriction' => $restriccionVigente ? $reglaCincuenta : null,
+            'last_movement' => $ultimoMovimiento ? [
+                'type' => $ultimoMovimiento->type,
+                'amount' => number_format((float) $ultimoMovimiento->amount, 4, '.', ''),
+                'occurred_at' => $ultimoMovimiento->occurred_at->toIso8601String(),
+            ] : null,
+            'capabilities' => $this->getCapabilities($request->user()),
+            'lock_version' => $this->lock_version,
+        ];
+    }
+
+    private function getCapabilities($user): array
+    {
+        // Distribuidora puede solicitar si es dueña de la línea
+        $isOwner = $user->hasRole('distributor') && $user->id === $this->distributor_id;
+        
+        // Coordinador/Gerente pueden revisar (el alcance ya está filtrado por el query)
+        $isReviewer = $user->hasRole('coordinator');
+        $isDecider = $user->hasRole('branch_manager') || $user->hasRole('general_manager') || $user->hasRole('admin');
+        
+        // Revisar si hay una solicitud activa
+        $hasActiveRequest = SolicitudIncrementoLinea::where('credit_line_id', $this->id)
+            ->whereIn('status', ['REQUESTED', 'PREAUTHORIZED'])
+            ->exists();
+
+        return [
+            'can_request_increase' => $isOwner && !$hasActiveRequest,
+            'can_review_increase' => $isReviewer,
+            'can_decide_increase' => $isDecider,
+            'can_view_movements' => true,
         ];
     }
 }

@@ -178,19 +178,34 @@ class ServicioActivacionDistribuidora
 
                 MovimientoLineaCredito::create([
                     'credit_line_id' => $linea->id,
+                    'distributor_id' => $distribuidora->id,
+                    'sequence' => 1,
                     'type' => TipoMovimientoLineaCredito::AUTORIZACION_INICIAL,
                     'amount' => $importe,
-                    'balance_before' => '0.0000',
-                    'balance_after' => $importe,
+                    'total_authorized_before' => '0.0000',
+                    'total_authorized_after' => $importe,
+                    'used_balance_before' => '0.0000',
+                    'used_balance_after' => '0.0000',
                     'source_type' => 'DISTRIBUTOR_APPLICATION_AUTHORIZATION',
                     'source_id' => $autorizacion->id,
-                    'created_by' => $actor->id,
+                    'performed_by' => $actor->id,
+                    'authorized_by' => $actor->id,
+                    'occurred_at' => now(),
                 ]);
+
+                $configuracionTolerancia = app(\App\Services\ConfiguracionServicio::class)->resolver('CREDIT_TOLERANCE_AMOUNT');
 
                 RestriccionUsoCredito::create([
                     'credit_line_id' => $linea->id,
+                    'distributor_id' => $distribuidora->id,
                     'type' => 'INITIAL_50_PERCENT',
                     'base_total' => $importe,
+                    'tolerance_amount' => $configuracionTolerancia['value'],
+                    'configuration_version_id' => $configuracionTolerancia['version_id'],
+                    'source_type' => 'DISTRIBUTOR_APPLICATION_AUTHORIZATION',
+                    'source_id' => $autorizacion->id,
+                    'activated_at' => now(),
+                    'created_by' => $actor->id,
                 ]);
 
                 $token = Str::random(60);

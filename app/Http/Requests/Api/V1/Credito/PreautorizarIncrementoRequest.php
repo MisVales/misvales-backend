@@ -8,17 +8,24 @@ class PreautorizarIncrementoRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return true; // Se maneja en la Policy
     }
 
     public function rules(): array
     {
-        $solicitud = $this->route('solicitud');
-        $max = $solicitud ? $solicitud->requested_amount : '0.00';
-
         return [
-            'monto_recomendado' => ['required', 'numeric', 'min:1', "max:{$max}"],
-            'notas' => ['nullable', 'string', 'max:500'],
+            'recommended_amount' => [
+                'required',
+                'string',
+                'regex:/^\d+(\.\d{1,4})?$/',
+                function ($attribute, $value, $fail) {
+                    if (bccomp($value, '0.0000', 4) <= 0) {
+                        $fail("El importe recomendado debe ser mayor que cero.");
+                    }
+                }
+            ],
+            'reason' => ['required', 'string', 'max:255'],
+            'lock_version' => ['required', 'integer', 'min:1'],
         ];
     }
 }

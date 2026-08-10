@@ -8,13 +8,14 @@ class RechazarIncrementoCoordinadorRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return true; // Se maneja en la Policy
     }
 
     public function rules(): array
     {
         return [
-            'notas' => ['nullable', 'string', 'max:500'],
+            'reason' => ['required', 'string', 'max:255'],
+            'lock_version' => ['required', 'integer', 'min:1'],
         ];
     }
 }

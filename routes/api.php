@@ -234,12 +234,15 @@ Route::prefix('v1')->group(function () {
             ->middleware('permission:clients.manage_portfolio');
 
         // Módulo 08 - Líneas de Crédito e Incrementos
+        Route::get('distributors/{distributor}/credit-line', [\App\Http\Controllers\Api\V1\Credito\LineaCreditoConsultaController::class, 'show']);
+        Route::get('distributors/{distributor}/credit-line/movements', [\App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController::class, 'index']);
+        Route::post('distributors/{distributor}/credit-increase-requests', [\App\Http\Controllers\Api\V1\Credito\CrearSolicitudIncrementoController::class, 'store'])->middleware('idempotency');
         Route::get('me/credit-line', [\App\Http\Controllers\Api\V1\LineaCreditoController::class, 'me']);
-        Route::get('credit-lines/{linea}/movements', [\App\Http\Controllers\Api\V1\MovimientoLineaCreditoController::class, 'index']);
-        Route::get('credit-lines/{linea}/increase-requests', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'index']);
-        Route::post('credit-lines/{linea}/increase-requests', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'store']);
+        Route::get('credit-increase-requests', [\App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController::class, 'index']);
+        Route::get('credit-increase-requests/{solicitud}', [\App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController::class, 'show']);
         Route::post('credit-increase-requests/{solicitud}/preauthorize', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'preauthorize']);
         Route::post('credit-increase-requests/{solicitud}/reject-by-coordinator', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'rejectByCoordinator']);
-        Route::post('credit-increase-requests/{solicitud}/decide', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'decide']);
+        Route::post('credit-increase-requests/{solicitud}/manager-decision', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'decide'])
+            ->middleware('idempotency');
     });
 });

@@ -64,8 +64,9 @@ class SolicitudIncrementoLineaController extends Controller
         $solicitudActualizada = $this->servicioPreautorizacion->preautorizar(
             $solicitud,
             $request->user(),
-            $request->validated('monto_recomendado'),
-            $request->validated('notas')
+            $request->validated('recommended_amount'),
+            $request->validated('reason'),
+            $request->validated('lock_version')
         );
 
         return new SolicitudIncrementoDetalleResource($solicitudActualizada);
@@ -73,37 +74,39 @@ class SolicitudIncrementoLineaController extends Controller
 
     public function rejectByCoordinator(RechazarIncrementoCoordinadorRequest $request, SolicitudIncrementoLinea $solicitud)
     {
-        Gate::authorize('preauthorize', $solicitud);
+        Gate::authorize('rejectByCoordinator', $solicitud);
 
         $solicitudActualizada = $this->servicioPreautorizacion->rechazarOperativamente(
             $solicitud,
             $request->user(),
-            $request->validated('notas')
+            $request->validated('reason'),
+            $request->validated('lock_version')
         );
 
         return new SolicitudIncrementoDetalleResource($solicitudActualizada);
     }
 
-    public function decide(DecidirIncrementoGerenteRequest $request, SolicitudIncrementoLinea $solicitud)
+    public function decide(DecidirIncrementoGerenteRequest $request, string $solicitudId)
     {
-        Gate::authorize('decide', $solicitud);
-
-        $accion = $request->validated('accion');
+        $solicitud = SolicitudIncrementoLinea::findOrFail($solicitudId);
         
-        if ($accion === 'AUTORIZAR') {
-            $solicitudActualizada = $this->servicioDecision->autorizar(
-                $solicitud,
-                $request->user(),
-                $request->validated('monto_autorizado'),
-                $request->validated('notas')
-            );
-        } else {
-            $solicitudActualizada = $this->servicioDecision->rechazar(
-                $solicitud,
-                $request->user(),
-                $request->validated('notas')
-            );
+        Gate::authorize('managerDecision', $solicitud);
+
+        $user = $request->user();
+
+        // El gerente no puede autorizar una solicitud que él haya creado como distribuidora.
+        if ($solicitud->requested_by === $user->id || $solicitud->distributor_id === $user->id) {
+            abort(403, "No puedes emitir una decisión sobre tu propia solicitud.");
         }
+
+        $solicitudActualizada = $this->servicioDecision->decidir(
+            $solicitud,
+            $user,
+            $request->validated('decision'),
+            $request->validated('authorized_amount'),
+            $request->validated('reason'),
+            $request->validated('lock_version')
+        );
 
         return new SolicitudIncrementoDetalleResource($solicitudActualizada);
     }

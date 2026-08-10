@@ -12,12 +12,20 @@ class ServicioActivacionRestriccionCredito
     {
         return DB::transaction(function () use ($linea, $montoIncremento, $solicitudId) {
             $montoRestringido = bcmul($montoIncremento, '0.50', 2);
+            $configuracionTolerancia = app(\App\Services\ConfiguracionServicio::class)->resolver('CREDIT_TOLERANCE_AMOUNT');
 
             return RestriccionUsoCredito::create([
                 'credit_line_id' => $linea->id,
-                'type' => 'INCREASE_' . substr($solicitudId, 0, 36),
-                'base_total' => $montoRestringido,
+                'distributor_id' => $linea->distributor_id,
+                'type' => 'POST_INCREASE_50_PERCENT',
                 'status' => \App\Enums\EstadoRestriccionUsoCredito::ACTIVE,
+                'base_total' => $montoRestringido,
+                'tolerance_amount' => $configuracionTolerancia['value'],
+                'configuration_version_id' => $configuracionTolerancia['version_id'],
+                'source_type' => 'CREDIT_INCREASE_REQUEST',
+                'source_id' => $solicitudId,
+                'activated_at' => now(),
+                'created_by' => auth()->id(),
             ]);
         });
     }

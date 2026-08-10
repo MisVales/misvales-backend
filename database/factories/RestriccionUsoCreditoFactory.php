@@ -17,11 +17,16 @@ class RestriccionUsoCreditoFactory extends Factory
 
         return [
             'credit_line_id' => LineaCredito::factory(),
+            'distributor_id' => \App\Models\Distribuidora::factory(),
             'type' => 'INITIAL_50_PERCENT',
             'status' => 'ACTIVE',
             'base_total' => number_format($importe / 10000, 4, '.', ''),
-            'consumed_at' => null,
-            'voucher_id' => null,
+            'tolerance_amount' => '0.0000',
+            'configuration_version_id' => 'v1.0.0',
+            'source_type' => 'DISTRIBUTOR_APPLICATION_AUTHORIZATION',
+            'source_id' => fake()->uuid(),
+            'activated_at' => now(),
+            'created_by' => \App\Models\User::factory(),
         ];
     }
 }

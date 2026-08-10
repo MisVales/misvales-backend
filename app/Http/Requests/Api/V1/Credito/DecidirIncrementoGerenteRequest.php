@@ -8,18 +8,28 @@ class DecidirIncrementoGerenteRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return true;
+        return true; // Se maneja en la Policy
     }
 
     public function rules(): array
     {
-        $solicitud = $this->route('solicitud');
-        $max = $solicitud ? $solicitud->requested_amount : '0.00';
-
         return [
-            'accion' => ['required', 'in:AUTORIZAR,RECHAZAR'],
-            'monto_autorizado' => ['required_if:accion,AUTORIZAR', 'nullable', 'numeric', 'min:1', "max:{$max}"],
-            'notas' => ['nullable', 'string', 'max:500'],
+            'decision' => ['required', 'string', 'in:APPROVE_REQUESTED,APPROVE_LOWER,REJECT'],
+            'reason' => ['required', 'string', 'max:255'],
+            'lock_version' => ['required', 'integer', 'min:1'],
+            'authorized_amount' => [
+                'required_if:decision,APPROVE_LOWER',
+                'prohibited_unless:decision,APPROVE_LOWER',
+                'string',
+                'regex:/^\d+(\.\d{1,4})?$/',
+                function ($attribute, $value, $fail) {
+                    if ($this->input('decision') === 'APPROVE_LOWER') {
+                        if (bccomp($value, '0.0000', 4) <= 0) {
+                            $fail("El importe autorizado debe ser mayor que cero.");
+                        }
+                    }
+                }
+            ],
         ];
     }
 }

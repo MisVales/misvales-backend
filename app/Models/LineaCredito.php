@@ -8,13 +8,13 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-class LineaCredito extends Model
+final class LineaCredito extends Model
 {
     use HasFactory, HasUuids;
 
     protected $table = 'credit_lines';
 
-    protected $fillable = ['distributor_id', 'total_authorized'];
+    protected $fillable = ['distributor_id'];
 
     protected function casts(): array
     {

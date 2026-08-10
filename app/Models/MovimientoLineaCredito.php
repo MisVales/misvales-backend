@@ -14,15 +14,25 @@ class MovimientoLineaCredito extends Model
 
     protected $table = 'credit_line_movements';
 
+    const UPDATED_AT = null;
+
     protected $fillable = [
         'credit_line_id',
+        'distributor_id',
+        'sequence',
         'type',
         'amount',
-        'balance_before',
-        'balance_after',
+        'total_authorized_before',
+        'total_authorized_after',
+        'used_balance_before',
+        'used_balance_after',
         'source_type',
         'source_id',
-        'created_by',
+        'reason',
+        'performed_by',
+        'authorized_by',
+        'idempotency_key',
+        'occurred_at',
     ];
 
     protected function casts(): array
@@ -30,8 +40,11 @@ class MovimientoLineaCredito extends Model
         return [
             'type' => TipoMovimientoLineaCredito::class,
             'amount' => 'decimal:4',
-            'balance_before' => 'decimal:4',
-            'balance_after' => 'decimal:4',
+            'total_authorized_before' => 'decimal:4',
+            'total_authorized_after' => 'decimal:4',
+            'used_balance_before' => 'decimal:4',
+            'used_balance_after' => 'decimal:4',
+            'occurred_at' => 'immutable_datetime',
         ];
     }
 
@@ -40,8 +53,18 @@ class MovimientoLineaCredito extends Model
         return $this->belongsTo(LineaCredito::class, 'credit_line_id');
     }
 
-    public function creadoPor(): BelongsTo
+    public function distribuidora(): BelongsTo
     {
-        return $this->belongsTo(User::class, 'created_by');
+        return $this->belongsTo(Distribuidora::class, 'distributor_id');
+    }
+
+    public function realizadoPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'performed_by');
+    }
+
+    public function autorizadoPor(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'authorized_by');
     }
 }

@@ -1,0 +1,14 @@
+<?php
+
+namespace App\Enums;
+
+enum EstadoSolicitudIncremento: string
+{
+    case REQUESTED = 'REQUESTED';
+    case REJECTED_BY_COORDINATOR = 'REJECTED_BY_COORDINATOR';
+    case PREAUTHORIZED = 'PREAUTHORIZED';
+    case REJECTED_BY_MANAGER = 'REJECTED_BY_MANAGER';
+    case AUTHORIZED_PARTIAL = 'AUTHORIZED_PARTIAL';
+    case AUTHORIZED_TOTAL = 'AUTHORIZED_TOTAL';
+    case COMPLETED = 'COMPLETED';
+}

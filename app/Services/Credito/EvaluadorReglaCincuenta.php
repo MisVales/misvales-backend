@@ -2,27 +2,67 @@
 
 namespace App\Services\Credito;
 
-use App\Models\LineaCredito;
+use App\Models\RestriccionUsoCredito;
 
 class EvaluadorReglaCincuenta
 {
-    protected CalculadorSaldoCredito $calculador;
-
-    public function __construct(CalculadorSaldoCredito $calculador)
-    {
-        $this->calculador = $calculador;
-    }
-
     /**
-     * Evalúa si un monto específico puede ser utilizado basado en el saldo disponible actual
-     * que ya tiene descontadas las restricciones del 50%.
+     * Evalúa la regla del 50% basándose en una restricción vigente y el saldo disponible actual.
+     * Retorna los importes en string exacto a 4 decimales.
      */
-    public function puedeUtilizar(LineaCredito $linea, string $montoSolicitado): bool
+    public function evaluar(?RestriccionUsoCredito $restriccion, string $availableBalance): array
     {
-        $saldos = $this->calculador->calcular($linea);
-        
-        $saldoDisponible = $saldos['saldo_disponible'];
+        $availableBalance = number_format((float) $availableBalance, 4, '.', '');
 
-        return bccomp($saldoDisponible, $montoSolicitado, 2) >= 0;
+        // Cuando no exista restricción vigente, devolver nulls y no inventar un rango.
+        if (!$restriccion) {
+            return [
+                'restriction_id' => null,
+                'restriction_type' => null,
+                'restriction_status' => null,
+                'base_total' => null,
+                'available_balance' => $availableBalance,
+                'tolerance_amount' => null,
+                'reference_amount' => null,
+                'lower_limit' => null,
+                'upper_limit' => null,
+                'has_admissible_range' => true, // Sin restricción, todo el saldo es admisible para un vale
+            ];
+        }
+
+        // Utilizar la base total y tolerancia congeladas en la restricción
+        $baseTotal = number_format((float) $restriccion->base_total, 4, '.', '');
+        $toleranceAmount = number_format((float) $restriccion->tolerance_amount, 4, '.', '');
+
+        // reference_amount = base_total * 0.50
+        $referenceAmount = bcmul($baseTotal, '0.5000', 4);
+
+        // temp_lower = reference_amount - tolerance_amount
+        $tempLower = bcsub($referenceAmount, $toleranceAmount, 4);
+        
+        // lower_limit = max(0, reference_amount - tolerance_amount)
+        $lowerLimit = bccomp($tempLower, '0.0000', 4) > 0 ? $tempLower : '0.0000';
+
+        // temp_upper = reference_amount + tolerance_amount
+        $tempUpper = bcadd($referenceAmount, $toleranceAmount, 4);
+
+        // upper_limit = min(available_balance, reference_amount + tolerance_amount)
+        $upperLimit = bccomp($availableBalance, $tempUpper, 4) < 0 ? $availableBalance : $tempUpper;
+
+        // has_admissible_range = true cuando upper_limit >= lower_limit
+        $hasAdmissibleRange = bccomp($upperLimit, $lowerLimit, 4) >= 0;
+
+        return [
+            'restriction_id' => $restriccion->id,
+            'restriction_type' => $restriccion->type,
+            'restriction_status' => $restriccion->status->value ?? $restriccion->status,
+            'base_total' => $baseTotal,
+            'available_balance' => $availableBalance,
+            'tolerance_amount' => $toleranceAmount,
+            'reference_amount' => $referenceAmount,
+            'lower_limit' => $lowerLimit,
+            'upper_limit' => $upperLimit,
+            'has_admissible_range' => $hasAdmissibleRange,
+        ];
     }
 }
