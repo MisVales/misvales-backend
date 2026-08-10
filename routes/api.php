@@ -64,6 +64,15 @@ Route::prefix('v1')->group(function () {
         });
     });
 
+    // Rutas públicas o protegidas para el catálogo de direcciones
+    Route::prefix('address')->group(function () {
+        Route::get('states', [\App\Http\Controllers\AddressController::class, 'getStates']);
+        Route::get('states/{estado}/municipalities', [\App\Http\Controllers\AddressController::class, 'getMunicipalities']);
+        Route::get('zip-codes/{code}', [\App\Http\Controllers\AddressController::class, 'getInfoByZipCode']);
+        Route::post('autocomplete', [\App\Http\Controllers\AddressController::class, 'autocomplete']);
+        Route::post('geocode', [\App\Http\Controllers\AddressController::class, 'geocode']);
+    });
+
     // Perfil y Permisos
     Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
         

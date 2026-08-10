@@ -39,4 +39,8 @@ return [
         'address_validation_key' => env('GOOGLE_MAPS_ADDRESS_VALIDATION_API_KEY'),
     ],
 
+    'geoapify' => [
+        'key' => env('GEOAPIFY_API_KEY'),
+    ],
+
 ];
