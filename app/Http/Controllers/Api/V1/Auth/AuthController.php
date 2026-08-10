@@ -34,7 +34,7 @@ class AuthController extends Controller
         ]);
 
         $ip = $request->ip();
-        $email = trim(strtoupper($request->email));
+        $email = strtolower(trim($request->email));
         $throttleKey = "login_attempts_{$ip}_{$email}";
         $rateLimitEnabled = (bool) config('ratelimit.enabled', true);
 

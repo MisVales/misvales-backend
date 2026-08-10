@@ -65,6 +65,12 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Audit Module
             ['module' => 'audit', 'action' => 'view', 'code' => 'audit.view', 'description' => 'Ver auditoría y eventos de seguridad'],
+
+            // Distributor Applications Module
+            ['module' => 'distributor_applications', 'action' => 'view', 'code' => 'distributor_applications.view', 'description' => 'Ver solicitudes de distribuidoras'],
+            ['module' => 'distributor_applications', 'action' => 'create', 'code' => 'distributor_applications.create', 'description' => 'Crear solicitud de distribuidora'],
+            ['module' => 'distributor_applications', 'action' => 'update', 'code' => 'distributor_applications.update', 'description' => 'Editar solicitud de distribuidora en borrador'],
+            ['module' => 'distributor_applications', 'action' => 'submit', 'code' => 'distributor_applications.submit', 'description' => 'Enviar a revisión la solicitud de distribuidora'],
         ];
 
         foreach ($permissions as $permissionData) {
