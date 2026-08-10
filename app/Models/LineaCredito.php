@@ -44,4 +44,9 @@ class LineaCredito extends Model
     {
         return bcsub($this->total_authorized, $this->used_balance, 4);
     }
+
+    public function solicitudesIncremento(): HasMany
+    {
+        return $this->hasMany(SolicitudIncrementoLinea::class, 'credit_line_id');
+    }
 }
