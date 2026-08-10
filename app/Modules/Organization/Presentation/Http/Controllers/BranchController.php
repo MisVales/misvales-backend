@@ -51,6 +51,8 @@ final class BranchController extends Controller
             id: Str::uuid()->toString(),
             name: $request->validated('name'),
             address: $request->validated('address'),
+            lat: $request->validated('lat'),
+            lng: $request->validated('lng'),
             actorId: $request->user()->id,
         );
 
@@ -74,6 +76,8 @@ final class BranchController extends Controller
             branchId: $id,
             name: $request->validated('name'),
             address: $request->validated('address'),
+            lat: $request->validated('lat'),
+            lng: $request->validated('lng'),
             expectedVersion: $request->integer('lock_version'),
             actorId: $request->user()->id,
         );

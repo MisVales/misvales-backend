@@ -15,6 +15,8 @@ final class StoreBranchRequest extends OrganizationFormRequest
         return [
             'name' => ['required', 'string', 'max:150'],
             'address' => ['required', 'string', 'max:500'],
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
         ];
     }
 }

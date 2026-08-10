@@ -28,6 +28,8 @@ final class UpdateBranchRequest extends OrganizationFormRequest
         return [
             'name' => ['required', 'string', 'max:150'],
             'address' => ['required', 'string', 'max:500'],
+            'lat' => ['nullable', 'numeric'],
+            'lng' => ['nullable', 'numeric'],
             'lock_version' => ['required', 'integer', 'min:0'],
         ];
     }

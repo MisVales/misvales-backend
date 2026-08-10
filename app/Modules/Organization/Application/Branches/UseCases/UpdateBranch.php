@@ -2,7 +2,6 @@
 
 namespace App\Modules\Organization\Application\Branches\UseCases;
 
-use App\Modules\Organization\Application\Branches\AddressValidator;
 use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
 use App\Modules\Organization\Domain\Assignments\Exceptions\OrganizationScopeDenied;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationScopeResolver;
@@ -12,6 +11,7 @@ use App\Modules\Organization\Domain\Branches\Exceptions\BranchVersionConflict;
 use App\Modules\Organization\Domain\Branches\Repositories\BranchRepository;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchName;
+use App\Modules\Organization\Domain\Branches\ValidatedAddress;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
 use Illuminate\Support\Str;
@@ -22,13 +22,14 @@ final readonly class UpdateBranch
         private BranchRepository $branches,
         private OrganizationScopeResolver $scopeResolver,
         private OrganizationEventPublisher $events,
-        private AddressValidator $addressValidator,
     ) {}
 
     public function handle(
         string $branchId,
         string $name,
         string $address,
+        ?float $lat,
+        ?float $lng,
         int $expectedVersion,
         string $actorId,
     ): Branch {
@@ -47,9 +48,16 @@ final readonly class UpdateBranch
             'name' => $branch->name()->value(),
             'address' => $branch->address()?->formatted,
         ];
+        $validatedAddress = new ValidatedAddress(
+            formatted: $address,
+            validationId: 'sepomex_geoapify',
+            placeId: null,
+            latitude: $lat,
+            longitude: $lng
+        );
         $branch->updateDetails(
             BranchName::fromString($name),
-            $this->addressValidator->validate($address),
+            $validatedAddress,
         );
 
         if ($branch->lockVersion() !== $expectedVersion) {

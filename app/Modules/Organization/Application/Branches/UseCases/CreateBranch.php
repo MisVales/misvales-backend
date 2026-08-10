@@ -2,9 +2,8 @@
 
 namespace App\Modules\Organization\Application\Branches\UseCases;
 
-use App\Modules\Organization\Application\Branches\AddressValidator;
-use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
 use App\Modules\Organization\Domain\Branches\Branch;
+use App\Modules\Organization\Domain\Branches\ValidatedAddress;
 use App\Modules\Organization\Domain\Branches\Repositories\BranchRepository;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchCode;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
@@ -16,23 +15,29 @@ use Illuminate\Support\Str;
 
 final readonly class CreateBranch
 {
-    public function __construct(
         private BranchRepository $branches,
         private OrganizationEventPublisher $events,
-        private AddressValidator $addressValidator,
     ) {}
 
     public function handle(
         string $id,
         string $name,
         string $address,
+        ?float $lat,
+        ?float $lng,
         string $actorId,
     ): Branch {
         $branchCode = BranchCode::fromString(sprintf(
             'SUC-%03d',
             (int) DB::scalar("SELECT nextval('branches_code_sequence')"),
         ));
-        $validatedAddress = $this->addressValidator->validate($address);
+        $validatedAddress = new ValidatedAddress(
+            formatted: $address,
+            validationId: 'sepomex_geoapify',
+            placeId: null,
+            latitude: $lat,
+            longitude: $lng
+        );
 
         $branch = Branch::create(
             id: BranchId::fromString($id),
