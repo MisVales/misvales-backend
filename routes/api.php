@@ -232,5 +232,14 @@ Route::prefix('v1')->group(function () {
             ->middleware(['permission:clients.manage_portfolio', 'idempotency']);
         Route::patch('clients/{client}/portfolio-entries/{entry}', [CarteraInformativaClienteController::class, 'update'])
             ->middleware('permission:clients.manage_portfolio');
+
+        // Módulo 08 - Líneas de Crédito e Incrementos
+        Route::get('me/credit-line', [\App\Http\Controllers\Api\V1\LineaCreditoController::class, 'me']);
+        Route::get('credit-lines/{linea}/movements', [\App\Http\Controllers\Api\V1\MovimientoLineaCreditoController::class, 'index']);
+        Route::get('credit-lines/{linea}/increase-requests', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'index']);
+        Route::post('credit-lines/{linea}/increase-requests', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'store']);
+        Route::post('credit-increase-requests/{solicitud}/preauthorize', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'preauthorize']);
+        Route::post('credit-increase-requests/{solicitud}/reject-by-coordinator', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'rejectByCoordinator']);
+        Route::post('credit-increase-requests/{solicitud}/decide', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'decide']);
     });
 });
