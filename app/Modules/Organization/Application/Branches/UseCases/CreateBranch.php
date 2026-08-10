@@ -10,7 +10,7 @@ use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchName;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
-use App\Modules\Organization\Domain\Events\OrganizationEventPublisher;
+use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
