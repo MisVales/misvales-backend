@@ -27,7 +27,7 @@ class GeoapifyService
             'limit' => 5,
         ];
 
-        $response = Http::get("{$this->baseUrl}/geocode/autocomplete", $query);
+        $response = Http::withoutVerifying()->get("{$this->baseUrl}/geocode/autocomplete", $query);
 
         return $response->json();
     }
@@ -47,7 +47,7 @@ class GeoapifyService
             'limit' => 1,
         ];
 
-        $response = Http::get("{$this->baseUrl}/geocode/search", $query);
+        $response = Http::withoutVerifying()->get("{$this->baseUrl}/geocode/search", $query);
 
         return $response->json();
     }

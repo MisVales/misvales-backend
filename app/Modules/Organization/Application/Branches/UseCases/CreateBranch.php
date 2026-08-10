@@ -10,11 +10,13 @@ use App\Modules\Organization\Domain\Branches\ValueObjects\BranchId;
 use App\Modules\Organization\Domain\Branches\ValueObjects\BranchName;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
+use App\Modules\Organization\Domain\Events\OrganizationEventPublisher;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 final readonly class CreateBranch
 {
+    public function __construct(
         private BranchRepository $branches,
         private OrganizationEventPublisher $events,
     ) {}

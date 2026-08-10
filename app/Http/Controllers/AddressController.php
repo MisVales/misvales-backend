@@ -20,23 +20,23 @@ class AddressController extends Controller
 
     public function getStates()
     {
-        $states = Cache::rememberForever('sepomex_states', function () {
-            return Estado::orderBy('name')->get();
+        $states = Cache::rememberForever('sepomex_states_array', function () {
+            return Estado::orderBy('name')->get()->toArray();
         });
         return response()->json($states);
     }
 
     public function getMunicipalities(Estado $estado)
     {
-        $municipalities = Cache::rememberForever('sepomex_municipalities_' . $estado->id, function () use ($estado) {
-            return $estado->municipios()->orderBy('name')->get();
+        $municipalities = Cache::rememberForever('sepomex_municipalities_array_' . $estado->id, function () use ($estado) {
+            return $estado->municipios()->orderBy('name')->get()->toArray();
         });
         return response()->json($municipalities);
     }
 
     public function getInfoByZipCode($code)
     {
-        $data = Cache::rememberForever('sepomex_zipcode_' . $code, function () use ($code) {
+        $data = Cache::rememberForever('sepomex_zipcode_array_' . $code, function () use ($code) {
             $cp = CodigoPostal::with(['municipio.estado', 'colonias' => function($q) {
                 $q->orderBy('name');
             }])->where('code', $code)->first();
@@ -44,10 +44,10 @@ class AddressController extends Controller
             if (!$cp) return null;
 
             return [
-                'estado' => $cp->municipio->estado,
-                'municipio' => $cp->municipio,
-                'colonias' => $cp->colonias,
-                'codigo_postal' => $cp
+                'estado' => $cp->municipio->estado->toArray(),
+                'municipio' => $cp->municipio->toArray(),
+                'colonias' => $cp->colonias->toArray(),
+                'codigo_postal' => $cp->toArray()
             ];
         });
 
