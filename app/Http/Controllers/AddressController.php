@@ -7,6 +7,7 @@ use App\Models\Estado;
 use App\Models\Municipio;
 use App\Models\CodigoPostal;
 use App\Services\GeoapifyService;
+use Illuminate\Support\Facades\Cache;
 
 class AddressController extends Controller
 {
@@ -19,31 +20,42 @@ class AddressController extends Controller
 
     public function getStates()
     {
-        return response()->json(Estado::orderBy('name')->get());
+        $states = Cache::rememberForever('sepomex_states', function () {
+            return Estado::orderBy('name')->get();
+        });
+        return response()->json($states);
     }
 
     public function getMunicipalities(Estado $estado)
     {
-        return response()->json($estado->municipios()->orderBy('name')->get());
+        $municipalities = Cache::rememberForever('sepomex_municipalities_' . $estado->id, function () use ($estado) {
+            return $estado->municipios()->orderBy('name')->get();
+        });
+        return response()->json($municipalities);
     }
 
     public function getInfoByZipCode($code)
     {
-        // El CP puede tener varias colonias y pertenece a un municipio
-        $cp = CodigoPostal::with(['municipio.estado', 'colonias' => function($q) {
-            $q->orderBy('name');
-        }])->where('code', $code)->first();
+        $data = Cache::rememberForever('sepomex_zipcode_' . $code, function () use ($code) {
+            $cp = CodigoPostal::with(['municipio.estado', 'colonias' => function($q) {
+                $q->orderBy('name');
+            }])->where('code', $code)->first();
 
-        if (!$cp) {
+            if (!$cp) return null;
+
+            return [
+                'estado' => $cp->municipio->estado,
+                'municipio' => $cp->municipio,
+                'colonias' => $cp->colonias,
+                'codigo_postal' => $cp
+            ];
+        });
+
+        if (!$data) {
             return response()->json(['message' => 'Código Postal no encontrado'], 404);
         }
 
-        return response()->json([
-            'estado' => $cp->municipio->estado,
-            'municipio' => $cp->municipio,
-            'colonias' => $cp->colonias,
-            'codigo_postal' => $cp
-        ]);
+        return response()->json($data);
     }
 
     public function autocomplete(Request $request)
@@ -76,14 +88,21 @@ class AddressController extends Controller
             'state' => 'required|string',
         ]);
 
-        $result = $this->geoapifyService->geocode(
-            $request->street,
-            $request->number,
-            $request->neighborhood,
-            $request->postcode,
-            $request->city,
-            $request->state
-        );
+        $cacheKey = 'geocode_' . md5(implode('|', [
+            $request->street, $request->number, $request->neighborhood,
+            $request->postcode, $request->city, $request->state
+        ]));
+
+        $result = Cache::remember($cacheKey, now()->addDays(30), function () use ($request) {
+            return $this->geoapifyService->geocode(
+                $request->street,
+                $request->number,
+                $request->neighborhood,
+                $request->postcode,
+                $request->city,
+                $request->state
+            );
+        });
 
         return response()->json($result);
     }
