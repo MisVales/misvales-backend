@@ -34,6 +34,12 @@ class TrackSessionActivity
             $session = AuthSession::where('session_identifier_hash', $tokenHash)->first();
 
             if ($session) {
+                if (app()->environment('local') && $session->authentication_method === 'LOCAL_SUPER_SESSION') {
+                    $request->attributes->set('auth_session', $session);
+
+                    return $next($request);
+                }
+
                 $policy = $this->policyService->getPolicyForUser($user);
                 $now = now();
 

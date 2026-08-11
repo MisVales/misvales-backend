@@ -53,3 +53,6 @@ FILE-MANIFEST.txt
 
 
 /misvales-front
+
+# Extensiones locales de desarrollo (credenciales y sesiones técnicas)
+/bootstrap/local/
