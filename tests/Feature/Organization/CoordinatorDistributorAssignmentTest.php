@@ -5,6 +5,7 @@ namespace Tests\Feature\Organization;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\Role;
 use App\Models\SolicitudDistribuidora;
 use App\Models\User;
@@ -68,11 +69,6 @@ final class CoordinatorDistributorAssignmentTest extends TestCase
             'id' => $second->json('data.id'),
             'status' => 'ACTIVE',
         ]);
-        $this->assertDatabaseHas('distributor_applications', [
-            'id' => $distributor->id,
-            'coordinator_id' => $coordinatorB->id,
-        ]);
-
         $this->getJson("/api/v1/assignments/coordinator-distributor?branch_id={$branch->id}&include_history=true")
             ->assertOk()
             ->assertJsonCount(2, 'data');
@@ -148,9 +144,9 @@ final class CoordinatorDistributorAssignmentTest extends TestCase
         ]);
     }
 
-    private function distributor(User $creator, BranchRecord $branch, User $coordinator): SolicitudDistribuidora
+    private function distributor(User $creator, BranchRecord $branch, User $coordinator): Distribuidora
     {
-        return SolicitudDistribuidora::query()->forceCreate([
+        $solicitud = SolicitudDistribuidora::query()->forceCreate([
             'id' => Str::uuid()->toString(),
             'application_number' => 'SOL-2026-'.random_int(100000, 999999),
             'branch_id' => $branch->id,
@@ -158,6 +154,18 @@ final class CoordinatorDistributorAssignmentTest extends TestCase
             'status' => 'ACTIVE',
             'section_declarations' => [],
             'created_by' => $creator->id,
+            'lock_version' => 1,
+        ]);
+
+        return Distribuidora::query()->forceCreate([
+            'id' => Str::uuid()->toString(),
+            'application_id' => $solicitud->id,
+            'user_id' => $creator->id,
+            'distributor_number' => 'DIS-2026-'.random_int(100000, 999999),
+            'branch_id' => $branch->id,
+            'status' => 'ACTIVE',
+            'activated_at' => now(),
+            'activated_by' => $creator->id,
             'lock_version' => 1,
         ]);
     }

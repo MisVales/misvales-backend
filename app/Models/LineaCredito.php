@@ -14,7 +14,12 @@ final class LineaCredito extends Model
 
     protected $table = 'credit_lines';
 
-    protected $fillable = ['distributor_id'];
+    protected $fillable = [
+        'distributor_id',
+        'total_authorized',
+        'used_balance',
+        'lock_version',
+    ];
 
     protected function casts(): array
     {

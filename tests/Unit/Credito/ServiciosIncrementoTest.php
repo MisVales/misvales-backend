@@ -30,10 +30,29 @@ class ServiciosIncrementoTest extends TestCase
             $mock->shouldReceive('registrar')->andReturn();
         });
         
-        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) {
+        $autor = User::factory()->create(['state' => 'ACTIVE']);
+        $definicion = \App\Models\ConfigurationDefinition::query()->create([
+            'key' => 'CREDIT_TOLERANCE_AMOUNT',
+            'name' => 'Tolerancia',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $autor->id,
+        ]);
+        $version = \App\Models\ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definicion->id,
+            'version' => 1,
+            'value' => '500.0000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba',
+            'created_by' => $autor->id,
+            'published_by' => $autor->id,
+            'published_at' => now(),
+        ]);
+        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) use ($version) {
             $mock->shouldReceive('resolver')->with('CREDIT_TOLERANCE_AMOUNT')->andReturn([
                 'value' => '500.0000',
-                'version_id' => 'v1.0.0'
+                'version_id' => $version->id,
             ]);
         });
     }
@@ -110,7 +129,7 @@ class ServiciosIncrementoTest extends TestCase
 
         $movimiento = \App\Models\MovimientoLineaCredito::where('credit_line_id', $linea->id)->first();
         $this->assertNotNull($movimiento);
-        $this->assertEquals('INCREASE', $movimiento->type);
+        $this->assertEquals(\App\Enums\TipoMovimientoLineaCredito::INCREASE, $movimiento->type);
         $this->assertEquals('5000.0000', $movimiento->amount);
         $this->assertEquals('10000.0000', $movimiento->total_authorized_before);
         $this->assertEquals('15000.0000', $movimiento->total_authorized_after);

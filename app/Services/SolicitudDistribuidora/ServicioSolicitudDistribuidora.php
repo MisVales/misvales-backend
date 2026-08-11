@@ -98,7 +98,12 @@ final class ServicioSolicitudDistribuidora
         $permitida = SolicitudDistribuidora::query()
             ->whereKey($solicitud->id)
             ->tap(fn (Builder $query) => $this->aplicarAlcance($query, $actor))
-            ->with(['sucursal:id,name', 'coordinador:id,name', 'datosPersonales', 'familiares', 'domicilios', 'vehiculos', 'patrimonio', 'empleos', 'creditosComerciales'])
+            ->with([
+                'sucursal:id,name', 'coordinador:id,name', 'datosPersonales', 'familiares',
+                'domicilios', 'vehiculos', 'patrimonio', 'empleos', 'creditosComerciales',
+                'verificationVisits.mediaFiles', 'corrections', 'evaluations',
+                'latestEvaluation', 'authorization',
+            ])
             ->first();
 
         if ($permitida === null) {

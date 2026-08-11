@@ -1,7 +1,6 @@
 <?php
 namespace Database\Factories;
 use App\Models\MediaFile;
-use App\Models\VerificationVisit;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
@@ -11,7 +10,6 @@ class MediaFileFactory extends Factory {
     public function definition() {
         return [
             'id' => Str::uuid(),
-            'verification_visit_id' => VerificationVisit::factory(),
             'file_type' => 'id_front',
             'disk' => 'private',
             'path' => 'evidences/' . Str::uuid() . '.jpg',

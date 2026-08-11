@@ -25,7 +25,11 @@ class ServicioEvidenciaVerificacion {
             if ($visit->status !== VerificationVisitStatus::IN_PROGRESS) throw new BusinessException('VERIFICATION_VISIT_NOT_STARTED', 'La visita debe estar EN PROGRESO.', 409);
 
             $sha256 = hash_file('sha256', $file->getRealPath());
-            $exists = MediaFile::where('verification_visit_id', $visit->id)->where('sha256', $sha256)->exists();
+            $exists = MediaFile::where('sha256', $sha256)
+                ->whereHas('bindings', fn ($query) => $query
+                    ->where('owner_type', 'verification_visit')
+                    ->where('owner_id', $visit->id))
+                ->exists();
             if ($exists) {
                 throw new BusinessException('VERIFICATION_EVIDENCE_DUPLICATE', 'Evidencia duplicada.', 409);
             }
@@ -34,7 +38,6 @@ class ServicioEvidenciaVerificacion {
             $path = $file->store('evidences/' . $visit->id, 'private');
 
             $media = MediaFile::create([
-                'verification_visit_id' => $visit->id,
                 'file_type' => $fileType,
                 'disk' => 'private',
                 'path' => $path,
@@ -43,6 +46,12 @@ class ServicioEvidenciaVerificacion {
                 'size_bytes' => $file->getSize(),
                 'sha256' => $sha256,
                 'uploaded_by' => $verifierId
+            ]);
+            $media->bindings()->create([
+                'owner_type' => 'verification_visit',
+                'owner_id' => $visit->id,
+                'purpose' => 'EVIDENCE',
+                'created_by' => $verifierId,
             ]);
             
             $visit->touch();
@@ -53,14 +62,19 @@ class ServicioEvidenciaVerificacion {
     }
 
     public function consultarEvidencia(string $visitId): Collection {
-        return MediaFile::where('verification_visit_id', $visitId)->get();
+        return MediaFile::whereHas('bindings', fn ($query) => $query
+            ->where('owner_type', 'verification_visit')
+            ->where('owner_id', $visitId))
+            ->get();
     }
 
     public function descargarEvidencia(string $mediaId, string $userId) {
         $media = MediaFile::find($mediaId);
         if (!$media) throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'Evidencia no encontrada.', 404);
         
-        $visit = VerificationVisit::find($media->verification_visit_id);
+        $binding = $media->bindings()->where('owner_type', 'verification_visit')->first();
+        $visit = $binding === null ? null : VerificationVisit::find($binding->owner_id);
+        if ($visit === null) throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'La evidencia no está vinculada a una visita.', 404);
         $application = DistributorApplication::find($visit->application_id);
         $user = User::find($userId);
 
@@ -93,7 +107,9 @@ class ServicioEvidenciaVerificacion {
         DB::transaction(function () use ($mediaId, $verifierId) {
             $media = MediaFile::find($mediaId);
             if (!$media) throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'Evidencia no encontrada.', 404);
-            $visit = VerificationVisit::lockForUpdate()->find($media->verification_visit_id);
+            $binding = $media->bindings()->where('owner_type', 'verification_visit')->first();
+            $visit = $binding === null ? null : VerificationVisit::lockForUpdate()->find($binding->owner_id);
+            if ($visit === null) throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'La evidencia no está vinculada a una visita.', 404);
 
             if ($visit->verifier_id !== $verifierId) {
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'MediaFile', $mediaId, $verifierId, null, null, null, 'Intento de eliminación', 'DENIED');

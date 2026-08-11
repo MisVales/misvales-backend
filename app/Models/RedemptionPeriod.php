@@ -19,6 +19,7 @@ class RedemptionPeriod extends Model
         'ends_at',
         'status',
         'point_value',
+        'point_value_configuration_version_id',
         'reason',
         'created_by',
         'published_by',
@@ -34,6 +35,12 @@ class RedemptionPeriod extends Model
         'published_at' => 'datetime',
         'closed_at' => 'datetime',
         'point_value' => 'decimal:4',
+        'lock_version' => 'integer',
         'status' => \App\Enums\RedemptionPeriodStatus::class,
     ];
+
+    public function versionConfiguracionValorPunto()
+    {
+        return $this->belongsTo(ConfigurationVersion::class, 'point_value_configuration_version_id');
+    }
 }

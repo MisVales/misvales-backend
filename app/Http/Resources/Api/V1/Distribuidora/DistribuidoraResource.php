@@ -11,15 +11,15 @@ class DistribuidoraResource extends JsonResource
     {
         $categoria = $this->categoriaVigente?->versionCategoria;
         $coordinador = $this->coordinadorVigente?->coordinator;
-        $datos = $this->solicitud?->applicant_data ?? [];
+        $datos = $this->solicitud?->datosPersonales;
 
         return [
             'id' => $this->id,
             'distributor_number' => $this->distributor_number,
             'full_name' => trim(implode(' ', array_filter([
-                data_get($datos, 'personal_info.first_name'),
-                data_get($datos, 'personal_info.last_name'),
-                data_get($datos, 'personal_info.second_last_name'),
+                $datos?->first_name,
+                $datos?->first_last_name,
+                $datos?->second_last_name,
             ]))),
             'branch' => $this->sucursal ? ['id' => $this->sucursal->id, 'name' => $this->sucursal->name] : null,
             'coordinator' => $coordinador ? ['id' => $coordinador->id, 'name' => $coordinador->name] : null,

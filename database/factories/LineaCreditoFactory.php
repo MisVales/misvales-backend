@@ -17,7 +17,7 @@ class LineaCreditoFactory extends Factory
 
         return [
             'distributor_id' => Distribuidora::factory(),
-            'total_authorized' => number_format($importe / 10000, 4, '.', ''),
+            'total_authorized' => bcdiv((string) $importe, '10000', 4),
             'used_balance' => '0.0000',
             'lock_version' => 1,
         ];

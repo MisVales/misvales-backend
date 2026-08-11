@@ -12,7 +12,6 @@ class MediaFile extends Model {
     protected $table = 'media_files';
 
     protected $fillable = [
-        'verification_visit_id',
         'file_type',
         'disk',
         'path',
@@ -28,7 +27,7 @@ class MediaFile extends Model {
         'disk'
     ];
 
-    public function verificationVisit() {
-        return $this->belongsTo(VerificationVisit::class);
+    public function bindings() {
+        return $this->hasMany(MediaFileBinding::class);
     }
 }

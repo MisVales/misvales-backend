@@ -9,36 +9,13 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_application_number_seq START WITH 1 INCREMENT BY 1');
-
-        Schema::create('distributor_applications', function (Blueprint $table) {
-            $table->uuid('id')->primary();
-            $table->string('application_number', 32)->unique();
-            $table->foreignUuid('branch_id')->constrained('branches');
-            $table->foreignUuid('coordinator_id')->constrained('users');
-            $table->string('status', 40)->default('DRAFT');
-            $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
-            $table->foreignUuid('created_by')->constrained('users');
-            $table->foreignUuid('submitted_by')->nullable()->constrained('users');
-            $table->timestampTz('submitted_at')->nullable();
-            $table->unsignedInteger('lock_version')->default(1);
-            $table->timestampsTz();
-
-            $table->index(['branch_id', 'status']);
-            $table->index(['coordinator_id', 'status']);
-            $table->index('created_at');
-            $table->index('submitted_at');
-        });
-
-        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_status_check CHECK (status IN ('DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'ACTIVE'))");
-        DB::statement('ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_lock_version_check CHECK (lock_version >= 1)');
-        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
-        DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
+        // La raíz canónica se crea antes de las tablas M05 para que todas sus FKs
+        // nazcan apuntando a la misma identidad. Esta migración se conserva como
+        // marcador histórico del antiguo orden de M04.
     }
 
     public function down(): void
     {
-        Schema::dropIfExists('distributor_applications');
-        DB::statement('DROP SEQUENCE IF EXISTS distributor_application_number_seq');
+        // La raíz pertenece a 2026_08_04_112940 y se revierte allí.
     }
 };

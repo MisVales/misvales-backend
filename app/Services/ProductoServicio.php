@@ -53,12 +53,12 @@ class ProductoServicio
 
     private function normalizarPorcentaje(mixed $valor): string
     {
-        return number_format((float) $valor, 6, '.', '');
+        return bcadd((string) $valor, '0', 6);
     }
 
     private function normalizarMonto(mixed $valor): string
     {
-        return number_format((float) $valor, 4, '.', '');
+        return bcadd((string) $valor, '0', 4);
     }
 
     public function actualizarVersion(ProductVersion $version, array $datos): ProductVersion

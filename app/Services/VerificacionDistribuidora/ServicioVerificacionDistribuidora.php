@@ -68,9 +68,9 @@ class ServicioVerificacionDistribuidora {
             if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita completada.', 409);
             
             $visit->forceFill([
-                'latitude' => (string)$lat,
-                'longitude' => (string)$lng,
-                'location_accuracy_meters' => (string)$accuracy
+                'latitude' => $lat === null ? null : (string) $lat,
+                'longitude' => $lng === null ? null : (string) $lng,
+                'location_accuracy_meters' => $accuracy === null ? null : (string) $accuracy,
             ])->save();
         });
     }
@@ -115,7 +115,7 @@ class ServicioVerificacionDistribuidora {
             if ($visit->status === VerificationVisitStatus::ASSIGNED) throw new BusinessException('VERIFICATION_VISIT_NOT_STARTED', 'Visita no iniciada.', 409);
             if ($visit->status === VerificationVisitStatus::COMPLETED) throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita ya completada.', 409);
 
-            $hasEvidence = MediaFile::where('verification_visit_id', $visit->id)->exists();
+            $hasEvidence = $visit->mediaFiles()->exists();
             if (!$hasEvidence) throw new BusinessException('VERIFICATION_VISIT_EVIDENCE_REQUIRED', 'No se puede finalizar la visita sin evidencias.', 409);
 
             $resEnum = VerificationVisitResult::tryFrom($result);

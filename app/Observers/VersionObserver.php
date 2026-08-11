@@ -161,8 +161,14 @@ class VersionObserver
             $changes = $model->getChanges();
             if (isset($changes['status'])) {
                 $statusValue = $changes['status'] instanceof RedemptionPeriodStatus ? $changes['status']->value : $changes['status'];
-                if ($statusValue === RedemptionPeriodStatus::PUBLISHED->value) {
+                if (in_array($statusValue, [
+                    RedemptionPeriodStatus::SCHEDULED->value,
+                    RedemptionPeriodStatus::OPEN->value,
+                ], true)) {
                     return 'Periodo de canje publicado.';
+                }
+                if ($statusValue === RedemptionPeriodStatus::CLOSED->value) {
+                    return 'Periodo de canje cerrado.';
                 }
                 if ($statusValue === RedemptionPeriodStatus::CANCELLED->value) {
                     return 'Periodo de canje cancelado.';

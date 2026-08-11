@@ -24,4 +24,22 @@ class DistribuidoraFactory extends Factory
             'lock_version' => 1,
         ];
     }
+
+    public function active(): self
+    {
+        return $this->state(fn () => [
+            'status' => 'ACTIVE',
+            'activated_at' => now(),
+            'activated_by' => User::factory()->state(['state' => 'ACTIVE']),
+        ]);
+    }
+
+    public function disabledWithActivationHistory(): self
+    {
+        return $this->state(fn () => [
+            'status' => 'DISABLED',
+            'activated_at' => now()->subDay(),
+            'activated_by' => User::factory()->state(['state' => 'ACTIVE']),
+        ]);
+    }
 }

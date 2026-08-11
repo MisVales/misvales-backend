@@ -537,7 +537,12 @@ class RegistroClienteApiTest extends TestCase
             'distributor_number' => $numero,
             'branch_id' => $solicitud->branch_id,
         ]);
-        $distribuidora->forceFill(['status' => 'ACTIVE', 'lock_version' => 1])->save();
+        $distribuidora->forceFill([
+            'status' => 'ACTIVE',
+            'activated_at' => now(),
+            'activated_by' => $usuario->id,
+            'lock_version' => 1,
+        ])->save();
         $rol = Role::query()->where('code', 'distributor')->firstOrFail();
         UserRoleScope::create([
             'user_id' => $usuario->id,

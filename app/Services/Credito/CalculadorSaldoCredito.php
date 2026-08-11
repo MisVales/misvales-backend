@@ -33,9 +33,9 @@ class CalculadorSaldoCredito
         $availableBalance = bcsub($totalAuthorized, $usedBalance, 4);
 
         return [
-            'total_authorized' => number_format((float) $totalAuthorized, 4, '.', ''),
-            'used_balance' => number_format((float) $usedBalance, 4, '.', ''),
-            'available_balance' => number_format((float) $availableBalance, 4, '.', ''),
+            'total_authorized' => bcadd($totalAuthorized, '0', 4),
+            'used_balance' => bcadd($usedBalance, '0', 4),
+            'available_balance' => $availableBalance,
         ];
     }
 

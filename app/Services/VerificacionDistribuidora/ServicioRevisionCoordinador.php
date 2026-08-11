@@ -10,6 +10,27 @@ use App\Exceptions\BusinessException;
 use App\Helpers\AuditHelper;
 
 class ServicioRevisionCoordinador {
+
+    public function listarVerificadoresDisponibles(string $applicationId, string $coordinatorId): array
+    {
+        $application = DistributorApplication::find($applicationId);
+        if (!$application) throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        if ($application->coordinator_id !== $coordinatorId) throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
+
+        return User::query()
+            ->select(['users.id', 'users.name', 'users.state'])
+            ->join('user_role_scopes', 'user_role_scopes.user_id', '=', 'users.id')
+            ->join('roles', 'roles.id', '=', 'user_role_scopes.role_id')
+            ->where('roles.code', 'verifier')
+            ->where('user_role_scopes.branch_id', $application->branch_id)
+            ->where('user_role_scopes.status', 'ACTIVE')
+            ->whereNull('user_role_scopes.revoked_at')
+            ->where('users.state', 'ACTIVE')
+            ->orderBy('users.name')
+            ->get()
+            ->map(fn (User $user): array => ['id' => $user->id, 'name' => $user->name, 'branch_id' => $application->branch_id, 'state' => is_object($user->state) ? $user->state->value : $user->state])
+            ->all();
+    }
     
     public function devolverACaptura(string $applicationId, string $coordinatorId, string $reason, array $pendingSections, int $lockVersion): void {
         DB::transaction(function () use ($applicationId, $coordinatorId, $reason, $pendingSections, $lockVersion) {

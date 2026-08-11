@@ -26,7 +26,7 @@ class AutorizacionSolicitudController extends Controller {
                 $applicationId, 
                 auth()->id(), 
                 $data['reason'],
-                (float) $data['initial_credit_line_amount'],
+                (string) $data['initial_credit_line_amount'],
                 (int) $data['lock_version'],
             );
             $msg = 'Solicitud autorizada exitosamente.';

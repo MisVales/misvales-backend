@@ -26,6 +26,7 @@ class TrackSessionActivity
     {
         $user = $request->user();
         $token = $user ? $user->currentAccessToken() : null;
+        $session = null;
 
         if ($user && $token) {
             $tokenHash = hash('sha256', $request->bearerToken());

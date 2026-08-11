@@ -612,9 +612,9 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'plate' => 'NO-PERMITIDA',
         ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['plate']]]);
 
-        self::assertFalse(Schema::hasTable('distributors'));
-        self::assertFalse(Schema::hasTable('credit_lines'));
-        self::assertFalse(Schema::hasTable('distributor_category_assignments'));
+        self::assertTrue(Schema::hasTable('distributors'));
+        self::assertTrue(Schema::hasTable('credit_lines'));
+        self::assertTrue(Schema::hasTable('distributor_category_assignments'));
     }
 
     private function usuarioConRol(string $rol, ?string $sucursalId = null): User

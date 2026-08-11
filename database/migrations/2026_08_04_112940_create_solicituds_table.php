@@ -1,29 +1,40 @@
 <?php
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::create('distributor_applications_m5', function (Blueprint $table) {
+        DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_application_number_seq START WITH 1 INCREMENT BY 1');
+
+        Schema::create('distributor_applications', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->json('applicant_data')->comment('Datos de la aspirante');
-            $table->string('status', 50)->default('COORDINATOR_REVIEW');
-            $table->integer('lock_version')->default(1);
-            $table->uuid('branch_id');
-            $table->uuid('coordinator_id')->nullable();
-            $table->uuid('verifier_id')->nullable();
-            $table->uuid('manager_id')->nullable();
+            $table->string('application_number', 32)->unique();
+            $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
+            $table->foreignUuid('coordinator_id')->constrained('users')->restrictOnDelete();
+            $table->string('status', 40)->default('DRAFT');
+            $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
+            $table->jsonb('pending_sections')->nullable();
+            $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
+            $table->foreignUuid('submitted_by')->nullable()->constrained('users')->restrictOnDelete();
+            $table->timestampTz('submitted_at')->nullable();
+            $table->unsignedInteger('lock_version')->default(1);
             $table->timestampsTz();
-            
-            // No onDelete('cascade')
-            $table->foreign('branch_id')->references('id')->on('branches')->restrictOnDelete();
-            $table->foreign('coordinator_id')->references('id')->on('users')->restrictOnDelete();
-            $table->foreign('verifier_id')->references('id')->on('users')->restrictOnDelete();
-            $table->foreign('manager_id')->references('id')->on('users')->restrictOnDelete();
+
+            $table->index(['branch_id', 'status']);
+            $table->index(['coordinator_id', 'status']);
+            $table->index('created_at');
+            $table->index('submitted_at');
         });
+
+        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_status_check CHECK (status IN ('DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'AUTHORIZED_PENDING_ACTIVATION', 'ACTIVE'))");
+        DB::statement('ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_lock_version_check CHECK (lock_version >= 1)');
+        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
+        DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
     }
     public function down(): void {
-        Schema::dropIfExists('distributor_applications_m5');
+        Schema::dropIfExists('distributor_applications');
+        DB::statement('DROP SEQUENCE IF EXISTS distributor_application_number_seq');
     }
 };

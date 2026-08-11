@@ -5,7 +5,7 @@ namespace App\Services\Credito;
 use App\Enums\EstadoSolicitudIncremento;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
-use InvalidArgumentException;
+use App\Exceptions\ExcepcionCredito;
 
 class ServicioEstadoIncremento
 {
@@ -71,8 +71,10 @@ class ServicioEstadoIncremento
         $validasDesdeAnterior = $transicionesValidas[$estadoAnterior->value] ?? [];
 
         if (!in_array($nuevoEstado, $validasDesdeAnterior)) {
-            throw new InvalidArgumentException(
-                "Transición inválida de estado {$estadoAnterior->value} a {$nuevoEstado->value}."
+            throw new ExcepcionCredito(
+                'CREDIT_INCREASE_REQUEST_STATUS_INVALID',
+                "Transición de estado no permitida: {$estadoAnterior->value} a {$nuevoEstado->value}.",
+                400,
             );
         }
     }

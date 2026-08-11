@@ -12,7 +12,7 @@ class EvaluadorReglaCincuenta
      */
     public function evaluar(?RestriccionUsoCredito $restriccion, string $availableBalance): array
     {
-        $availableBalance = number_format((float) $availableBalance, 4, '.', '');
+        $availableBalance = bcadd($availableBalance, '0.0000', 4);
 
         // Cuando no exista restricción vigente, devolver nulls y no inventar un rango.
         if (!$restriccion) {
@@ -31,8 +31,8 @@ class EvaluadorReglaCincuenta
         }
 
         // Utilizar la base total y tolerancia congeladas en la restricción
-        $baseTotal = number_format((float) $restriccion->base_total, 4, '.', '');
-        $toleranceAmount = number_format((float) $restriccion->tolerance_amount, 4, '.', '');
+        $baseTotal = bcadd($restriccion->base_total, '0.0000', 4);
+        $toleranceAmount = bcadd($restriccion->tolerance_amount, '0.0000', 4);
 
         // reference_amount = base_total * 0.50
         $referenceAmount = bcmul($baseTotal, '0.5000', 4);

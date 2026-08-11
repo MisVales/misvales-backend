@@ -14,7 +14,7 @@ use App\Helpers\AuditHelper;
 
 class ServicioEvaluacionSolicitud {
     public function consultarEvaluacion(string $applicationId, string $coordinatorId): ?ApplicationEvaluation {
-        return ApplicationEvaluation::with('visit')->where('application_id', $applicationId)->where('evaluated_by', $coordinatorId)->first();
+        return ApplicationEvaluation::with('visit')->where('application_id', $applicationId)->where('evaluated_by', $coordinatorId)->latest('evaluated_at')->first();
     }
 
     public function evaluar(
@@ -42,10 +42,6 @@ class ServicioEvaluacionSolicitud {
                     $correctionCount = ApplicationCorrection::where('application_id', $application->id)->where('verification_visit_id', $visit->id)->count();
                     if ($correctionCount < count($differences)) throw new BusinessException('APPLICATION_EVALUATION_DIFFERENCES_PENDING', 'Diferencias sin resolver.', 409);
                 }
-            }
-
-            if (ApplicationEvaluation::where('application_id', $application->id)->exists()) {
-                throw new BusinessException('APPLICATION_EVALUATION_ALREADY_EXISTS', 'Ya evaluado.', 409);
             }
 
             $eval = new ApplicationEvaluation([

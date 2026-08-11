@@ -49,7 +49,7 @@ class CategoriaServicio
 
     private function normalizarPorcentaje(mixed $valor): string
     {
-        return number_format((float) $valor, 4, '.', '');
+        return bcadd((string) $valor, '0', 4);
     }
 
     public function actualizarVersion(CategoryVersion $version, array $datos): CategoryVersion

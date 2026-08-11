@@ -39,7 +39,7 @@ class LineaCreditoResource extends JsonResource
             'restriction' => $restriccionVigente ? $reglaCincuenta : null,
             'last_movement' => $ultimoMovimiento ? [
                 'type' => $ultimoMovimiento->type,
-                'amount' => number_format((float) $ultimoMovimiento->amount, 4, '.', ''),
+                'amount' => (string) $ultimoMovimiento->amount,
                 'occurred_at' => $ultimoMovimiento->occurred_at->toIso8601String(),
             ] : null,
             'capabilities' => $this->getCapabilities($request->user()),

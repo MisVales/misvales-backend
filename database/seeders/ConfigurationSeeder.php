@@ -119,7 +119,7 @@ class ConfigurationSeeder extends Seeder
                 DB::transaction(function () use ($config, $admin, $servicio) {
                     $definition = $servicio->crearConfiguracion($config, $admin->id);
                     $version = $definition->versions()->first();
-                    $servicio->publicarVersion($version, $admin->id);
+                    $servicio->publicarVersion($version, [], $admin->id);
                 });
                 
                 $this->command->info("Configuración {$config['key']} creada y publicada.");

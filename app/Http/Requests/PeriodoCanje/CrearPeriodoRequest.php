@@ -16,7 +16,6 @@ class CrearPeriodoRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'starts_at' => ['required', 'date', 'after_or_equal:today'],
             'ends_at' => ['required', 'date', 'after:starts_at'], // Punto 69
-            'point_value' => ['required', 'numeric', 'min:0.0001'],
             'reason' => ['required', 'string'],
         ];
     }

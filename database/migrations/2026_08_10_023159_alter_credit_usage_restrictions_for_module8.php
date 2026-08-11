@@ -9,35 +9,44 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('credit_usage_restrictions', function (Blueprint $table) {
-            // Drop old unique constraint
-            $table->dropUnique('credit_usage_restrictions_credit_line_id_type_unique');
-            
-            // Drop old column
-            $table->dropColumn('voucher_id');
-            
-            // Add new columns
-            $table->foreignUuid('distributor_id')->after('credit_line_id')->constrained('distributors')->restrictOnDelete();
-            
-            $table->decimal('tolerance_amount', 19, 4)->after('base_total');
-            $table->foreignUuid('configuration_version_id')->after('tolerance_amount')->constrained('configuration_versions')->restrictOnDelete();
-            
-            $table->string('source_type')->after('configuration_version_id');
-            $table->uuid('source_id')->after('source_type');
-            
-            $table->uuid('reserved_voucher_id')->nullable()->after('source_id');
-            
-            $table->timestampTz('activated_at')->after('reserved_voucher_id');
-            $table->timestampTz('reserved_at')->nullable()->after('activated_at');
-            $table->timestampTz('cancelled_at')->nullable()->after('consumed_at');
-            
-            $table->foreignUuid('created_by')->nullable()->after('cancelled_at')->constrained('users')->restrictOnDelete();
-            
-            $table->integer('lock_version')->default(1)->after('created_by');
-        });
+        if (Schema::hasColumn('credit_usage_restrictions', 'voucher_id')) {
+            $legacyIds = DB::table('credit_usage_restrictions')->limit(20)->pluck('id');
+            if ($legacyIds->isNotEmpty()) {
+                throw new RuntimeException('No se pueden inventar configuración, procedencia y tolerancia para restricciones legacy. IDs: '.$legacyIds->implode(', '));
+            }
 
-        // Add partial unique index
-        DB::statement("CREATE UNIQUE INDEX credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
+            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
+            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
+            Schema::table('credit_usage_restrictions', function (Blueprint $table): void {
+                $table->dropUnique('credit_usage_restrictions_credit_line_id_type_unique');
+                $table->dropColumn('voucher_id');
+                $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
+                $table->decimal('tolerance_amount', 19, 4);
+                $table->foreignUuid('configuration_version_id')->constrained('configuration_versions')->restrictOnDelete();
+                $table->string('source_type', 64);
+                $table->uuid('source_id');
+                $table->uuid('reserved_voucher_id')->nullable();
+                $table->timestampTz('activated_at');
+                $table->timestampTz('reserved_at')->nullable();
+                $table->timestampTz('cancelled_at')->nullable();
+                $table->foreignUuid('created_by')->nullable()->constrained('users')->restrictOnDelete();
+                $table->unsignedInteger('lock_version')->default(1);
+                $table->index('distributor_id');
+                $table->index('configuration_version_id');
+            });
+        }
+
+        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
+        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
+        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_lifecycle_check');
+        DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_status_check CHECK (status IN ('ACTIVE', 'RESERVED', 'CONSUMED', 'CANCELLED'))");
+        DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lifecycle_check CHECK (
+            (status = 'ACTIVE' AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
+            OR (status = 'RESERVED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
+            OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
+            OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
+        )");
+        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
     }
 
     public function down(): void

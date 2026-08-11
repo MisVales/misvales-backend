@@ -42,7 +42,7 @@ class ServicioPreautorizacionIncremento
             }
 
             // Validar que monto recomendado <= solicitado
-            if (bccomp($montoRecomendado, $solicitud->requested_amount, 4) > 0) {
+            if (bccomp($montoRecomendado, '0.0000', 4) <= 0 || bccomp($montoRecomendado, $solicitud->requested_amount, 4) > 0) {
                 throw new ExcepcionCredito('CREDIT_INCREASE_RECOMMENDATION_INVALID', 'El importe recomendado no puede ser mayor al solicitado.', 400);
             }
 
@@ -69,7 +69,7 @@ class ServicioPreautorizacionIncremento
                 'authorized_amount' => $montoRecomendado,
                 'amounts_after' => null,
                 'reason' => $motivo,
-                'configuration_version' => 'v1.0.0',
+                'configuration_version' => null,
                 'occurred_at' => now()->toIso8601String(),
                 'result' => 'SUCCESS',
             ];
@@ -84,8 +84,7 @@ class ServicioPreautorizacionIncremento
                 ['previous_state' => EstadoSolicitudIncremento::REQUESTED],
                 ['new_state' => EstadoSolicitudIncremento::PREAUTHORIZED, 'authorized_amount' => $montoRecomendado],
                 $motivo,
-                'SUCCESS',
-                'v1.0.0'
+                'SUCCESS'
             );
 
             OutboxEvent::create([
@@ -142,7 +141,7 @@ class ServicioPreautorizacionIncremento
                 'authorized_amount' => null,
                 'amounts_after' => null,
                 'reason' => $motivo,
-                'configuration_version' => 'v1.0.0',
+                'configuration_version' => null,
                 'occurred_at' => now()->toIso8601String(),
                 'result' => 'SUCCESS',
             ];
@@ -157,8 +156,7 @@ class ServicioPreautorizacionIncremento
                 ['previous_state' => EstadoSolicitudIncremento::REQUESTED],
                 ['new_state' => EstadoSolicitudIncremento::REJECTED_BY_COORDINATOR],
                 $motivo,
-                'SUCCESS',
-                'v1.0.0'
+                'SUCCESS'
             );
 
             OutboxEvent::create([

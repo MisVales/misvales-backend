@@ -4,6 +4,7 @@ namespace Tests\Feature\VerificacionDistribuidora;
 use Tests\TestCase;
 use App\Models\User;
 use App\Models\AuthSession;
+use App\Models\Branch;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 
@@ -17,6 +18,9 @@ abstract class Modulo5TestCase extends TestCase {
     }
 
     protected function actingAsMfaUser(User $user, array $roles = [], ?string $branchId = null) {
+        if ($branchId !== null && ! Branch::query()->whereKey($branchId)->exists()) {
+            Branch::factory()->create(['id' => $branchId]);
+        }
         foreach ($roles as $role) {
             if (method_exists($user, 'assignRole')) {
                 $user->assignRole($role, $branchId);

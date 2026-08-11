@@ -28,7 +28,7 @@ class CorreccionSolicitudTest extends Modulo5TestCase {
         
         // El coordinador intenta finalizar SIN haber corregido nada (ApplicationCorrectionCount = 0)
         $response = $this->actingAsMfaUser($coordinator, ['coordinator'])
-            ->postJson("/api/v1/distributor-applications/{$app->id}/corrections/complete", ['lock_version' => 1]);
+            ->postJson("/api/v1/distributor-applications/{$app->id}/corrections/finish", ['lock_version' => 1]);
 
         $response->assertStatus(409)->assertJsonPath('error', 'APPLICATION_CORRECTIONS_PENDING');
     }

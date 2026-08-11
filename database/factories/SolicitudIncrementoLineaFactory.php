@@ -15,14 +15,16 @@ class SolicitudIncrementoLineaFactory extends Factory
 
     public function definition(): array
     {
+        $importe = fake()->numberBetween(10000000, 100000000);
+
         return [
             'request_number' => 'INC-2026-' . fake()->unique()->numerify('######'),
-            'distributor_id' => \App\Models\Distribuidora::factory(),
             'credit_line_id' => LineaCredito::factory(),
-            'branch_id' => \App\Models\Branch::factory(),
+            'distributor_id' => fn (array $attributes) => LineaCredito::query()->findOrFail($attributes['credit_line_id'])->distributor_id,
+            'branch_id' => fn (array $attributes) => \App\Models\Distribuidora::query()->findOrFail($attributes['distributor_id'])->branch_id,
             'coordinator_id' => User::factory(),
             'status' => EstadoSolicitudIncremento::REQUESTED,
-            'requested_amount' => number_format(fake()->numberBetween(1000, 10000), 4, '.', ''),
+            'requested_amount' => bcdiv((string) $importe, '10000', 4),
             'recommended_amount' => null,
             'authorized_amount' => null,
             'line_total_at_request' => '10000.0000',

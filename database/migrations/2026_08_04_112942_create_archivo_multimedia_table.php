@@ -7,7 +7,6 @@ return new class extends Migration {
     public function up(): void {
         Schema::create('media_files', function (Blueprint $table) {
             $table->uuid('id')->primary();
-            $table->uuid('verification_visit_id');
             $table->string('file_type', 50);
             $table->string('disk');
             $table->text('path');
@@ -18,11 +17,8 @@ return new class extends Migration {
             $table->uuid('uploaded_by');
             $table->timestampsTz();
 
-            $table->foreign('verification_visit_id')->references('id')->on('verification_visits')->restrictOnDelete();
             $table->foreign('uploaded_by')->references('id')->on('users')->restrictOnDelete();
-            
-            // Indice compuesto para evitar subida duplicada exacta en la misma visita
-            $table->unique(['verification_visit_id', 'sha256']);
+            $table->index('sha256');
         });
     }
     public function down(): void {

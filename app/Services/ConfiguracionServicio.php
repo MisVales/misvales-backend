@@ -45,7 +45,7 @@ class ConfiguracionServicio
 
         return match ($enumTipo) {
             ConfigurationValueType::DECIMAL,
-            ConfigurationValueType::PERCENTAGE => number_format((float) $valor, 4, '.', ''), // Previene floats en JSON y da 4 decimales
+            ConfigurationValueType::PERCENTAGE => bcadd((string) $valor, '0', 4),
             ConfigurationValueType::INTEGER => (int) $valor,
             default => $valor,
         };

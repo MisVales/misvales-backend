@@ -19,6 +19,9 @@ use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\Category;
 use App\Models\CategoryVersion;
+use App\Models\ConfigurationDefinition;
+use App\Models\ConfigurationVersion;
+use App\Models\DatosPersonalesSolicitud;
 use App\Models\Distribuidora;
 use App\Models\DistributorApplication;
 use App\Models\LineaCredito;
@@ -31,6 +34,7 @@ use App\Models\VerificationVisit;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
@@ -44,7 +48,27 @@ class ActivacionDistribuidoraApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Cache::forget('configuracion:CREDIT_TOLERANCE_AMOUNT');
         $this->seed(RolesAndPermissionsSeeder::class);
+        $autorConfiguracion = User::factory()->create(['state' => 'ACTIVE']);
+        $definicion = ConfigurationDefinition::query()->create([
+            'key' => 'CREDIT_TOLERANCE_AMOUNT',
+            'name' => 'Tolerancia de crédito',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $autorConfiguracion->id,
+        ]);
+        ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definicion->id,
+            'version' => 1,
+            'value' => '500.0000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba de activación',
+            'created_by' => $autorConfiguracion->id,
+            'published_by' => $autorConfiguracion->id,
+            'published_at' => now(),
+        ]);
         $this->withoutMiddleware([TrackSessionActivity::class, RequireActiveUser::class, RequireMfaCompleted::class]);
         Mail::fake();
     }
@@ -72,7 +96,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertDatabaseCount('credit_line_movements', 1);
         self::assertDatabaseCount('credit_usage_restrictions', 1);
         self::assertDatabaseCount('account_invitations', 1);
-        self::assertDatabaseHas('distributor_applications_m5', ['id' => $solicitud->id, 'status' => 'ACTIVE']);
+        self::assertDatabaseHas('distributor_applications', ['id' => $solicitud->id, 'status' => 'ACTIVE']);
 
         $usuario = User::query()->where('normalized_email', 'aspirante@example.test')->firstOrFail();
         self::assertNull($usuario->password);
@@ -90,8 +114,10 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertDatabaseHas('credit_line_movements', [
             'type' => 'INITIAL_AUTHORIZATION',
             'amount' => '15000.0000',
-            'balance_before' => '0.0000',
-            'balance_after' => '15000.0000',
+            'total_authorized_before' => '15000.0000',
+            'total_authorized_after' => '15000.0000',
+            'used_balance_before' => '0.0000',
+            'used_balance_after' => '0.0000',
             'source_type' => 'DISTRIBUTOR_APPLICATION_AUTHORIZATION',
             'source_id' => ApplicationAuthorization::query()->where('application_id', $solicitud->id)->value('id'),
         ]);
@@ -100,7 +126,6 @@ class ActivacionDistribuidoraApiTest extends TestCase
             'status' => 'ACTIVE',
             'base_total' => '15000.0000',
             'consumed_at' => null,
-            'voucher_id' => null,
         ]);
         self::assertSame(64, strlen((string) AccountInvitation::query()->value('token_hash')));
         Mail::assertQueued(ActivationInvitationMail::class, 1);
@@ -128,7 +153,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
     public function test_no_materializa_solicitud_sin_autorizacion_favorable(): void
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
-        DB::table('distributor_applications_m5')
+        DB::table('distributor_applications')
             ->where('id', $solicitud->id)
             ->update(['status' => ApplicationStatus::REJECTED->value]);
         Sanctum::actingAs($gerente);
@@ -356,7 +381,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
         $this->withHeader('Idempotency-Key', $clave)
             ->postJson("/api/v1/distributor-applications/{$solicitud->id}/activation", [
                 'category_version_id' => (string) Str::uuid(),
-            ])->assertConflict()->assertJsonPath('error.code', 'IDEMPOTENCY_KEY_REUSED');
+            ])->assertConflict()->assertJsonPath('error.code', 'IDEMPOTENCY_KEY_REUSED_WITH_DIFFERENT_PAYLOAD');
     }
 
     public function test_matriz_de_lectura_y_modificacion_por_roles(): void
@@ -536,7 +561,11 @@ class ActivacionDistribuidoraApiTest extends TestCase
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
         $distribuidora = $this->activar($gerente, $solicitud, $version);
-        DB::table('distributors')->where('id', $distribuidora->id)->update(['status' => 'ACTIVE']);
+        DB::table('distributors')->where('id', $distribuidora->id)->update([
+            'status' => 'ACTIVE',
+            'activated_at' => now(),
+            'activated_by' => $gerente->id,
+        ]);
         Sanctum::actingAs($gerente);
 
         $this->postJson("/api/v1/distributors/{$distribuidora->id}/activation-invitations/resend")
@@ -624,12 +653,28 @@ class ActivacionDistribuidoraApiTest extends TestCase
         $gerente = $this->usuarioConRol('general_manager', null, $creador);
         $coordinador = $this->usuarioConRol('coordinator', $sucursal->id, $creador);
         $solicitud = DistributorApplication::create([
-            'applicant_data' => ['personal_info' => [
-                'first_name' => 'Ana', 'last_name' => 'López', 'email' => "aspirante{$sufijo}@example.test",
-            ]],
+            'application_number' => 'SOL-2026-'.random_int(100000, 999999),
             'status' => ApplicationStatus::AUTHORIZED_PENDING_ACTIVATION,
             'branch_id' => $sucursal->id,
             'coordinator_id' => $coordinador->id,
+            'section_declarations' => [],
+            'created_by' => $creador->id,
+        ]);
+        DatosPersonalesSolicitud::query()->forceCreate([
+            'application_id' => $solicitud->id,
+            'first_name' => 'Ana',
+            'first_last_name' => 'López',
+            'curp_ciphertext' => 'ciphertext',
+            'curp_hmac' => hash('sha256', 'curp'.$sufijo),
+            'birth_date' => '1990-01-01',
+            'birth_place' => 'Monterrey',
+            'birth_state' => 'Nuevo León',
+            'birth_city' => 'Monterrey',
+            'email' => "aspirante{$sufijo}@example.test",
+            'phone_number' => '8112345678',
+            'official_id_type' => 'INE',
+            'official_id_number_ciphertext' => 'ciphertext',
+            'official_id_number_hmac' => hash('sha256', 'id'.$sufijo),
         ]);
         $verificador = $this->usuarioConRol('verifier', $sucursal->id, $creador);
         $visita = new VerificationVisit([

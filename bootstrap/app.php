@@ -147,6 +147,18 @@ return Application::configure(basePath: dirname(__DIR__))
                 'metadata' => ['message' => $e->getMessage(), 'path' => $request->path()],
             ]);
 
+            if ($request->is('api/v1/distributor-applications*')) {
+                app(SecurityAuditService::class)->log($request, [
+                    'event_type' => 'DISTRIBUTOR_APPLICATION_ACCESS_DENIED',
+                    'severity' => 'WARNING',
+                    'outcome' => 'DENIED',
+                    'entity_type' => 'distributor_application',
+                    'entity_id' => is_string($request->route('application')) ? $request->route('application') : null,
+                    'branch_id' => $request->input('branch_id'),
+                    'metadata' => ['message' => $e->getMessage(), 'path' => $request->path()],
+                ]);
+            }
+
             if ($request->is('api/*')) {
                 return response()->json(['error' => 'PERMISSION_DENIED', 'message' => 'Acceso denegado.'], 403);
             }
@@ -181,6 +193,7 @@ return Application::configure(basePath: dirname(__DIR__))
                             'outcome' => 'DENIED',
                             'entity_type' => 'distributor_application',
                             'entity_id' => is_string($solicitud) ? $solicitud : null,
+                            'branch_id' => $request->input('branch_id'),
                             'metadata' => [
                                 'application_id' => is_string($solicitud) ? $solicitud : null,
                                 'application_number' => null,

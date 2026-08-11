@@ -18,7 +18,7 @@ class ApplicationAuthorization extends Model {
 
     protected $casts = [
         'decision' => ApplicationAuthorizationDecision::class,
-        'initial_credit_line_amount' => 'string',
+        'initial_credit_line_amount' => 'decimal:4',
         'authorized_at' => 'datetime',
     ];
 

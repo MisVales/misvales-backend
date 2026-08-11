@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Models\VerificationVisit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use App\Models\Category;
 use App\Models\CategoryVersion;
 use App\Models\ConfigurationDefinition;
@@ -82,6 +84,9 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        Relation::morphMap([
+            'verification_visit' => VerificationVisit::class,
+        ]);
         Gate::policy(BranchRecord::class, BranchPolicy::class);
         Gate::policy(CoordinatorDistributorAssignment::class, CoordinatorAssignmentPolicy::class);
         Gate::policy(Distribuidora::class, DistribuidoraPolicy::class);

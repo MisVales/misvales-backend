@@ -8,6 +8,7 @@ use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 
 class VerificationVisit extends Model
 {
@@ -50,9 +51,12 @@ class VerificationVisit extends Model
         return $this->belongsTo(User::class, 'assigned_by');
     }
 
-    public function mediaFiles()
+    public function mediaFiles(): BelongsToMany
     {
-        return $this->hasMany(MediaFile::class, 'verification_visit_id');
+        return $this->belongsToMany(MediaFile::class, 'media_file_bindings', 'owner_id', 'media_file_id')
+            ->wherePivot('owner_type', 'verification_visit')
+            ->withPivot(['purpose', 'created_by'])
+            ->withTimestamps();
     }
 
     public function corrections()

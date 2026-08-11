@@ -26,7 +26,7 @@ class DistribuidoraController extends Controller
     {
         Gate::authorize('view', $distributor);
         $distributor->load([
-            'usuario', 'sucursal', 'solicitud.autorizacion', 'coordinadorVigente.coordinator',
+            'usuario', 'sucursal', 'solicitud.autorizacion', 'solicitud.datosPersonales', 'coordinadorVigente.coordinator',
             'categoriaVigente.versionCategoria', 'asignacionesCategoria.versionCategoria',
             'lineaCredito.movimientos', 'lineaCredito.restricciones',
         ]);

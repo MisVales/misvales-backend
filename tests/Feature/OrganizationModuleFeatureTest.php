@@ -7,6 +7,7 @@ namespace Tests\Feature;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\Role;
+use App\Models\Distribuidora;
 use App\Models\SolicitudDistribuidora;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -108,7 +109,7 @@ final class OrganizationModuleFeatureTest extends TestCase
         $branch = $this->branch($manager, 'MATRIZ', headquarters: true);
         $coordinatorA = $this->userWithRole('coordinator', $branch);
         $coordinatorB = $this->userWithRole('coordinator', $branch);
-        $distributor = SolicitudDistribuidora::query()->forceCreate([
+        $application = SolicitudDistribuidora::query()->forceCreate([
             'id' => Str::uuid()->toString(),
             'application_number' => 'SOL-2026-000001',
             'branch_id' => $branch->id,
@@ -117,6 +118,10 @@ final class OrganizationModuleFeatureTest extends TestCase
             'section_declarations' => [],
             'created_by' => $manager->id,
             'lock_version' => 1,
+        ]);
+        $distributor = Distribuidora::factory()->active()->create([
+            'application_id' => $application->id,
+            'branch_id' => $branch->id,
         ]);
         Sanctum::actingAs($manager);
 

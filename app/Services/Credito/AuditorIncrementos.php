@@ -18,7 +18,7 @@ class AuditorIncrementos
         array $nuevos = [],
         ?string $motivo = null,
         string $resultado = 'SUCCESS',
-        string $versionConfiguracion = 'v1.0.0'
+        ?string $versionConfiguracion = null
     ): void {
         $rol = null;
         

@@ -68,6 +68,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             // Distributor Applications Module
             ['module' => 'distributor_applications', 'action' => 'view', 'code' => 'distributor_applications.view', 'description' => 'Ver solicitudes de distribuidoras'],
+            ['module' => 'distributor_applications', 'action' => 'view_sensitive', 'code' => 'distributor_applications.view_sensitive', 'description' => 'Consultar datos sensibles de solicitudes dentro del alcance autorizado'],
             ['module' => 'distributor_applications', 'action' => 'create', 'code' => 'distributor_applications.create', 'description' => 'Crear solicitud de distribuidora'],
             ['module' => 'distributor_applications', 'action' => 'update', 'code' => 'distributor_applications.update', 'description' => 'Editar solicitud de distribuidora en borrador'],
             ['module' => 'distributor_applications', 'action' => 'submit', 'code' => 'distributor_applications.submit', 'description' => 'Enviar a revisión la solicitud de distribuidora'],
@@ -127,7 +128,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
                 $permissionCodes = $roleData['code'] === 'branch_manager'
-                    ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'distributor_applications.view', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
+                    ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'distributor_applications.view', 'distributor_applications.view_sensitive', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
                     : ['users.view', 'roles.view', 'branches.view', 'catalogs.view_published', 'catalogs.view_history', 'distributor_applications.view'];
                 $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
                 $syncData = [];
@@ -145,6 +146,7 @@ class RolesAndPermissionsSeeder extends Seeder
             if ($roleData['code'] === 'coordinator') {
                 $permissions = Permission::query()->whereIn('code', [
                     'distributor_applications.view',
+                    'distributor_applications.view_sensitive',
                     'distributor_applications.create',
                     'distributor_applications.update',
                     'distributor_applications.submit',

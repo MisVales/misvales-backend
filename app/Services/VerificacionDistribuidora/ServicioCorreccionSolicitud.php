@@ -3,12 +3,13 @@ namespace App\Services\VerificacionDistribuidora;
 use App\Models\DistributorApplication;
 use App\Models\VerificationVisit;
 use App\Models\ApplicationCorrection;
+use App\Models\DatosPersonalesSolicitud;
 use App\Enums\ApplicationStatus;
 use App\Enums\ApplicationCorrectionSection;
 use Illuminate\Support\Facades\DB;
 use App\Exceptions\BusinessException;
-use Illuminate\Support\Arr;
 use App\Helpers\AuditHelper;
+use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 
 class ServicioCorreccionSolicitud {
     
@@ -49,24 +50,79 @@ class ServicioCorreccionSolicitud {
             });
             if (!$fieldWasReported) throw new BusinessException('APPLICATION_CORRECTION_DIFFERENCE_NOT_FOUND', 'Campo no reportado.', 404);
 
-            $appData = $application->applicant_data;
-            $previousValuePayload = Arr::get($appData, $section->value . '.' . $fieldPath);
-            Arr::set($appData, $section->value . '.' . $fieldPath, $newValuePayload);
-            
-            $application->applicant_data = $appData;
-            $application->save();
+            [$previousValuePayload, $persistedNewValue] = $this->aplicarEnExpedienteCanonico(
+                $application->id,
+                $section,
+                $fieldPath,
+                $newValuePayload,
+            );
+            $application->forceFill(['lock_version' => $application->lock_version + 1])->save();
 
             $correction = ApplicationCorrection::create([
                 'application_id' => $application->id, 'verification_visit_id' => $visit->id,
                 'section' => $section, 'field_path' => $fieldPath,
                 'previous_value_payload' => json_encode($previousValuePayload),
-                'new_value_payload' => json_encode($newValuePayload),
+                'new_value_payload' => json_encode($persistedNewValue),
                 'reason' => $reason, 'corrected_by' => $coordinatorId, 'corrected_at' => now()
             ]);
 
             AuditHelper::log('APPLICATION_CORRECTION_APPLIED', 'ApplicationCorrection', $correction->id, $coordinatorId, $application->branch_id, null, ['field' => $fieldPath], $reason, 'SUCCESS', $application->lock_version);
             return $correction;
         });
+    }
+
+    /** @return array{mixed, mixed} */
+    private function aplicarEnExpedienteCanonico(
+        string $applicationId,
+        ApplicationCorrectionSection $section,
+        string $fieldPath,
+        mixed $newValue,
+    ): array {
+        if (! in_array($section, [ApplicationCorrectionSection::PERSONAL_INFO, ApplicationCorrectionSection::PERSONAL_DATA], true)) {
+            throw new BusinessException(
+                'APPLICATION_CORRECTION_FIELD_MAPPING_UNAVAILABLE',
+                'La sección requiere identificar explícitamente el registro histórico; no se adivina el destino.',
+                422,
+            );
+        }
+
+        $datos = DatosPersonalesSolicitud::query()->where('application_id', $applicationId)->lockForUpdate()->first();
+        if ($datos === null) {
+            throw new BusinessException('APPLICATION_PERSONAL_DATA_NOT_FOUND', 'No existen datos personales canónicos para corregir.', 409);
+        }
+
+        $camposDirectos = [
+            'first_name', 'first_last_name', 'second_last_name', 'birth_date', 'birth_place',
+            'birth_state', 'birth_city', 'email', 'phone_number', 'official_id_type',
+        ];
+        if (in_array($fieldPath, $camposDirectos, true)) {
+            $anterior = $datos->getAttribute($fieldPath);
+            $datos->setAttribute($fieldPath, $newValue);
+            $datos->save();
+
+            return [$anterior, $newValue];
+        }
+
+        $protector = app(ProtectorDatosSolicitud::class);
+        $columnas = match ($fieldPath) {
+            'curp' => ['curp_ciphertext', 'curp_hmac', 'cifrarCurp', 'generarHmacCurp'],
+            'rfc' => ['rfc_ciphertext', 'rfc_hmac', 'cifrarRfc', 'generarHmacRfc'],
+            'official_id_number' => ['official_id_number_ciphertext', 'official_id_number_hmac', 'cifrarIdentificacion', 'generarHmacIdentificacion'],
+            default => null,
+        };
+        if ($columnas === null || ! is_string($newValue)) {
+            throw new BusinessException('APPLICATION_CORRECTION_FIELD_INVALID', 'Campo de corrección no permitido.', 422);
+        }
+
+        [$ciphertext, $hmac, $metodoCifrado, $metodoHmac] = $columnas;
+        $anterior = $datos->getAttribute($ciphertext);
+        $nuevoCifrado = $protector->{$metodoCifrado}($newValue);
+        $datos->forceFill([
+            $ciphertext => $nuevoCifrado,
+            $hmac => $protector->{$metodoHmac}($newValue),
+        ])->save();
+
+        return [$anterior, $nuevoCifrado];
     }
     
     public function finalizarCorrecciones(string $applicationId, string $coordinatorId, int $lockVersion): void {

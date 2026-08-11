@@ -31,7 +31,10 @@ class DatabaseSeeder extends Seeder
             ->exists();
 
         if ($hasGeneralManager) {
-            $this->call(HeadquartersBranchSeeder::class);
+            $this->call([
+                HeadquartersBranchSeeder::class,
+                ConfigurationSeeder::class,
+            ]);
         }
     }
 }

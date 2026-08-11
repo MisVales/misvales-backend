@@ -2,6 +2,7 @@
 
 namespace App\Policies;
 
+use App\Enums\EstadoSolicitudIncremento;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
 use App\Models\CoordinatorDistributorAssignment;
@@ -11,14 +12,9 @@ class SolicitudIncrementoLineaPolicy
 {
     public function before(User $user)
     {
-        if ($user->status !== 'ACTIVE') {
+        if ($user->state !== 'ACTIVE') {
             return false;
         }
-    }
-
-    private function hasMfa(User $user): bool
-    {
-        return request()->attributes->get('session')?->mfa_verified_at !== null;
     }
 
     public function viewAny(User $user): bool
@@ -65,14 +61,12 @@ class SolicitudIncrementoLineaPolicy
 
     public function create(User $user): bool
     {
-        if (!$this->hasMfa($user)) return false;
         return $user->hasPermissionTo('credit_increase_requests.create_own');
     }
 
     public function preauthorize(User $user, SolicitudIncrementoLinea $solicitud): bool
     {
-        if (!$this->hasMfa($user)) return false;
-        if ($solicitud->status !== 'REQUESTED') return false;
+        if ($solicitud->status !== EstadoSolicitudIncremento::REQUESTED) return false;
         
         if ($user->hasPermissionTo('credit_increase_requests.preauthorize_assigned')) {
             return CoordinatorDistributorAssignment::where('coordinator_id', $user->id)->where('distributor_id', $solicitud->distributor_id)->where('status', 'ACTIVE')->exists();
@@ -83,8 +77,7 @@ class SolicitudIncrementoLineaPolicy
 
     public function rejectByCoordinator(User $user, SolicitudIncrementoLinea $solicitud): bool
     {
-        if (!$this->hasMfa($user)) return false;
-        if ($solicitud->status !== 'REQUESTED') return false;
+        if ($solicitud->status !== EstadoSolicitudIncremento::REQUESTED) return false;
 
         if ($user->hasPermissionTo('credit_increase_requests.reject_assigned')) {
             return CoordinatorDistributorAssignment::where('coordinator_id', $user->id)->where('distributor_id', $solicitud->distributor_id)->where('status', 'ACTIVE')->exists();
@@ -95,8 +88,7 @@ class SolicitudIncrementoLineaPolicy
 
     public function managerDecision(User $user, SolicitudIncrementoLinea $solicitud): bool
     {
-        if (!$this->hasMfa($user)) return false;
-        if ($solicitud->status !== 'PREAUTHORIZED') return false;
+        if ($solicitud->status !== EstadoSolicitudIncremento::PREAUTHORIZED) return false;
         
         // Separación de funciones (propietario)
         if ($solicitud->requested_by === $user->id || $solicitud->distributor_id === $user->id) {

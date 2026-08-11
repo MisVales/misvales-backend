@@ -9,44 +9,36 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // First, let's remove the constraints that depend on the old columns
+        if (Schema::hasColumn('credit_line_movements', 'balance_before')) {
+            $legacyIds = DB::table('credit_line_movements')->limit(20)->pluck('id');
+            if ($legacyIds->isNotEmpty()) {
+                throw new RuntimeException('No se pueden convertir movimientos legacy sin inventar snapshots históricos. IDs: '.$legacyIds->implode(', '));
+            }
+
+            DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
+            Schema::table('credit_line_movements', function (Blueprint $table): void {
+                $table->dropColumn(['balance_before', 'balance_after', 'updated_at']);
+                $table->dropConstrainedForeignId('created_by');
+                $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
+                $table->unsignedBigInteger('sequence');
+                $table->decimal('total_authorized_before', 19, 4);
+                $table->decimal('total_authorized_after', 19, 4);
+                $table->decimal('used_balance_before', 19, 4);
+                $table->decimal('used_balance_after', 19, 4);
+                $table->string('reason')->nullable();
+                $table->foreignUuid('performed_by')->nullable()->constrained('users')->restrictOnDelete();
+                $table->foreignUuid('authorized_by')->nullable()->constrained('users')->restrictOnDelete();
+                $table->string('idempotency_key')->nullable();
+                $table->timestampTz('occurred_at');
+                $table->unique(['credit_line_id', 'sequence']);
+                $table->index(['distributor_id', 'occurred_at']);
+                $table->index(['credit_line_id', 'occurred_at']);
+            });
+        }
+
         DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
-
-        Schema::table('credit_line_movements', function (Blueprint $table) {
-            // Drop old columns
-            $table->dropColumn(['balance_before', 'balance_after', 'updated_at']);
-            
-            // Note: The previous schema had 'created_by'. We will drop it and replace it with 'performed_by'
-            $table->dropConstrainedForeignId('created_by');
-
-            // Add new columns
-            $table->foreignUuid('distributor_id')->after('credit_line_id')->constrained('distributors')->restrictOnDelete();
-            $table->bigInteger('sequence')->after('distributor_id');
-            
-            $table->decimal('total_authorized_before', 19, 4)->after('amount');
-            $table->decimal('total_authorized_after', 19, 4)->after('total_authorized_before');
-            
-            $table->decimal('used_balance_before', 19, 4)->after('total_authorized_after');
-            $table->decimal('used_balance_after', 19, 4)->after('used_balance_before');
-            
-            $table->string('reason')->nullable()->after('source_id');
-            $table->foreignUuid('performed_by')->nullable()->after('reason')->constrained('users')->restrictOnDelete();
-            $table->foreignUuid('authorized_by')->nullable()->after('performed_by')->constrained('users')->restrictOnDelete();
-            
-            $table->string('idempotency_key')->nullable()->after('authorized_by');
-            
-            $table->timestampTz('occurred_at')->after('idempotency_key');
-            
-            // Add constraints and indices
-            $table->unique(['credit_line_id', 'sequence']);
-            $table->index(['distributor_id', 'occurred_at']);
-            
-            // Note: credit_line_id, created_at index already exists from Module 6
-            $table->index(['credit_line_id', 'occurred_at']);
-        });
-
-        // Partial unique index for idempotency_key
-        DB::statement('CREATE UNIQUE INDEX credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
+        DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
+        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
     }
 
     public function down(): void

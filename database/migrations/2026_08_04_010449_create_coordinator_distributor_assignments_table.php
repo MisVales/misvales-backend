@@ -48,7 +48,6 @@ return new class extends Migration
             WHERE status = 'ACTIVE' AND valid_to IS NULL;
         ");
 
-        // Evitar duplicar la misma asignación activa:
         DB::statement("
             CREATE UNIQUE INDEX coordinator_distributor_active_pair_unique
             ON coordinator_distributor_assignments (coordinator_id, distributor_id, branch_id)

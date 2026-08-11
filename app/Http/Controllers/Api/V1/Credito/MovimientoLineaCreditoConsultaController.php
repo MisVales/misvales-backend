@@ -67,8 +67,7 @@ class MovimientoLineaCreditoConsultaController extends Controller
             [],
             [],
             'Consulta de movimientos de línea de crédito.',
-            'SUCCESS',
-            'v1.0.0'
+            'SUCCESS'
         );
 
         // Construir la consulta de movimientos

@@ -38,6 +38,7 @@ class DistributorApplicationFactory extends Factory
     {
         return [
             'id' => Str::uuid(),
+            'application_number' => sprintf('SOL-%d-%06d', now()->year, fake()->unique()->numberBetween(1, 999999)),
             'branch_id' => function (): string {
                 $creador = User::factory()->create(['state' => 'ACTIVE']);
 
@@ -49,14 +50,10 @@ class DistributorApplicationFactory extends Factory
                     'created_by' => $creador->id,
                 ])->id;
             },
-            'applicant_data' => [
-                'personal_info' => [
-                    'first_name' => $this->faker->firstName,
-                    'last_name' => $this->faker->lastName,
-                    'curp' => strtoupper(Str::random(18)),
-                    'rfc' => strtoupper(Str::random(13)),
-                ],
-            ],
+            'coordinator_id' => User::factory()->state(['state' => 'ACTIVE']),
+            'section_declarations' => [],
+            'pending_sections' => null,
+            'created_by' => User::factory()->state(['state' => 'ACTIVE']),
             'status' => ApplicationStatus::DRAFT,
             'lock_version' => 1,
         ];

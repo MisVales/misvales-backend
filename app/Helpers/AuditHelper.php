@@ -9,7 +9,11 @@ class AuditHelper {
         $actorRole = null;
         if ($actorId) {
             $user = User::find($actorId);
-            $actorRole = $user ? ($user->roles()->first()?->code) : null;
+            $actorRole = $user?->roleScopes()
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->with('role')
+                ->first()?->role?->code;
         }
 
         AuditLog::create([

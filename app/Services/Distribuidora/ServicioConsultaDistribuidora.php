@@ -59,7 +59,7 @@ class ServicioConsultaDistribuidora
         return [
             'usuario',
             'sucursal',
-            'solicitud',
+            'solicitud.datosPersonales',
             'coordinadorVigente.coordinator',
             'categoriaVigente.versionCategoria',
         ];

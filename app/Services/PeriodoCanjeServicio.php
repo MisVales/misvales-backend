@@ -15,6 +15,7 @@ class PeriodoCanjeServicio
     {
         $startsAt = Carbon::parse($datos['starts_at'], 'America/Monterrey')->setTimezone('UTC');
         $endsAt = Carbon::parse($datos['ends_at'], 'America/Monterrey')->setTimezone('UTC');
+        $configuracionPunto = app(ConfiguracionServicio::class)->resolver('POINT_VALUE_AMOUNT');
 
         return RedemptionPeriod::create([
             'code' => $datos['code'],
@@ -23,7 +24,8 @@ class PeriodoCanjeServicio
             'starts_at' => $startsAt,
             'ends_at' => $endsAt,
             'status' => RedemptionPeriodStatus::DRAFT,
-            'point_value' => number_format((float) $datos['point_value'], 4, '.', ''),
+            'point_value' => bcadd((string) $configuracionPunto['value'], '0', 4),
+            'point_value_configuration_version_id' => $configuracionPunto['version_id'],
             'reason' => $datos['reason'],
             'created_by' => $usuarioId,
         ]);
@@ -41,7 +43,7 @@ class PeriodoCanjeServicio
         }
 
         if (array_key_exists('lock_version', $datos)) {
-            if ($periodo->lock_version !== (int) $datos['lock_version']) {
+            if ((int) $periodo->lock_version !== (int) $datos['lock_version']) {
                 throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
             }
             $periodo->lock_version++;
@@ -52,9 +54,6 @@ class PeriodoCanjeServicio
         }
         if (array_key_exists('description', $datos)) {
             $periodo->description = $datos['description'];
-        }
-        if (array_key_exists('point_value', $datos)) {
-            $periodo->point_value = number_format((float) $datos['point_value'], 4, '.', '');
         }
         if (array_key_exists('reason', $datos)) {
             $periodo->reason = $datos['reason'];
@@ -82,16 +81,23 @@ class PeriodoCanjeServicio
             throw new BusinessException('INVALID_VALIDITY', 'No se puede publicar un periodo cuya fecha de inicio ya ha pasado.');
         }
 
+        if ($periodo->point_value === null || $periodo->point_value_configuration_version_id === null) {
+            throw new BusinessException('REDEMPTION_POINT_VALUE_CONFIGURATION_REQUIRED', 'El periodo requiere valor de punto y versión de configuración trazable.');
+        }
+
         return DB::transaction(function () use ($periodo, $datos, $usuarioId) {
             if (array_key_exists('lock_version', $datos)) {
-                if ($periodo->lock_version !== (int) $datos['lock_version']) {
+                if ((int) $periodo->lock_version !== (int) $datos['lock_version']) {
                     throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
                 }
                 $periodo->lock_version++;
             }
 
             // Punto 70: Impedir periodos de canje publicados con traslapes.
-            $traslape = RedemptionPeriod::where('status', RedemptionPeriodStatus::PUBLISHED)
+            $traslape = RedemptionPeriod::whereIn('status', [
+                RedemptionPeriodStatus::SCHEDULED,
+                RedemptionPeriodStatus::OPEN,
+            ])
                 ->where('id', '!=', $periodo->id)
                 ->where(function ($q) use ($periodo) {
                     $q->where('starts_at', '<', $periodo->ends_at)
@@ -104,7 +110,9 @@ class PeriodoCanjeServicio
                 throw new BusinessException('REDEMPTION_PERIOD_OVERLAP', 'El periodo de canje se traslapa con un periodo ya publicado. Debe ajustar las fechas.');
             }
 
-            $periodo->status = RedemptionPeriodStatus::PUBLISHED;
+            $periodo->status = $periodo->starts_at->isFuture()
+                ? RedemptionPeriodStatus::SCHEDULED
+                : RedemptionPeriodStatus::OPEN;
             $periodo->reason .= "\n[Publicación]: ".$datos['reason'];
             $periodo->published_by = $usuarioId;
             $periodo->published_at = now();
@@ -128,7 +136,7 @@ class PeriodoCanjeServicio
         }
 
         if (array_key_exists('lock_version', $datos)) {
-            if ($periodo->lock_version !== (int) $datos['lock_version']) {
+            if ((int) $periodo->lock_version !== (int) $datos['lock_version']) {
                 throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del periodo fue modificada por otro usuario.');
             }
             $periodo->lock_version++;
@@ -150,6 +158,10 @@ class PeriodoCanjeServicio
         $isCurrent = ! $fecha || $fechaConsulta->diffInSeconds(now()) < 5;
 
         if ($isCurrent) {
+            $this->sincronizarEstadosTemporales($fechaConsulta);
+        }
+
+        if ($isCurrent) {
             return Cache::remember('periodo_canje:vigente', $this->calcularCacheTTL(), fn () => $this->resolverDesdeBD($fechaConsulta));
         }
 
@@ -160,7 +172,10 @@ class PeriodoCanjeServicio
     {
         // Punto 71: Mantener cerrado el canje cuando no exista un periodo publicado y vigente.
         // Aquí si no existe, regresamos null y los clientes de este servicio sabrán que el canje está inactivo.
-        $periodo = RedemptionPeriod::where('status', RedemptionPeriodStatus::PUBLISHED)
+        $periodo = RedemptionPeriod::whereIn('status', [
+            RedemptionPeriodStatus::SCHEDULED,
+            RedemptionPeriodStatus::OPEN,
+        ])
             ->where('starts_at', '<=', $fecha)
             ->where('ends_at', '>', $fecha)
             ->first();
@@ -182,12 +197,15 @@ class PeriodoCanjeServicio
 
     private function calcularCacheTTL(): Carbon
     {
-        $proximoEvento = RedemptionPeriod::where('status', RedemptionPeriodStatus::PUBLISHED)
+        $proximoEvento = RedemptionPeriod::whereIn('status', [
+            RedemptionPeriodStatus::SCHEDULED,
+            RedemptionPeriodStatus::OPEN,
+        ])
             ->where(function ($q) {
                 $q->where('starts_at', '>', now())
                     ->orWhere('ends_at', '>', now());
             })
-            ->orderByRaw('LEAST(COALESCE(NULLIF(starts_at < NOW(), true), starts_at), ends_at) ASC')
+            ->orderByRaw('CASE WHEN starts_at > NOW() THEN starts_at ELSE ends_at END ASC')
             ->first();
 
         if ($proximoEvento) {
@@ -195,5 +213,26 @@ class PeriodoCanjeServicio
         }
 
         return now()->addHours(24);
+    }
+
+    private function sincronizarEstadosTemporales(Carbon $fecha): void
+    {
+        DB::transaction(function () use ($fecha) {
+            RedemptionPeriod::where('status', RedemptionPeriodStatus::OPEN)
+                ->where('ends_at', '<=', $fecha)
+                ->update([
+                    'status' => RedemptionPeriodStatus::CLOSED->value,
+                    'closed_at' => $fecha,
+                    'updated_at' => $fecha,
+                ]);
+
+            RedemptionPeriod::where('status', RedemptionPeriodStatus::SCHEDULED)
+                ->where('starts_at', '<=', $fecha)
+                ->where('ends_at', '>', $fecha)
+                ->update([
+                    'status' => RedemptionPeriodStatus::OPEN->value,
+                    'updated_at' => $fecha,
+                ]);
+        });
     }
 }

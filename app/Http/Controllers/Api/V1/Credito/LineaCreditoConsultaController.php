@@ -75,8 +75,7 @@ class LineaCreditoConsultaController extends Controller
             [],
             [],
             'Consulta de línea de crédito y saldo vigente.',
-            'SUCCESS',
-            'v1.0.0'
+            'SUCCESS'
         );
 
         return new LineaCreditoResource($linea);

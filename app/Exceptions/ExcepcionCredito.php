@@ -14,7 +14,7 @@ class ExcepcionCredito extends RuntimeException
         public readonly array $campos = [],
         public readonly array $detalles = [],
     ) {
-        parent::__construct($mensaje);
+        parent::__construct($mensaje, $estadoHttp);
     }
 
     public function render($request): JsonResponse

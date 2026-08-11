@@ -9,7 +9,6 @@ class DistributorApplicationResource extends JsonResource {
             'id' => $this->id,
             'branch_id' => $this->branch_id,
             'status' => $this->status->value ?? $this->status,
-            'applicant_data' => clone $this->masked_applicant_data,
             'pending_sections' => $this->pending_sections,
             'coordinator_id' => $this->coordinator_id,
             'submitted_at' => $this->submitted_at?->toIso8601String(),
@@ -19,7 +18,8 @@ class DistributorApplicationResource extends JsonResource {
             // Desgloses solicitados:
             'verification_visits' => VerificationVisitResource::collection($this->whenLoaded('verificationVisits')),
             'corrections' => ApplicationCorrectionResource::collection($this->whenLoaded('corrections')),
-            'evaluation' => new ApplicationEvaluationResource($this->whenLoaded('evaluation')),
+            'evaluations' => ApplicationEvaluationResource::collection($this->whenLoaded('evaluations')),
+            'latest_evaluation' => new ApplicationEvaluationResource($this->whenLoaded('latestEvaluation')),
             'authorization' => new ApplicationAuthorizationResource($this->whenLoaded('authorization')),
         ];
     }

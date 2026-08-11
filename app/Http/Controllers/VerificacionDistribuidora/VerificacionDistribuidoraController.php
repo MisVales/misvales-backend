@@ -10,7 +10,7 @@ use App\Http\Requests\VerificacionDistribuidora\AsignarVerificadorRequest;
 use App\Http\Requests\VerificacionDistribuidora\IniciarVisitaRequest;
 use App\Http\Requests\VerificacionDistribuidora\ActualizarVisitaRequest;
 use App\Http\Requests\VerificacionDistribuidora\FinalizarVisitaRequest;
-use Illuminate\Http\Request;
+use App\Http\Requests\VerificacionDistribuidora\RegistrarDiferenciasRequest;
 
 class VerificacionDistribuidoraController extends Controller {
     
@@ -31,6 +31,10 @@ class VerificacionDistribuidoraController extends Controller {
         $data = $request->validated();
         $this->revisionService->asignarVerificador($applicationId, auth()->id(), $data['verifier_id'], (int) $data['lock_version']);
         return response()->json(['message' => 'Verificador asignado exitosamente.'], 200);
+    }
+
+    public function listarVerificadoresDisponibles(string $applicationId): JsonResponse {
+        return response()->json(['data' => $this->revisionService->listarVerificadoresDisponibles($applicationId, auth()->id())]);
     }
 
     // ---- Métodos de Verificador ----
@@ -58,12 +62,8 @@ class VerificacionDistribuidoraController extends Controller {
         return response()->json(['message' => 'Visita actualizada.'], 200);
     }
 
-    public function registrarDiferencias(Request $request, string $visitId) {
-        // En una app real usaríamos un FormRequest estricto para validar la estructura del JSON
-        $differences = $request->validate([
-            'differences_payload' => 'required|array',
-            'lock_version' => 'required|integer'
-        ]);
+    public function registrarDiferencias(RegistrarDiferenciasRequest $request, string $visitId) {
+        $differences = $request->validated();
         $this->verificacionService->registrarDiferencias($visitId, auth()->id(), $differences['differences_payload'], (int) $differences['lock_version']);
         return response()->json(['message' => 'Diferencias registradas.'], 200);
     }

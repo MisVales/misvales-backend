@@ -17,7 +17,7 @@ class SolicitudIncrementoDetalleResource extends JsonResource
             ->where('source_id', $this->id)
             ->get();
 
-        return [
+        $data = [
             'id' => $this->id,
             'request_number' => $this->request_number,
             'status' => $this->status,
@@ -40,12 +40,12 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'name' => $this->coordinadorSnapshot->name,
                 ];
             }),
-            'requested_amount' => $this->requested_amount ? number_format((float) $this->requested_amount, 4, '.', '') : null,
-            'recommended_amount' => $this->recommended_amount ? number_format((float) $this->recommended_amount, 4, '.', '') : null,
-            'authorized_amount' => $this->authorized_amount ? number_format((float) $this->authorized_amount, 4, '.', '') : null,
-            'line_total_at_request' => $this->line_total_at_request ? number_format((float) $this->line_total_at_request, 4, '.', '') : null,
-            'used_balance_at_request' => $this->used_balance_at_request ? number_format((float) $this->used_balance_at_request, 4, '.', '') : null,
-            'available_balance_at_request' => $this->available_balance_at_request ? number_format((float) $this->available_balance_at_request, 4, '.', '') : null,
+            'requested_amount' => $this->requested_amount !== null ? (string) $this->requested_amount : null,
+            'recommended_amount' => $this->recommended_amount !== null ? (string) $this->recommended_amount : null,
+            'authorized_amount' => $this->authorized_amount !== null ? (string) $this->authorized_amount : null,
+            'line_total_at_request' => $this->line_total_at_request !== null ? (string) $this->line_total_at_request : null,
+            'used_balance_at_request' => $this->used_balance_at_request !== null ? (string) $this->used_balance_at_request : null,
+            'available_balance_at_request' => $this->available_balance_at_request !== null ? (string) $this->available_balance_at_request : null,
             'request_reason' => $this->request_reason,
             'coordinator_reason' => $this->coordinator_reason,
             'manager_reason' => $this->manager_reason,
@@ -72,8 +72,8 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'id' => $this->restriccion->id,
                     'type' => $this->restriccion->type,
                     'status' => $this->restriccion->status,
-                    'base_total' => number_format((float) $this->restriccion->base_total, 4, '.', ''),
-                    'tolerance_amount' => number_format((float) $this->restriccion->tolerance_amount, 4, '.', ''),
+                    'base_total' => (string) $this->restriccion->base_total,
+                    'tolerance_amount' => (string) $this->restriccion->tolerance_amount,
                 ];
             }),
             
@@ -82,11 +82,11 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'id' => $movimiento->id,
                     'sequence' => $movimiento->sequence,
                     'type' => $movimiento->type,
-                    'amount' => number_format((float) $movimiento->amount, 4, '.', ''),
-                    'total_authorized_before' => number_format((float) $movimiento->total_authorized_before, 4, '.', ''),
-                    'total_authorized_after' => number_format((float) $movimiento->total_authorized_after, 4, '.', ''),
-                    'used_balance_before' => number_format((float) $movimiento->used_balance_before, 4, '.', ''),
-                    'used_balance_after' => number_format((float) $movimiento->used_balance_after, 4, '.', ''),
+                    'amount' => (string) $movimiento->amount,
+                    'total_authorized_before' => (string) $movimiento->total_authorized_before,
+                    'total_authorized_after' => (string) $movimiento->total_authorized_after,
+                    'used_balance_before' => (string) $movimiento->used_balance_before,
+                    'used_balance_after' => (string) $movimiento->used_balance_after,
                     'occurred_at' => $movimiento->occurred_at->toIso8601String(),
                 ];
             }),

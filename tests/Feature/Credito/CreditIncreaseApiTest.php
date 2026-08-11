@@ -30,10 +30,29 @@ class CreditIncreaseApiTest extends TestCase
             $mock->shouldReceive('registrar')->andReturn();
         });
 
-        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) {
+        $autorConfiguracion = User::factory()->create(['state' => 'ACTIVE']);
+        $definicion = \App\Models\ConfigurationDefinition::query()->create([
+            'key' => 'CREDIT_TOLERANCE_AMOUNT',
+            'name' => 'Tolerancia',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $autorConfiguracion->id,
+        ]);
+        $version = \App\Models\ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definicion->id,
+            'version' => 1,
+            'value' => '500.0000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba',
+            'created_by' => $autorConfiguracion->id,
+            'published_by' => $autorConfiguracion->id,
+            'published_at' => now(),
+        ]);
+        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) use ($version) {
             $mock->shouldReceive('resolver')->with('CREDIT_TOLERANCE_AMOUNT')->andReturn([
                 'value' => '500.0000',
-                'version_id' => 'v1.0.0'
+                'version_id' => $version->id,
             ]);
         });
     }
@@ -44,7 +63,7 @@ class CreditIncreaseApiTest extends TestCase
 
         $distributor = $this->usuarioConRol('distributor', $branch->id);
 
-        \App\Models\Distribuidora::factory()->create([
+        \App\Models\Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
@@ -99,7 +118,7 @@ class CreditIncreaseApiTest extends TestCase
     {
         $branch = Branch::factory()->create();
         $distributor = $this->usuarioConRol('distributor', $branch->id);
-        \App\Models\Distribuidora::factory()->create([
+        \App\Models\Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
@@ -167,7 +186,7 @@ class CreditIncreaseApiTest extends TestCase
         $branch = Branch::factory()->create();
         $distributor = $this->usuarioConRol('distributor', $branch->id);
 
-        \App\Models\Distribuidora::factory()->create([
+        \App\Models\Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,

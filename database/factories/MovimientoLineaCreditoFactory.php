@@ -14,15 +14,15 @@ class MovimientoLineaCreditoFactory extends Factory
 
     public function definition(): array
     {
-        $importe = number_format(fake()->numberBetween(10000000, 1000000000) / 10000, 4, '.', '');
+        $importe = bcdiv((string) fake()->numberBetween(10000000, 1000000000), '10000', 4);
 
         return [
             'credit_line_id' => LineaCredito::factory(),
-            'distributor_id' => \App\Models\Distribuidora::factory(),
+            'distributor_id' => fn (array $attributes) => LineaCredito::query()->findOrFail($attributes['credit_line_id'])->distributor_id,
             'sequence' => fake()->unique()->numberBetween(1, 1000),
             'type' => 'INITIAL_AUTHORIZATION',
             'amount' => $importe,
-            'total_authorized_before' => '0.0000',
+            'total_authorized_before' => $importe,
             'total_authorized_after' => $importe,
             'used_balance_before' => '0.0000',
             'used_balance_after' => '0.0000',

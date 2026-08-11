@@ -7,7 +7,6 @@ class MediaFileResource extends JsonResource {
     public function toArray(Request $request): array {
         return [
             'id' => $this->id,
-            'verification_visit_id' => $this->verification_visit_id,
             'file_type' => $this->file_type,
             'mime_type' => $this->mime_type,
             'size_bytes' => $this->size_bytes,

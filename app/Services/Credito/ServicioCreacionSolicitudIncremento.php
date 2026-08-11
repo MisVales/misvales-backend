@@ -5,14 +5,13 @@ namespace App\Services\Credito;
 use App\Enums\EstadoSolicitudIncremento;
 use App\Helpers\AuditHelper;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\OutboxEvent;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
-use App\Models\UserRoleScope;
 use Illuminate\Support\Facades\DB;
 use App\Exceptions\ExcepcionCredito;
-use App\Models\CoordinatorDistributorAssignment;
 
 class ServicioCreacionSolicitudIncremento
 {
@@ -60,17 +59,16 @@ class ServicioCreacionSolicitudIncremento
                 throw new ExcepcionCredito('CREDIT_LINE_INCONSISTENT', 'La distribuidora no tiene un coordinador activo asignado.', 400);
             }
 
-            $scopeSucursal = UserRoleScope::where('user_id', $distributorId)
-                ->where('scope_type', 'BRANCH')
-                ->where('status', 'ACTIVE')
-                ->first();
-
-            if (!$scopeSucursal) {
-                throw new ExcepcionCredito('CREDIT_LINE_INCONSISTENT', 'La distribuidora no tiene una sucursal activa asignada.', 400);
+            $distribuidora = Distribuidora::query()->findOrFail($distributorId);
+            if ($asignacionCoordinador->branch_id !== $distribuidora->branch_id) {
+                throw new ExcepcionCredito('CREDIT_LINE_INCONSISTENT', 'La asignación coordinador-distribuidora no pertenece a la sucursal vigente.', 400);
             }
 
             // 4. Calcular saldos exactos al instante
             $saldos = $this->calculador->calcular($linea->total_authorized, $linea->used_balance);
+            if (bccomp($saldos['available_balance'], bcsub($saldos['total_authorized'], $saldos['used_balance'], 4), 4) !== 0) {
+                throw new ExcepcionCredito('CREDIT_LINE_INCONSISTENT', 'El snapshot de saldo disponible es inconsistente.', 409);
+            }
 
             // 5. Generar folio
             $folio = $this->generadorFolio->generar();
@@ -80,7 +78,7 @@ class ServicioCreacionSolicitudIncremento
                 'request_number' => $folio,
                 'distributor_id' => $distributorId,
                 'credit_line_id' => $linea->id,
-                'branch_id' => $scopeSucursal->branch_id,
+                'branch_id' => $distribuidora->branch_id,
                 'coordinator_id' => $asignacionCoordinador->coordinator_id,
                 'status' => EstadoSolicitudIncremento::REQUESTED,
                 'requested_amount' => $requestedAmount,
@@ -108,7 +106,7 @@ class ServicioCreacionSolicitudIncremento
                 'actor' => $solicitante->id,
                 'authorizer' => null,
                 'role' => 'distributor',
-                'branch' => $scopeSucursal->branch_id,
+                'branch' => $distribuidora->branch_id,
                 'request_id' => $solicitud->id,
                 'entity_id' => $solicitud->id,
                 'previous_state' => null,
@@ -117,7 +115,7 @@ class ServicioCreacionSolicitudIncremento
                 'authorized_amount' => null,
                 'amounts_after' => $saldos,
                 'reason' => $requestReason,
-                'configuration_version' => 'v1.0.0',
+                'configuration_version' => null,
                 'occurred_at' => now()->toIso8601String(),
                 'result' => 'SUCCESS',
             ];
@@ -128,12 +126,11 @@ class ServicioCreacionSolicitudIncremento
                 $solicitud->id,
                 $solicitud->id,
                 $solicitante,
-                $scopeSucursal->branch_id,
+                $distribuidora->branch_id,
                 ['previous_state' => null, 'amounts_before' => $saldos],
                 ['new_state' => EstadoSolicitudIncremento::REQUESTED, 'authorized_amount' => null, 'amounts_after' => $saldos],
                 $requestReason,
-                'SUCCESS',
-                'v1.0.0'
+                'SUCCESS'
             );
 
             OutboxEvent::create([

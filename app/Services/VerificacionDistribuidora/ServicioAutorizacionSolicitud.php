@@ -18,8 +18,8 @@ class ServicioAutorizacionSolicitud {
         return ApplicationAuthorization::with('manager')->where('application_id', $applicationId)->first();
     }
 
-    public function autorizar(string $applicationId, string $managerId, string $reason, float $initialCreditLine, int $lockVersion): ApplicationAuthorization {
-        if (empty($initialCreditLine) || $initialCreditLine <= 0) throw new BusinessException('APPLICATION_INITIAL_CREDIT_LINE_INVALID', 'Línea inválida.', 422);
+    public function autorizar(string $applicationId, string $managerId, string $reason, string $initialCreditLine, int $lockVersion): ApplicationAuthorization {
+        if (bccomp($initialCreditLine, '0.0000', 4) <= 0) throw new BusinessException('APPLICATION_INITIAL_CREDIT_LINE_INVALID', 'Línea inválida.', 422);
         return $this->decidir($applicationId, $managerId, ApplicationAuthorizationDecision::APPROVED, $reason, $initialCreditLine, $lockVersion);
     }
 
@@ -27,7 +27,7 @@ class ServicioAutorizacionSolicitud {
         return $this->decidir($applicationId, $managerId, ApplicationAuthorizationDecision::REJECTED, $reason, null, $lockVersion);
     }
 
-    private function decidir(string $applicationId, string $managerId, ApplicationAuthorizationDecision $decision, string $reason, ?float $initialCreditLine, int $lockVersion): ApplicationAuthorization {
+    private function decidir(string $applicationId, string $managerId, ApplicationAuthorizationDecision $decision, string $reason, ?string $initialCreditLine, int $lockVersion): ApplicationAuthorization {
         return DB::transaction(function () use ($applicationId, $managerId, $decision, $reason, $initialCreditLine, $lockVersion) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
             if (!$application) throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
@@ -43,7 +43,7 @@ class ServicioAutorizacionSolicitud {
             }
             if ($application->status !== ApplicationStatus::MANAGER_AUTHORIZATION) throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_READY_FOR_AUTHORIZATION', 'Estado inválido.', 409);
 
-            $evaluation = ApplicationEvaluation::where('application_id', $application->id)->first();
+            $evaluation = ApplicationEvaluation::where('application_id', $application->id)->latest('evaluated_at')->first();
             if (!$evaluation || $evaluation->result !== ApplicationEvaluationResult::COMPLIES) throw new BusinessException('APPLICATION_AUTHORIZATION_NOT_ALLOWED', 'Evaluación no cumple.', 403);
 
             if (ApplicationAuthorization::where('application_id', $application->id)->exists()) {

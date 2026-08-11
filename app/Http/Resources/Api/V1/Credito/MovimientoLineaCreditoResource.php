@@ -20,7 +20,7 @@ class MovimientoLineaCreditoResource extends JsonResource
             'id' => $this->id,
             'sequence' => $this->sequence,
             'type' => $this->type,
-            'amount' => number_format((float) $this->amount, 4, '.', ''),
+            'amount' => (string) $this->amount,
             'total_authorized_before' => $saldoAntes['total_authorized'],
             'total_authorized_after' => $saldoDespues['total_authorized'],
             'used_balance_before' => $saldoAntes['used_balance'],

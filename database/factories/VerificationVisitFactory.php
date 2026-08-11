@@ -9,6 +9,20 @@ use App\Enums\VerificationVisitStatus;
 
 class VerificationVisitFactory extends Factory {
     protected $model = VerificationVisit::class;
+
+    public function configure(): static
+    {
+        return $this->afterMaking(function (VerificationVisit $visit): void {
+            $status = $visit->status instanceof VerificationVisitStatus
+                ? $visit->status->value
+                : $visit->status;
+
+            if ($status === VerificationVisitStatus::COMPLETED->value) {
+                $visit->completed_at ??= now();
+            }
+        });
+    }
+
     public function definition() {
         return [
             'id' => Str::uuid(),

@@ -10,6 +10,7 @@ use App\Models\UserRoleScope;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\RoleAssignmentPolicyService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Str;
 
@@ -47,63 +48,66 @@ class UserAssignmentController extends Controller
 
         $user = User::findOrFail($userId);
 
-        $request->validate([
-            'role_id' => 'required|uuid|exists:roles,id',
-            'branch_id' => 'nullable|uuid', // Nullable significa alcance global
-        ]);
+        return DB::transaction(function () use ($request, $user, $policyService) {
+            $request->validate([
+                'role_id' => 'required|uuid|exists:roles,id',
+                'branch_id' => 'nullable|uuid', // Nullable significa alcance global
+            ]);
 
-        $role = Role::findOrFail($request->role_id);
+            $role = Role::findOrFail($request->role_id);
 
-        // Validación Avanzada (Punto 36)
-        $validationResult = $policyService->validateAssignment(
-            $request->user(),
-            $user,
-            $role,
-            $request->branch_id
-        );
+            // Validación Avanzada (Punto 36)
+            $validationResult = $policyService->validateAssignment(
+                $request->user(),
+                $user,
+                $role,
+                $request->branch_id
+            );
 
-        if ($validationResult !== true) {
-            return response()->json(['message' => $validationResult], 403);
-        }
+            if ($validationResult !== true) {
+                // If it's a string message rather than an exception
+                abort(403, $validationResult);
+            }
 
-        // Evitar asignaciones duplicadas (mismo rol en la misma sucursal)
-        $exists = UserRoleScope::where('user_id', $user->id)
-            ->where('role_id', $request->role_id)
-            ->where('branch_id', $request->branch_id)
-            ->where('status', 'ACTIVE')
-            ->whereNull('revoked_at')
-            ->exists();
+            // Evitar asignaciones duplicadas (mismo rol en la misma sucursal para el mismo usuario)
+            $exists = UserRoleScope::where('user_id', $user->id)
+                ->where('role_id', $request->role_id)
+                ->where('branch_id', $request->branch_id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->exists();
 
-        if ($exists) {
-            return response()->json(['message' => 'El usuario ya tiene este rol asignado en este alcance.'], 400);
-        }
+            if ($exists) {
+                abort(400, 'El usuario ya tiene este rol asignado en este alcance.');
+            }
 
-        $assignment = UserRoleScope::create([
-            'id' => Str::uuid(),
-            'user_id' => $user->id,
-            'role_id' => $request->role_id,
-            'branch_id' => $request->branch_id,
-            'assigned_by_user_id' => $request->user()->id,
-            'assigned_at' => now(),
-            'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
-            'status' => 'ACTIVE',
-        ]);
+            $assignment = UserRoleScope::create([
+                'id' => Str::uuid(),
+                'user_id' => $user->id,
+                'role_id' => $request->role_id,
+                'branch_id' => $request->branch_id,
+                'assigned_by_user_id' => $request->user()->id,
+                'assigned_at' => now(),
+                'scope_type' => $request->branch_id ? 'BRANCH' : 'GLOBAL',
+                'status' => 'ACTIVE',
+            ]);
 
-        app(SecurityAuditService::class)->log($request, [
-            'event_type' => 'ROLE_ASSIGNED',
-            'severity' => 'INFO',
-            'outcome' => 'SUCCESS',
-            'entity_type' => 'UserRoleScope',
-            'entity_id' => $assignment->id,
-            'user_id' => $user->id,
-            'branch_id' => $request->branch_id,
-            'metadata' => ['role_id' => $request->role_id],
-        ]);
+            app(SecurityAuditService::class)->log($request, [
+                'event_type' => 'ROLE_ASSIGNED',
+                'severity' => 'INFO',
+                'outcome' => 'SUCCESS',
+                'entity_type' => 'UserRoleScope',
+                'entity_id' => $assignment->id,
+                'user_id' => $user->id,
+                'branch_id' => $request->branch_id,
+                'metadata' => ['role_id' => $request->role_id],
+            ]);
 
-        return response()->json([
-            'message' => 'Asignación creada exitosamente.',
-            'assignment' => $assignment->load('role'),
-        ], 201);
+            return response()->json([
+                'message' => 'Asignación creada exitosamente.',
+                'assignment' => $assignment->load('role'),
+            ], 201);
+        });
     }
 
     /**

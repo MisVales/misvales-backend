@@ -25,6 +25,7 @@ use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\VerificationVisit;
+use App\Services\ConfiguracionServicio;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -85,6 +86,7 @@ class ServicioActivacionDistribuidora
                 $evaluacion = ApplicationEvaluation::query()
                     ->where('application_id', $solicitud->id)
                     ->lockForUpdate()
+                    ->latest('evaluated_at')
                     ->first();
                 $this->validador->validarVerificacion($visita, $evaluacion);
 
@@ -182,7 +184,7 @@ class ServicioActivacionDistribuidora
                     'sequence' => 1,
                     'type' => TipoMovimientoLineaCredito::AUTORIZACION_INICIAL,
                     'amount' => $importe,
-                    'total_authorized_before' => '0.0000',
+                    'total_authorized_before' => $importe,
                     'total_authorized_after' => $importe,
                     'used_balance_before' => '0.0000',
                     'used_balance_after' => '0.0000',
@@ -190,10 +192,11 @@ class ServicioActivacionDistribuidora
                     'source_id' => $autorizacion->id,
                     'performed_by' => $actor->id,
                     'authorized_by' => $actor->id,
+                    'idempotency_key' => 'initial-authorization:'.$autorizacion->id,
                     'occurred_at' => now(),
                 ]);
 
-                $configuracionTolerancia = app(\App\Services\ConfiguracionServicio::class)->resolver('CREDIT_TOLERANCE_AMOUNT');
+                $configuracionTolerancia = app(ConfiguracionServicio::class)->resolver('CREDIT_TOLERANCE_AMOUNT');
 
                 RestriccionUsoCredito::create([
                     'credit_line_id' => $linea->id,
@@ -243,6 +246,7 @@ class ServicioActivacionDistribuidora
             });
         } catch (QueryException $excepcion) {
             $detalle = mb_strtolower((string) ($excepcion->errorInfo[2] ?? ''));
+            report($excepcion);
             $codigo = match (true) {
                 str_contains($detalle, 'distributors_distributor_number_unique') => 'DISTRIBUTOR_NUMBER_CONFLICT',
                 str_contains($detalle, 'distributors_application_id_unique') => 'DISTRIBUTOR_ALREADY_EXISTS',
@@ -273,12 +277,12 @@ class ServicioActivacionDistribuidora
 
     private function datosCuenta(DistributorApplication $solicitud): array
     {
-        $datos = $solicitud->applicant_data ?? [];
-        $email = mb_strtolower(trim((string) (data_get($datos, 'personal_info.email') ?? data_get($datos, 'email'))));
+        $datos = $solicitud->datosPersonales()->first();
+        $email = mb_strtolower(trim((string) $datos?->email));
         $nombre = trim(implode(' ', array_filter([
-            data_get($datos, 'personal_info.first_name') ?? data_get($datos, 'first_name'),
-            data_get($datos, 'personal_info.last_name') ?? data_get($datos, 'last_name'),
-            data_get($datos, 'personal_info.second_last_name') ?? data_get($datos, 'second_last_name'),
+            $datos?->first_name,
+            $datos?->first_last_name,
+            $datos?->second_last_name,
         ])));
 
         if ($email === '' || filter_var($email, FILTER_VALIDATE_EMAIL) === false || $nombre === '') {

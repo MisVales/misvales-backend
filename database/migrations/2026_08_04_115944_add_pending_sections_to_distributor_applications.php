@@ -5,14 +5,10 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        Schema::table('distributor_applications_m5', function (Blueprint $table) {
-            $table->jsonb('pending_sections')->nullable()->after('applicant_data');
-        });
+        // La columna ya forma parte de la creación canónica de distributor_applications.
     }
 
     public function down(): void {
-        Schema::table('distributor_applications_m5', function (Blueprint $table) {
-            $table->dropColumn('pending_sections');
-        });
+        // Se revierte junto con la tabla canónica.
     }
 };

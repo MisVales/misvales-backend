@@ -83,4 +83,31 @@ class SolicitudDistribuidora extends Model
     {
         return $this->hasMany(CreditoComercialSolicitud::class, 'application_id');
     }
+
+    public function verificationVisits(): HasMany
+    {
+        return $this->hasMany(VerificationVisit::class, 'application_id');
+    }
+
+    public function corrections(): HasMany
+    {
+        return $this->hasMany(ApplicationCorrection::class, 'application_id');
+    }
+
+    public function evaluations(): HasMany
+    {
+        return $this->hasMany(ApplicationEvaluation::class, 'application_id');
+    }
+
+    public function latestEvaluation(): HasOne
+    {
+        return $this->hasOne(ApplicationEvaluation::class, 'application_id')
+            ->orderByDesc('evaluated_at')
+            ->orderByDesc('created_at');
+    }
+
+    public function authorization(): HasOne
+    {
+        return $this->hasOne(ApplicationAuthorization::class, 'application_id');
+    }
 }

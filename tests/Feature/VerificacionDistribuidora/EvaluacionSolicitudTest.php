@@ -15,11 +15,11 @@ class EvaluacionSolicitudTest extends Modulo5TestCase {
         $visit = VerificationVisit::factory()->create(['application_id' => $app->id, 'result' => VerificationVisitResult::FAVORABLE, 'status' => 'COMPLETED']);
 
         $response = $this->actingAsMfaUser($coordinator, ['coordinator'])
-            ->postJson("/api/v1/distributor-applications/{$app->id}/evaluations", [
+            ->postJson("/api/v1/distributor-applications/{$app->id}/evaluate", [
                 'visit_id' => $visit->id, 'result' => 'COMPLIES', 'reason' => 'Validado', 'lock_version' => 1
             ]);
 
         $response->assertStatus(200); // Because we changed it to implicitly return Response
-        $this->assertDatabaseHas('distributor_applications_m5', ['id' => $app->id, 'status' => ApplicationStatus::MANAGER_AUTHORIZATION->value]);
+        $this->assertDatabaseHas('distributor_applications', ['id' => $app->id, 'status' => ApplicationStatus::MANAGER_AUTHORIZATION->value]);
     }
 }

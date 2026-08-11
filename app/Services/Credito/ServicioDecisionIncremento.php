@@ -52,15 +52,20 @@ class ServicioDecisionIncremento
                 throw new ExcepcionCredito('CREDIT_INCREASE_REQUEST_STATUS_INVALID', 'Solo se pueden decidir solicitudes en estado PREAUTHORIZED.', 400);
             }
 
+            if ($gerente->id === $solicitud->requested_by || $gerente->id === $solicitud->coordinator_decided_by) {
+                throw new ExcepcionCredito('SEPARATION_OF_DUTIES_VIOLATION', 'No puedes autorizar una solicitud en la que participaste previamente.', 403);
+            }
+
             $nuevoEstado = null;
             $montoFinal = null;
+            $versionConfiguracion = null;
 
             if ($decision === 'APPROVE_REQUESTED') {
                 $nuevoEstado = EstadoSolicitudIncremento::AUTHORIZED_TOTAL;
                 $montoFinal = $solicitud->requested_amount;
             } elseif ($decision === 'APPROVE_LOWER') {
                 $nuevoEstado = EstadoSolicitudIncremento::AUTHORIZED_PARTIAL;
-                if (bccomp($authorizedAmount, $solicitud->requested_amount, 4) >= 0) {
+                if ($authorizedAmount === null || bccomp($authorizedAmount, '0.0000', 4) <= 0 || bccomp($authorizedAmount, $solicitud->requested_amount, 4) >= 0) {
                     throw new ExcepcionCredito('CREDIT_INCREASE_AUTHORIZED_AMOUNT_INVALID', 'El importe autorizado debe ser menor al solicitado en una aprobación parcial.', 400);
                 }
                 $montoFinal = $authorizedAmount;
@@ -72,6 +77,7 @@ class ServicioDecisionIncremento
             }
 
             $solicitud->authorized_amount = $montoFinal;
+            $solicitud->manager_decision = $decision;
 
             // Si es aprobatorio, aplicamos los cambios a la línea
             if ($nuevoEstado === EstadoSolicitudIncremento::AUTHORIZED_TOTAL || $nuevoEstado === EstadoSolicitudIncremento::AUTHORIZED_PARTIAL) {
@@ -101,7 +107,8 @@ class ServicioDecisionIncremento
 
                 // Actualizar línea
                 $linea->total_authorized = $newTotalAuthorized;
-                $linea->increment('lock_version');
+                $linea->lock_version++;
+                $linea->save();
 
                 // Crear el movimiento
                 $secuencia = MovimientoLineaCredito::where('credit_line_id', $linea->id)->max('sequence') + 1;
@@ -121,11 +128,13 @@ class ServicioDecisionIncremento
                     'reason' => 'Incremento de crédito autorizado por gerente.',
                     'performed_by' => $solicitud->requested_by,
                     'authorized_by' => $gerente->id,
+                    'idempotency_key' => 'credit-increase:'.$solicitud->id,
                     'occurred_at' => now(),
                 ]);
 
                 // Resolver tolerancia y crear restricción
                 $configuracionTolerancia = $this->configuracionServicio->resolver('CREDIT_TOLERANCE_AMOUNT');
+                $versionConfiguracion = (string) $configuracionTolerancia['version_id'];
                 
                 $restriccion = RestriccionUsoCredito::create([
                     'credit_line_id' => $linea->id,
@@ -158,7 +167,7 @@ class ServicioDecisionIncremento
                     'authorized_amount' => null,
                     'amounts_after' => null,
                     'reason' => 'Activación de restricción 50% post incremento',
-                    'configuration_version' => $configuracionTolerancia['version_id'] ?? 'v1.0.0',
+                    'configuration_version' => $versionConfiguracion,
                     'occurred_at' => now()->toIso8601String(),
                     'result' => 'SUCCESS',
                 ];
@@ -174,7 +183,7 @@ class ServicioDecisionIncremento
                     ['status' => 'ACTIVE', 'base_total' => $newTotalAuthorized, 'tolerance_amount' => $configuracionTolerancia['value']],
                     'Activación de restricción 50% post incremento',
                     'SUCCESS',
-                    (string) ($configuracionTolerancia['version_id'] ?? 'v1.0.0')
+                    $versionConfiguracion
                 );
 
                 OutboxEvent::create([
@@ -229,7 +238,7 @@ class ServicioDecisionIncremento
                     'available_balance' => bcsub((string) $newTotalAuthorized, (string) $usedBalanceAfter, 4)
                 ] : null,
                 'reason' => $motivo,
-                'configuration_version' => 'v1.0.0',
+                'configuration_version' => $versionConfiguracion,
                 'occurred_at' => now()->toIso8601String(),
                 'result' => 'SUCCESS',
             ];
@@ -245,7 +254,7 @@ class ServicioDecisionIncremento
                 ['new_state' => $nuevoEstado, 'authorized_amount' => $montoFinal, 'amounts_after' => $payload['amounts_after']],
                 $motivo,
                 'SUCCESS',
-                'v1.0.0'
+                $versionConfiguracion
             );
 
             OutboxEvent::create([

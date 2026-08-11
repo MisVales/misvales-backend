@@ -25,6 +25,11 @@ use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
+use App\Http\Controllers\VerificacionDistribuidora\EvidenciaVerificacionController;
+use App\Http\Controllers\VerificacionDistribuidora\VerificacionDistribuidoraController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchAssignmentController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchPersonnelController;
@@ -212,6 +217,28 @@ Route::prefix('v1')->group(function () {
         Route::patch('redemption-periods/{id}', [PeriodoCanjeController::class, 'update']);
         Route::post('redemption-periods/{id}/publish', [PeriodoCanjeController::class, 'publish']);
         Route::post('redemption-periods/{id}/cancel', [PeriodoCanjeController::class, 'cancel']);
+
+        // Módulo 5 - verificación, corrección, evaluación y dictamen
+        Route::post('distributor-applications/{application}/return-to-draft', [VerificacionDistribuidoraController::class, 'devolverACaptura']);
+        Route::post('distributor-applications/{application}/assign-verifier', [VerificacionDistribuidoraController::class, 'asignarVerificador']);
+        Route::get('distributor-applications/{application}/available-verifiers', [VerificacionDistribuidoraController::class, 'listarVerificadoresDisponibles']);
+        Route::get('verification-visits/assigned', [VerificacionDistribuidoraController::class, 'consultarAsignadas']);
+        Route::get('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'consultarVisita']);
+        Route::post('verification-visits/{visit}/start', [VerificacionDistribuidoraController::class, 'iniciarVisita']);
+        Route::put('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'actualizarVisita']);
+        Route::put('verification-visits/{visit}/differences', [VerificacionDistribuidoraController::class, 'registrarDiferencias']);
+        Route::post('verification-visits/{visit}/finish', [VerificacionDistribuidoraController::class, 'finalizarVisita']);
+        Route::get('verification-visits/{visit}/evidences', [EvidenciaVerificacionController::class, 'consultarEvidencia']);
+        Route::post('verification-visits/{visit}/evidences', [EvidenciaVerificacionController::class, 'adjuntarEvidencia']);
+        Route::get('verification-evidences/{media}/download', [EvidenciaVerificacionController::class, 'descargarEvidencia']);
+        Route::delete('verification-evidences/{media}', [EvidenciaVerificacionController::class, 'eliminarEvidenciaAbierta']);
+        Route::get('distributor-applications/{application}/corrections', [CorreccionSolicitudController::class, 'listarDiferencias']);
+        Route::post('distributor-applications/{application}/corrections', [CorreccionSolicitudController::class, 'aplicarCorreccion']);
+        Route::post('distributor-applications/{application}/corrections/finish', [CorreccionSolicitudController::class, 'finalizarCorrecciones']);
+        Route::get('distributor-applications/{application}/evaluations', [EvaluacionSolicitudController::class, 'consultarEvaluacion']);
+        Route::post('distributor-applications/{application}/evaluate', [EvaluacionSolicitudController::class, 'evaluar']);
+        Route::get('distributor-applications/{application}/authorization', [AutorizacionSolicitudController::class, 'consultarAutorizacion']);
+        Route::post('distributor-applications/{application}/authorize', [AutorizacionSolicitudController::class, 'autorizar']);
 
         // Módulo 6 - Activación y administración de distribuidoras
         Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])

@@ -18,6 +18,11 @@ final class SolicitudDistribuidoraDetalleResource extends SolicitudDistribuidora
             'assets_liabilities' => PatrimonioSolicitudResource::collection($this->whenLoaded('patrimonio')),
             'employments' => EmpleoSolicitudResource::collection($this->whenLoaded('empleos')),
             'commercial_credits' => CreditoComercialSolicitudResource::collection($this->whenLoaded('creditosComerciales')),
+            'verification_visits' => \App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource::collection($this->whenLoaded('verificationVisits')),
+            'corrections' => \App\Http\Resources\VerificacionDistribuidora\ApplicationCorrectionResource::collection($this->whenLoaded('corrections')),
+            'evaluations' => \App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource::collection($this->whenLoaded('evaluations')),
+            'latest_evaluation' => new \App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource($this->whenLoaded('latestEvaluation')),
+            'authorization' => new \App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResource($this->whenLoaded('authorization')),
         ]);
     }
 }

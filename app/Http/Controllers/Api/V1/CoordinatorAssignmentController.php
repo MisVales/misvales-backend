@@ -2,10 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
-use App\Enums\EstadoSolicitudDistribuidora;
+use App\Enums\EstadoDistribuidora;
 use App\Http\Controllers\Controller;
 use App\Models\CoordinatorDistributorAssignment;
-use App\Models\SolicitudDistribuidora;
+use App\Models\Distribuidora;
 use App\Models\UserRoleScope;
 use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\JsonResponse;
@@ -32,23 +32,23 @@ final class CoordinatorAssignmentController extends Controller
             ], 403);
         }
 
-        $distributors = SolicitudDistribuidora::query()
-            ->with(['datosPersonales', 'coordinador:id,name'])
+        $distributors = Distribuidora::query()
+            ->with(['solicitud.datosPersonales', 'coordinadorVigente.coordinator:id,name'])
             ->where('branch_id', $branchId)
-            ->where('status', EstadoSolicitudDistribuidora::ACTIVA->value)
-            ->orderBy('application_number')
+            ->where('status', EstadoDistribuidora::ACTIVA->value)
+            ->orderBy('distributor_number')
             ->get()
-            ->map(function (SolicitudDistribuidora $distributor): array {
-                $personalData = $distributor->datosPersonales;
+            ->map(function (Distribuidora $distributor): array {
+                $personalData = $distributor->solicitud?->datosPersonales;
 
                 return [
                     'id' => $distributor->id,
-                    'application_number' => $distributor->application_number,
+                    'distributor_number' => $distributor->distributor_number,
                     'status' => $distributor->status->value,
                     'branch' => ['id' => $distributor->branch_id],
                     'coordinator' => [
-                        'id' => $distributor->coordinator_id,
-                        'name' => $distributor->coordinador?->name,
+                        'id' => $distributor->coordinadorVigente?->coordinator_id,
+                        'name' => $distributor->coordinadorVigente?->coordinator?->name,
                     ],
                     'applicant' => [
                         'full_name' => $personalData === null ? null : trim(implode(' ', array_filter([
@@ -90,8 +90,8 @@ final class CoordinatorAssignmentController extends Controller
             ->orderByDesc('valid_from')
             ->get();
 
-        $distributors = SolicitudDistribuidora::query()
-            ->with('datosPersonales')
+        $distributors = Distribuidora::query()
+            ->with('solicitud.datosPersonales')
             ->whereIn('id', $assignments->pluck('distributor_id'))
             ->get()
             ->keyBy('id');
@@ -109,7 +109,7 @@ final class CoordinatorAssignmentController extends Controller
     {
         $validated = $request->validate([
             'coordinator_id' => ['required', 'uuid', 'exists:users,id'],
-            'distributor_id' => ['required', 'uuid', 'exists:distributor_applications,id'],
+            'distributor_id' => ['required', 'uuid', 'exists:distributors,id'],
             'branch_id' => ['required', 'uuid', 'exists:branches,id'],
             'assignment_reason' => ['nullable', 'string', 'max:500'],
         ]);
@@ -132,8 +132,8 @@ final class CoordinatorAssignmentController extends Controller
         }
 
         return DB::transaction(function () use ($request, $validated): JsonResponse {
-            $distributor = SolicitudDistribuidora::query()
-                ->with('datosPersonales')
+            $distributor = Distribuidora::query()
+                ->with('solicitud.datosPersonales')
                 ->lockForUpdate()
                 ->findOrFail($validated['distributor_id']);
 
@@ -193,11 +193,6 @@ final class CoordinatorAssignmentController extends Controller
                 'assignment_reason' => $validated['assignment_reason'] ?? null,
             ]);
 
-            $distributor->forceFill([
-                'coordinator_id' => $validated['coordinator_id'],
-                'lock_version' => $distributor->lock_version + 1,
-            ])->save();
-
             app(SecurityAuditService::class)->log($request, [
                 'event_type' => $activeAssignment === null
                     ? 'COORDINATOR_ASSIGNMENT_CREATED'
@@ -243,11 +238,11 @@ final class CoordinatorAssignmentController extends Controller
                 ], 409);
             }
 
-            $distributor = SolicitudDistribuidora::query()
+            $distributor = Distribuidora::query()
                 ->lockForUpdate()
                 ->find($lockedAssignment->distributor_id);
 
-            if ($distributor?->status === EstadoSolicitudDistribuidora::ACTIVA) {
+            if ($distributor?->status === EstadoDistribuidora::ACTIVA) {
                 return response()->json([
                     'code' => 'ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR',
                     'message' => 'Una distribuidora activa no puede quedar sin coordinador; debe reasignarse.',
@@ -290,9 +285,9 @@ final class CoordinatorAssignmentController extends Controller
     /** @return array<string, mixed> */
     private function serialize(
         CoordinatorDistributorAssignment $assignment,
-        ?SolicitudDistribuidora $distributor,
+        ?Distribuidora $distributor,
     ): array {
-        $personalData = $distributor?->datosPersonales;
+        $personalData = $distributor?->solicitud?->datosPersonales;
         $fullName = $personalData === null ? null : trim(implode(' ', array_filter([
             $personalData->first_name,
             $personalData->first_last_name,
@@ -303,7 +298,7 @@ final class CoordinatorAssignmentController extends Controller
             ...$assignment->toArray(),
             'distributor' => $distributor === null ? null : [
                 'id' => $distributor->id,
-                'application_number' => $distributor->application_number,
+                'distributor_number' => $distributor->distributor_number,
                 'full_name' => $fullName,
                 'status' => $distributor->status->value,
                 'branch_id' => $distributor->branch_id,
