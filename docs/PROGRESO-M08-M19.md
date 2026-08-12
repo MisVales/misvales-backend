@@ -150,10 +150,23 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Backend M08-M16: migración limpia con seed APROBADA; 30 pruebas y 181 aserciones APROBADAS.
 - Frontend M16: spec HTTP aislado APROBADO y build Angular APROBADO. La ejecución directa de varios specs con Vitest no es válida en este proyecto porque cada spec histórico inicializa el entorno Angular; el spec M16 se validó mediante `ng test --include`.
 
+### 2026-08-12 — implementación y validación M17
+- Transferencia: distribuidora origen inicia, receptora preacepta/rechaza, coordinador origen autoriza/rechaza y receptora acepta definitivamente; no existen atajos entre estados.
+- Saldo: el cero se revalida al iniciar y completar exclusivamente para transferencia; no se agregó como restricción a la generación ordinaria de vales.
+- Asignaciones: al completar se cierra la anterior y se crea la nueva bajo bloqueo; el siguiente vale es digital incluso si el cliente transferido aún no tenía vales.
+- Reasignación administrativa: gerencia de sucursal dentro de su alcance y gerencia general global registran motivo, actor, fecha, origen, destino y snapshots.
+- Cambio de sucursal: se rechaza mientras existan clientes vigentes; después cambia sucursal y coordinador destino sin modificar línea, categoría, relaciones, pagos, puntos ni sucursales históricas.
+- Coordinadores: cambio individual conserva periodos; salida exige un destino válido para cada distribuidora y se ejecuta atómicamente, evitando distribuidoras activas sin coordinador.
+- Persistencia/contrato: solicitudes de transferencia y eventos organizacionales; diez operaciones M17 documentadas en `docs/openapi.yml`; eventos de salida en outbox para M18.
+- Backend enfocado M17+generación de vales: 16 pruebas y 95 aserciones APROBADAS; migración limpia con seed APROBADA.
+- Regresión acumulada M08-M17: 36 pruebas y 221 aserciones APROBADAS; rutas API y `git diff --check` aprobados.
+- Frontend: vista responsiva por permisos para distribuidora, coordinador, gerencias y administrador de solo lectura; spec HTTP y build Angular APROBADOS.
+- Sesión técnica: `migrate:fresh` eliminó la cuenta local no sembrada `test@gmail.com`; no se recreó ni se imprimió su credencial automáticamente. La prueba humana queda pendiente de restaurar esa cuenta local de forma segura, mientras las decisiones de actores se validaron con sesiones Sanctum reales en pruebas HTTP.
+
 ## Checkpoint actual
-Módulo: M16
-Actividad: cierre técnico M16 y preparación de commits enfocados.
-Último archivo modificado: docs/openapi.yml y feature Angular `riesgo`.
-Último comando ejecutado: `ng test --watch=false --include=src/app/features/riesgo/riesgo-api.service.spec.ts`.
-Resultado: backend 30 pruebas/181 aserciones, migración limpia y build Angular aprobados; spec M16 aprobado.
-Siguiente paso exacto: confirmar diff enfocado, crear commits M16 en ambos repositorios y comenzar auditoría M17.
+Módulo: M17
+Actividad: validación acumulada, prueba humana y commits enfocados.
+Último archivo modificado: contrato OpenAPI, progreso y feature Angular `transferencias`.
+Último comando ejecutado: pruebas M17, spec Angular y build.
+Resultado: vertical y regresión M08-M17 aprobadas; cuenta técnica local ausente después de migración limpia.
+Siguiente paso exacto: crear commits M17 enfocados, intentar restaurar la sesión técnica sin exponer credenciales y comenzar M18.

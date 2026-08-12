@@ -20,6 +20,7 @@ use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RestriccionUsoCredito;
 use App\Models\Role;
+use App\Models\SolicitudTransferenciaCliente;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
@@ -93,6 +94,17 @@ final class GeneracionValeApiTest extends TestCase
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $nuevaDistribuidora->id, 'category_version_id' => $versionCategoria, 'starts_at' => now()->subMinute(), 'assigned_by' => $nuevoActor->id, 'reason' => 'Transferencia']);
         AsignacionClienteDistribuidora::query()->create(['client_id' => $this->cliente->id, 'distributor_id' => $nuevaDistribuidora->id, 'branch_id' => $branch->id, 'starts_at' => now(), 'assigned_by' => $nuevoActor->id, 'reason' => 'Transferencia']);
         Sanctum::actingAs($nuevoActor);
+        $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
+    }
+
+    public function test_cliente_transferido_sin_vales_previos_inicia_con_vale_digital(): void
+    {
+        $actual = AsignacionClienteDistribuidora::query()->where('client_id', $this->cliente->id)->whereNull('ends_at')->firstOrFail();
+        $origenUser = $this->usuarioConRol('distributor', $actual->branch_id);
+        $origen = Distribuidora::factory()->active()->create(['user_id' => $origenUser->id, 'branch_id' => $actual->branch_id]);
+        $historica = AsignacionClienteDistribuidora::query()->create(['client_id' => $this->cliente->id, 'distributor_id' => $origen->id, 'branch_id' => $actual->branch_id, 'starts_at' => now()->subDays(2), 'ends_at' => now()->subDay(), 'assigned_by' => $origenUser->id, 'reason' => 'Transferencia']);
+        SolicitudTransferenciaCliente::query()->create(['client_id' => $this->cliente->id, 'origin_assignment_id' => $historica->id, 'origin_distributor_id' => $origen->id, 'destination_distributor_id' => $this->distribuidora->id, 'origin_branch_id' => $actual->branch_id, 'destination_branch_id' => $actual->branch_id, 'status' => 'COMPLETED', 'initiated_by' => $origenUser->id, 'preaccepted_by' => $this->actor->id, 'preaccepted_at' => now()->subDay(), 'origin_decided_by' => $origenUser->id, 'origin_decision_reason' => 'Autorizada', 'origin_decided_at' => now()->subDay(), 'completed_by' => $this->actor->id, 'completed_at' => now()->subDay(), 'new_assignment_id' => $actual->id]);
+
         $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
     }
 

@@ -847,3 +847,73 @@ paths:
       tags: [Distributor Risk]
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: Decisión gerencial e historial preservado }, '409': { description: Solicitud ya decidida } }
+
+  /client-transfers:
+    get:
+      summary: Consultar transferencias por propiedad, asignación o alcance
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Solicitudes con origen, destino, estado y responsables } }
+
+  /clients/{client}/transfers:
+    post:
+      summary: Iniciar transferencia de cliente propio con saldo cero
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Transferencia solicitada }, '409': { description: Saldo distinto de cero o transferencia incompatible } }
+
+  /client-transfers/{transfer}/preaccept:
+    post:
+      summary: Preaceptar o rechazar como distribuidora receptora
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Respuesta de receptora registrada }, '409': { description: Estado inválido } }
+
+  /client-transfers/{transfer}/origin-decision:
+    post:
+      summary: Autorizar o rechazar salida como coordinador origen
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Decisión de salida registrada }, '403': { description: No es coordinador origen asignado } }
+
+  /client-transfers/{transfer}/complete:
+    post:
+      summary: Aceptar definitivamente y cambiar asignación
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Transferencia completada con historial }, '409': { description: Contexto o saldo cambió } }
+
+  /clients/{client}/administrative-reassignment:
+    post:
+      summary: Reasignar cliente administrativamente por alcance gerencial
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Asignación anterior cerrada y nueva creada }, '403': { description: Fuera de alcance } }
+
+  /distributors/{distributor}/branch-change:
+    post:
+      summary: Cambiar sucursal después de reasignar clientes
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Sucursal y coordinador destino aplicados }, '409': { description: Existen clientes pendientes } }
+
+  /distributors/{distributor}/coordinator-change:
+    post:
+      summary: Cambiar coordinador conservando asignación histórica
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Coordinador reasignado sin periodo sin responsable } }
+
+  /coordinators/{coordinator}/exit-reassignment:
+    post:
+      summary: Reasignar todas las distribuidoras antes de salida de coordinador
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Todas las asignaciones reemplazadas atómicamente }, '422': { description: Destinos incompletos o inválidos } }
+
+  /organizational-change-history:
+    get:
+      summary: Consultar historial inmutable de cambios organizacionales
+      tags: [Organizational Transfers]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Origen, destino, usuario, fecha, motivo y snapshots } }
