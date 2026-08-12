@@ -917,3 +917,59 @@ paths:
       tags: [Organizational Transfers]
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: Origen, destino, usuario, fecha, motivo y snapshots } }
+
+  /notifications:
+    get:
+      summary: Consultar bandeja propia paginada y filtrable
+      tags: [Operations Center]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Notificaciones con estado, entidad y deep link } }
+
+  /notifications/unread-count:
+    get:
+      summary: Consultar contador propio de notificaciones no leídas
+      tags: [Operations Center]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Contador no leído } }
+
+  /notifications/{notification}/read:
+    patch:
+      summary: Marcar una notificación propia como leída
+      tags: [Operations Center]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Notificación marcada }, '404': { description: No pertenece al actor } }
+
+  /notifications/read-all:
+    post:
+      summary: Marcar todas las notificaciones propias como leídas
+      tags: [Operations Center]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Bandeja propia marcada } }
+
+  /reports:
+    get:
+      summary: Listar los veintidós reportes funcionales disponibles
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Catálogo autorizado de reportes } }
+
+  /reports/{report}:
+    get:
+      summary: Ejecutar reporte real paginado con filtros y alcance
+      tags: [Reports]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Proyección paginada }, '403': { description: Fuera de alcance }, '404': { description: Reporte inexistente } }
+
+  /audit-logs:
+    get:
+      summary: Consultar auditoría inmutable sanitizada por alcance
+      tags: [Audit]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Eventos aditivos con correlación y valores sanitizados } }
+
+  /operational-logs:
+    get:
+      summary: Consultar logs estructurados por canal y correlación
+      tags: [Operational Logs]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Metadatos HTTP sin cuerpos ni secretos } }

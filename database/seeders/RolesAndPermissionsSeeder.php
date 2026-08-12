@@ -142,6 +142,13 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'organization_changes', 'action' => 'view', 'code' => 'organization_changes.view', 'description' => 'Consultar historial de cambios organizacionales'],
             ['module' => 'organization_changes', 'action' => 'manage_branch', 'code' => 'organization_changes.manage_branch', 'description' => 'Ejecutar cambios dentro de sucursal'],
             ['module' => 'organization_changes', 'action' => 'manage_global', 'code' => 'organization_changes.manage_global', 'description' => 'Ejecutar cambios globales'],
+            ['module' => 'notifications', 'action' => 'view_own', 'code' => 'notifications.view_own', 'description' => 'Consultar y marcar notificaciones propias'],
+            ['module' => 'reports', 'action' => 'view_branch', 'code' => 'reports.view_branch', 'description' => 'Consultar reportes paginados de sucursal'],
+            ['module' => 'reports', 'action' => 'view_global', 'code' => 'reports.view_global', 'description' => 'Consultar reportes paginados globales'],
+            ['module' => 'audit', 'action' => 'view_branch', 'code' => 'audit.view_branch', 'description' => 'Consultar auditoría inmutable de sucursal'],
+            ['module' => 'audit', 'action' => 'view_global', 'code' => 'audit.view_global', 'description' => 'Consultar auditoría inmutable global'],
+            ['module' => 'logs', 'action' => 'view_branch', 'code' => 'logs.view_branch', 'description' => 'Consultar logs estructurados de sucursal'],
+            ['module' => 'logs', 'action' => 'view_global', 'code' => 'logs.view_global', 'description' => 'Consultar logs estructurados globales'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -232,6 +239,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'points.authorize_branch', 'points.deliver_branch',
                     'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
                     'client_transfers.view', 'organization_changes.view', 'organization_changes.manage_branch',
+                    'notifications.view_own', 'reports.view_branch', 'audit.view_branch', 'logs.view_branch',
                 ]);
             }
 
@@ -247,6 +255,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'surpluses.view_global',
                     'risk.view_global',
                     'client_transfers.view', 'organization_changes.view',
+                    'notifications.view_own', 'reports.view_global', 'audit.view_global', 'logs.view_global',
                 ]);
             }
 
@@ -264,6 +273,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'manual_reconciliation.authorize_branch',
                     'risk.view_assigned', 'delinquency_removal.request_assigned',
                     'client_transfers.view', 'client_transfers.decide_assigned',
+                    'notifications.view_own',
                 ]);
             }
 
@@ -281,11 +291,16 @@ class RolesAndPermissionsSeeder extends Seeder
                     'points.view_own', 'points.redeem_own',
                     'risk.view_own',
                     'client_transfers.view', 'client_transfers.initiate_own', 'client_transfers.receive_own',
+                    'notifications.view_own',
                 ]);
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch', 'notifications.view_own']);
+            }
+
+            if ($roleData['code'] === 'verifier') {
+                $this->assignPerms($role, ['notifications.view_own']);
             }
         }
     }

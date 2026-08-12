@@ -163,10 +163,22 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Frontend: vista responsiva por permisos para distribuidora, coordinador, gerencias y administrador de solo lectura; spec HTTP y build Angular APROBADOS.
 - Sesión técnica: `migrate:fresh` eliminó la cuenta local no sembrada `test@gmail.com`; no se recreó ni se imprimió su credencial automáticamente. La prueba humana queda pendiente de restaurar esa cuenta local de forma segura, mientras las decisiones de actores se validaron con sesiones Sanctum reales en pruebas HTTP.
 
+### 2026-08-12 — implementación y validación M18
+- Notificaciones: proyector programado consume outbox y auditorías reales de M08-M17, resuelve actor, distribuidora, coordinador, gerente de sucursal y gerente general; cada fuente/destinatario se deduplica mediante índice único.
+- Contenido: destinatario, título, descripción, fecha, lectura, tipo, entidad, identificador y deep link; bandeja, contador, lectura individual y lectura total son exclusivamente del usuario autenticado.
+- Correo: eventos críticos configurados agregan canal email con contenido mínimo y enlace; no incluyen contraseñas, tokens, CURP, RFC, CLABE, documentos ni cuerpos del evento.
+- Reportes: veintidós proyecciones reales cubren distribuidoras, líneas/saldos/recuperación, vales, relaciones/comportamiento, morosidad/alertas, cartera, conciliaciones, excedentes/devoluciones, puntos, solicitudes, incrementos, transferencias y cambios organizacionales.
+- Rendimiento/alcance: todas las consultas son SQL proyectado y paginado con máximo 100, filtros por fecha/sucursal/coordinador/distribuidora/estado cuando corresponden; gerente de sucursal se limita a sus sucursales y administrador conserva lectura global sin mutaciones.
+- Auditoría: columnas ampliadas para solicitante/autorizador/ejecutor, sesión, correlación, evidencia y regla; trigger PostgreSQL impide UPDATE/DELETE y API es únicamente GET con sanitización recursiva.
+- Logs: request, correlation y trace ID validados, propagados en respuesta y contexto; persistencia estructurada separa canal/nivel y guarda método/ruta/estado/duración sin payload, cookies, tokens ni datos sensibles.
+- Frontend: centro de operación con contador tipo campana, bandeja/filtros/deep links, selector de reportes, visor de auditoría y visor de logs por correlación; controles visibles según permisos efectivos.
+- Backend M18 enfocado: 4 pruebas y 157 aserciones APROBADAS; incluyen destinatarios reales, reintento sin duplicados, propiedad de lectura, ejecución de los 22 reportes, auditoría inmutable, sanitización y correlación.
+- Frontend M18: spec HTTP y build Angular APROBADOS.
+
 ## Checkpoint actual
-Módulo: M17
-Actividad: validación acumulada, prueba humana y commits enfocados.
-Último archivo modificado: contrato OpenAPI, progreso y feature Angular `transferencias`.
-Último comando ejecutado: pruebas M17, spec Angular y build.
-Resultado: vertical y regresión M08-M17 aprobadas; cuenta técnica local ausente después de migración limpia.
-Siguiente paso exacto: crear commits M17 enfocados, intentar restaurar la sesión técnica sin exponer credenciales y comenzar M18.
+Módulo: M18
+Actividad: regresión acumulada, contrato y commits enfocados.
+Último archivo modificado: contrato OpenAPI, progreso y centro de operación Angular.
+Último comando ejecutado: pruebas M18, spec Angular y build.
+Resultado: vertical M18 aprobada; falta regresión acumulada M08-M18.
+Siguiente paso exacto: ejecutar regresión M08-M18, crear commits M18 y comenzar el cierre técnico M19.

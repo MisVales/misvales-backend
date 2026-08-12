@@ -13,6 +13,7 @@ use App\Models\OutboxEvent;
 use App\Models\SolicitudTransferenciaCliente;
 use App\Models\User;
 use App\Services\Cliente\ServicioCarteraInformativa;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 
 final readonly class ServicioTransferenciasOrganizacionales
@@ -148,7 +149,7 @@ final readonly class ServicioTransferenciasOrganizacionales
                 throw new ExcepcionCliente('ACTIVE_DISTRIBUTOR_WITHOUT_COORDINATOR', 'La distribuidora activa no tiene coordinador vigente.', 409);
             }
             $antes = ['branch_id' => $distribuidora->branch_id, 'coordinator_id' => $actual?->coordinator_id];
-            $momento = now();
+            $momento = $this->momentoPosterior($actual);
             $actual?->update(['status' => 'REASSIGNED', 'valid_to' => $momento, 'ended_by' => $actor->id, 'end_reason' => $motivo, 'lock_version' => ($actual->lock_version ?? 0) + 1]);
             CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinadorDestino->id, 'distributor_id' => $distribuidora->id, 'branch_id' => $sucursalDestino, 'valid_from' => $momento, 'status' => 'ACTIVE', 'assigned_by' => $actor->id, 'assignment_reason' => $motivo]);
             $origen = $distribuidora->branch_id;
@@ -169,7 +170,7 @@ final readonly class ServicioTransferenciasOrganizacionales
             if ($actual->coordinator_id === $destino->id) {
                 throw new ExcepcionCliente('COORDINATOR_ALREADY_ASSIGNED', 'El coordinador destino ya está asignado.', 409);
             }
-            $momento = now();
+            $momento = $this->momentoPosterior($actual);
             $actual->update(['status' => 'REASSIGNED', 'valid_to' => $momento, 'ended_by' => $actor->id, 'end_reason' => $motivo, 'lock_version' => $actual->lock_version + 1]);
             $nueva = CoordinatorDistributorAssignment::create(['coordinator_id' => $destino->id, 'distributor_id' => $distribuidora->id, 'branch_id' => $distribuidora->branch_id, 'valid_from' => $momento, 'status' => 'ACTIVE', 'assigned_by' => $actor->id, 'assignment_reason' => $motivo]);
             $this->evento('COORDINATOR_CHANGE', $distribuidora->id, $distribuidora->branch_id, $distribuidora->branch_id, $actor, $motivo, ['coordinator_id' => $actual->coordinator_id, 'assignment_id' => $actual->id], ['coordinator_id' => $destino->id, 'assignment_id' => $nueva->id]);
@@ -231,6 +232,17 @@ final readonly class ServicioTransferenciasOrganizacionales
     {
         EventoCambioOrganizacional::create(['type' => $tipo, 'subject_id' => $sujeto, 'origin_branch_id' => $origen, 'destination_branch_id' => $destino, 'actor_id' => $actor->id, 'reason' => $motivo, 'before_snapshot' => $antes, 'after_snapshot' => $despues, 'occurred_at' => now()]);
         $this->notificar($tipo, $sujeto, ['before' => $antes, 'after' => $despues]);
+    }
+
+    private function momentoPosterior(?CoordinatorDistributorAssignment $actual): CarbonInterface
+    {
+        $momento = now();
+        if (! $actual) {
+            return $momento;
+        }
+        $minimo = $actual->valid_from->copy()->addSecond();
+
+        return $momento->gt($minimo) ? $momento : $minimo;
     }
 
     private function notificar(string $tipo, string $sujeto, array $payload): void
