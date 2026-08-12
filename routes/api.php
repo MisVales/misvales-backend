@@ -11,6 +11,7 @@ use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\ClienteController;
+use App\Http\Controllers\Api\V1\ConciliacionBancariaController;
 use App\Http\Controllers\Api\V1\ConfiguracionController;
 use App\Http\Controllers\Api\V1\CoordinatorAssignmentController;
 use App\Http\Controllers\Api\V1\Credito\CrearSolicitudIncrementoController;
@@ -310,5 +311,14 @@ Route::prefix('v1')->group(function () {
         Route::get('relations', [RelacionDistribuidoraController::class, 'index']);
         Route::get('relations/{relacion}', [RelacionDistribuidoraController::class, 'show']);
         Route::get('relations/{relacion}/download', [RelacionDistribuidoraController::class, 'download']);
+
+        // Módulo 12 - Archivo bancario y conciliación automática
+        Route::post('bank-imports', [ConciliacionBancariaController::class, 'import']);
+        Route::get('bank-imports', [ConciliacionBancariaController::class, 'imports']);
+        Route::get('bank-movements', [ConciliacionBancariaController::class, 'movements']);
+        Route::post('relations/{relacion}/clarifications', [ConciliacionBancariaController::class, 'clarify']);
+        Route::post('bank-movements/{movimiento}/manual-reconciliation-requests', [ConciliacionBancariaController::class, 'requestManual']);
+        Route::post('manual-reconciliation-requests/{solicitud}/decision', [ConciliacionBancariaController::class, 'decideManual']);
+        Route::post('manual-reconciliation-requests/{solicitud}/execute', [ConciliacionBancariaController::class, 'executeManual']);
     });
 });

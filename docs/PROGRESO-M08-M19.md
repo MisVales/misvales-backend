@@ -17,7 +17,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M09 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M10 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M11 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M12 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M12 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M13 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M14 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M15 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -101,10 +101,19 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Pruebas backend combinadas M08-M11: APROBADAS, 22 pruebas y 130 aserciones. Migración limpia y rutas API: APROBADAS.
 - Pruebas frontend M09-M11: APROBADAS, 8 pruebas. Build Angular y verificaciones de formato: APROBADOS.
 
+### 2026-08-12 — implementación y validación M12
+- Importación: XLSX manual, almacenamiento privado, hash único, usuario/sucursal/fecha/resultado/filas, fila original y error persistidos; ninguna integración bancaria.
+- Validación atómica: tipo XLSX, archivo legible y cinco columnas obligatorias; estructura incompleta rechaza el archivo completo y registra motivo.
+- Conciliación: folio bancario único; referencia exacta; abono, liquidación, excedente y no conciliado; solo el importe aplicable altera saldo y el excedente queda separado.
+- Flujo manual: aclaración con evidencia privada, solicitud de cajera, autorización por alcance con prohibición de autoautorizar y ejecución posterior con snapshots antes/después.
+- Frontend: carga XLSX, contrato visible, progreso, resumen por clasificación e historial; navegación protegida por permisos efectivos.
+- Pruebas backend combinadas M08-M12: APROBADAS, 24 pruebas y 138 aserciones; incluyen XLSX real, columna ausente, doble archivo, abono y referencia inexistente. Migración limpia aprobada.
+- Pruebas frontend M11-M12: APROBADAS, 3 pruebas. Build Angular y formato: APROBADOS.
+
 ## Checkpoint actual
-Módulo: M12
-Actividad: auditoría inicial de archivo bancario y conciliación manual.
+Módulo: M13
+Actividad: auditoría inicial del libro financiero de pagos y recuperación de línea.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
 Último comando ejecutado: commits M09 enfocados en backend y frontend.
 Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: leer el contrato M12 e implementar importación privada de Excel sin integración bancaria.
+Siguiente paso exacto: implementar aplicación contable por orden obligatorio y recuperación exclusiva de capital.

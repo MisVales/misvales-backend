@@ -24,13 +24,17 @@ use App\Models\SolicitudModificacionVale;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
+use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Relacion\ServicioGeneracionRelacion;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
+use ZipArchive;
 
 final class CajaValeApiTest extends TestCase
 {
@@ -185,6 +189,60 @@ final class CajaValeApiTest extends TestCase
         config()->set('relations.advance_period_days', null);
         $this->expectExceptionMessage('RELATION_CONFIGURATION_INCOMPLETE');
         app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
+    }
+
+    public function test_xlsx_concilia_abono_liquidacion_excedente_no_conciliado_y_rechaza_doble_archivo(): void
+    {
+        Storage::fake('local');
+        config()->set('relations.advance_period_days', 10);
+        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
+        $this->voucher->update(['status' => 'CASHED']);
+        $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDay()]);
+        app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
+        $relation = RelacionDistribuidora::firstOrFail();
+        $file = $this->xlsx([[$relation->payment_reference, '1000.00', '2026-08-12 10:00:00', 'BANK-001', 'Abono'], ['NO-EXISTE', '50.00', '2026-08-12 10:01:00', 'BANK-002', 'Sin referencia']]);
+        $import = app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+        $this->assertSame('PROCESSED', $import->status);
+        $this->assertSame(1, $import->summary['partial_payments']);
+        $this->assertSame(1, $import->summary['unreconciled']);
+        $this->assertSame('1975.0000', $relation->fresh()->balance);
+        $this->expectExceptionMessage('BANK_FILE_ALREADY_IMPORTED');
+        app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+    }
+
+    public function test_xlsx_sin_columna_se_rechaza_completo_y_registra_motivo(): void
+    {
+        Storage::fake('local');
+        $file = $this->xlsx([], ['referencia de pago', 'monto', 'fecha', 'folio bancario']);
+        try {
+            app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+            $this->fail('Debió fallar');
+        } catch (\RuntimeException $e) {
+            $this->assertSame('BANK_FILE_REQUIRED_COLUMNS_MISSING', $e->getMessage());
+        }
+        $this->assertDatabaseHas('bank_file_imports', ['status' => 'REJECTED', 'error' => 'BANK_FILE_REQUIRED_COLUMNS_MISSING']);
+        $this->assertDatabaseCount('bank_movements', 0);
+    }
+
+    private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'bank').'.xlsx';
+        $zip = new ZipArchive;
+        $zip->open($path, ZipArchive::CREATE);
+        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
+        $all = array_merge([$headers], $rows);
+        $xml = '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
+        foreach ($all as $ri => $row) {
+            $xml .= '<row r="'.($ri + 1).'">';
+            foreach (array_values($row) as $ci => $value) {
+                $col = chr(65 + $ci);
+                $xml .= '<c r="'.$col.($ri + 1).'" t="inlineStr"><is><t>'.htmlspecialchars((string) $value, ENT_XML1).'</t></is></c>';
+            }$xml .= '</row>';
+        }$xml .= '</sheetData></worksheet>';
+        $zip->addFromString('xl/worksheets/sheet1.xml', $xml);
+        $zip->close();
+
+        return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
     }
 
     private function postIdempotent(string $uri, array $data)

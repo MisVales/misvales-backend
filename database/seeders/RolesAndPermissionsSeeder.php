@@ -105,6 +105,16 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'relations', 'action' => 'download_own', 'code' => 'relations.download_own', 'description' => 'Descargar relaciones propias'],
             ['module' => 'relations', 'action' => 'download_branch', 'code' => 'relations.download_branch', 'description' => 'Descargar relaciones de sucursal'],
             ['module' => 'relations', 'action' => 'download_global', 'code' => 'relations.download_global', 'description' => 'Descargar relaciones globalmente'],
+            ['module' => 'bank_imports', 'action' => 'create_branch', 'code' => 'bank_imports.create_branch', 'description' => 'Cargar archivo bancario externo en sucursal'],
+            ['module' => 'bank_imports', 'action' => 'view_branch', 'code' => 'bank_imports.view_branch', 'description' => 'Consultar importaciones bancarias de sucursal'],
+            ['module' => 'bank_movements', 'action' => 'view_branch', 'code' => 'bank_movements.view_branch', 'description' => 'Consultar movimientos bancarios de sucursal'],
+            ['module' => 'bank_imports', 'action' => 'view_global', 'code' => 'bank_imports.view_global', 'description' => 'Consultar importaciones bancarias globalmente'],
+            ['module' => 'bank_movements', 'action' => 'view_global', 'code' => 'bank_movements.view_global', 'description' => 'Consultar movimientos bancarios globalmente'],
+            ['module' => 'payment_clarifications', 'action' => 'create_own', 'code' => 'payment_clarifications.create_own', 'description' => 'Crear aclaraciones propias con evidencia'],
+            ['module' => 'manual_reconciliation', 'action' => 'request_branch', 'code' => 'manual_reconciliation.request_branch', 'description' => 'Solicitar conciliación manual en sucursal'],
+            ['module' => 'manual_reconciliation', 'action' => 'authorize_branch', 'code' => 'manual_reconciliation.authorize_branch', 'description' => 'Autorizar conciliación manual de sucursal'],
+            ['module' => 'manual_reconciliation', 'action' => 'authorize_global', 'code' => 'manual_reconciliation.authorize_global', 'description' => 'Autorizar conciliación manual global'],
+            ['module' => 'manual_reconciliation', 'action' => 'execute_branch', 'code' => 'manual_reconciliation.execute_branch', 'description' => 'Ejecutar conciliación manual autorizada'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -189,6 +199,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'vouchers.view_branch',
                     'voucher_modifications.authorize_branch',
                     'relations.view_branch', 'relations.download_branch',
+                    'bank_imports.view_branch', 'bank_movements.view_branch',
+                    'manual_reconciliation.authorize_branch',
                 ]);
             }
 
@@ -200,6 +212,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                     'vouchers.view_global',
                     'relations.view_global',
+                    'bank_imports.view_global', 'bank_movements.view_global',
                 ]);
             }
 
@@ -213,6 +226,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.reject_assigned',
                     'vouchers.view_assigned',
                     'voucher_modifications.authorize_branch',
+                    'bank_movements.view_branch',
+                    'manual_reconciliation.authorize_branch',
                 ]);
             }
 
@@ -225,11 +240,12 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                     'vouchers.create_own', 'vouchers.view_own',
                     'relations.view_own', 'relations.download_own',
+                    'payment_clarifications.create_own',
                 ]);
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch']);
             }
         }
     }
