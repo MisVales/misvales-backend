@@ -20,7 +20,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M12 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M13 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M14 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M15 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M15 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M16 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M17 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M18 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -130,10 +130,19 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Pruebas backend combinadas M08-M14: APROBADAS, 26 pruebas y 161 aserciones; pruebas enfocadas de excedente/devolución: 2 pruebas y 22 aserciones. Migración limpia aprobada.
 - Frontend M11-M14: 4 pruebas y build Angular aprobados.
 
+### 2026-08-12 — implementación y validación M15
+- Libro separado: cuenta, saldo/reservado, movimientos con antes/después, generado/descontado/canjeado, relación, motivo y snapshot/versionado de regla.
+- Anticipado: `floor(capital nominal / 1200) × 3`; puntual no mueve puntos; tardío descuenta `floor(saldo × 20%)` una sola vez y nunca deja saldo negativo.
+- Canje: solo con periodo OPEN publicado, reserva bajo bloqueo, valida disponible y congela valor del punto/importe; rechazo libera reserva y entrega descuenta definitivamente.
+- Permisos: distribuidora consulta/solicita; gerencias autorizan por alcance; la entrega usa permiso explícito compatible del gerente de sucursal, sin crear un rol nuevo.
+- Frontend: saldo, disponible, equivalente estimado, historial, periodo/CTA y bandeja de autorización/entrega.
+- Pruebas backend combinadas M08-M15: APROBADAS, 28 pruebas y 175 aserciones; incluyen anticipado, floor tardío una vez, periodo cerrado, reserva, snapshot y entrega. Migración limpia aprobada.
+- Frontend M11-M15: 5 pruebas y build Angular aprobados.
+
 ## Checkpoint actual
-Módulo: M15
-Actividad: auditoría inicial del libro de puntos y canjes.
+Módulo: M16
+Actividad: auditoría inicial de riesgo, morosidad y regularización de distribuidora.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
 Último comando ejecutado: commits M09 enfocados en backend y frontend.
 Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: implementar puntos exclusivamente por liquidación anticipada y canjes contra periodos publicados.
+Siguiente paso exacto: implementar detección de relaciones incumplidas y decisión formal de morosidad solo sobre la distribuidora.

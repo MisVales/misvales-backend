@@ -121,6 +121,11 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'refunds', 'action' => 'authorize_branch', 'code' => 'refunds.authorize_branch', 'description' => 'Autorizar devoluciones de sucursal'],
             ['module' => 'refunds', 'action' => 'authorize_global', 'code' => 'refunds.authorize_global', 'description' => 'Autorizar devoluciones globalmente'],
             ['module' => 'refunds', 'action' => 'execute_branch', 'code' => 'refunds.execute_branch', 'description' => 'Registrar devolución externa ejecutada'],
+            ['module' => 'points', 'action' => 'view_own', 'code' => 'points.view_own', 'description' => 'Consultar puntos propios'],
+            ['module' => 'points', 'action' => 'redeem_own', 'code' => 'points.redeem_own', 'description' => 'Solicitar canje propio'],
+            ['module' => 'points', 'action' => 'authorize_branch', 'code' => 'points.authorize_branch', 'description' => 'Autorizar canjes de sucursal'],
+            ['module' => 'points', 'action' => 'authorize_global', 'code' => 'points.authorize_global', 'description' => 'Autorizar canjes globalmente'],
+            ['module' => 'points', 'action' => 'deliver_branch', 'code' => 'points.deliver_branch', 'description' => 'Registrar entrega de canje en sucursal'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -208,6 +213,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'bank_imports.view_branch', 'bank_movements.view_branch',
                     'manual_reconciliation.authorize_branch',
                     'surpluses.view_branch', 'refunds.authorize_branch',
+                    'points.authorize_branch', 'points.deliver_branch',
                 ]);
             }
 
@@ -250,6 +256,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'relations.view_own', 'relations.download_own',
                     'payment_clarifications.create_own',
                     'surpluses.view_own',
+                    'points.view_own', 'points.redeem_own',
                 ]);
             }
 

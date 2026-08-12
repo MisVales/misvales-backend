@@ -13,6 +13,7 @@ use App\Models\CategoryVersion;
 use App\Models\Cliente;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
+use App\Models\CuentaPuntos;
 use App\Models\Distribuidora;
 use App\Models\ExcedenteDistribuidora;
 use App\Models\ImportacionArchivoBancario;
@@ -21,6 +22,7 @@ use App\Models\MediaFile;
 use App\Models\MovimientoBancario;
 use App\Models\Product;
 use App\Models\ProductVersion;
+use App\Models\RedemptionPeriod;
 use App\Models\RelacionDistribuidora;
 use App\Models\RelacionPartidaDistribuidora;
 use App\Models\RestriccionUsoCredito;
@@ -31,12 +33,14 @@ use App\Models\UserRoleScope;
 use App\Models\Vale;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Excedente\ServicioExcedente;
+use App\Services\Puntos\ServicioPuntos;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -264,6 +268,7 @@ final class CajaValeApiTest extends TestCase
         $relation = RelacionDistribuidora::firstOrFail();
         app(ServicioImportacionBancaria::class)->importar($this->xlsx([[$relation->payment_reference, '4000', '2026-08-12 10:00:00', 'BANK-SURPLUS', 'Excedente']]), $this->cashier, $this->branch->id);
         $surplus = ExcedenteDistribuidora::firstOrFail();
+        $this->assertDatabaseHas('point_accounts', ['distributor_id' => $this->distributorUser->distribuidora->id, 'balance' => 6]);
         $this->assertSame('1025.0000', $surplus->available_amount);
         $this->assertSame('PENDING_DECISION', $surplus->status);
         app(ServicioExcedente::class)->elegirCredito($surplus, $this->distributorUser);
@@ -300,6 +305,41 @@ final class CajaValeApiTest extends TestCase
         $this->postIdempotent('/api/v1/refund-requests/'.$request->id.'/execute', ['method' => 'TRANSFERENCIA_EXTERNA', 'reference' => 'REF-001', 'evidence_media_id' => $media->id])->assertSuccessful()->assertJsonPath('data.status', 'EXECUTED');
         $this->assertSame('REFUNDED', $refundSurplus->fresh()->status);
         $this->assertSame('0.0000', $refundSurplus->fresh()->reserved_amount);
+    }
+
+    public function test_canje_exige_periodo_reserva_snapshot_autorizacion_y_entrega(): void
+    {
+        $account = CuentaPuntos::create(['distributor_id' => $this->distributorUser->distribuidora->id, 'balance' => 30]);
+        Sanctum::actingAs($this->distributorUser);
+        $this->postIdempotent('/api/v1/point-redemption-requests', ['points' => 10])->assertStatus(409);
+        $def = ConfigurationDefinition::create(['key' => 'POINT_VALUE', 'name' => 'Valor punto', 'value_type' => 'DECIMAL', 'status' => 'ACTIVE', 'created_by' => $this->distributorUser->id]);
+        $ver = ConfigurationVersion::create(['configuration_definition_id' => $def->id, 'version' => 1, 'value' => '2.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
+        $period = RedemptionPeriod::create(['code' => 'TEST-POINTS', 'name' => 'Canje', 'starts_at' => now()->subHour(), 'ends_at' => now()->addDay(), 'status' => 'OPEN', 'point_value' => '2.0000', 'point_value_configuration_version_id' => $ver->id, 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
+        $request = $this->postIdempotent('/api/v1/point-redemption-requests', ['points' => 10])->assertCreated()->assertJsonPath('data.monetary_value', '20.0000');
+        $this->assertSame(10, $account->fresh()->reserved);
+        $manager = $this->user('branch_manager', $this->branch->id);
+        Sanctum::actingAs($manager);
+        $this->postIdempotent('/api/v1/point-redemption-requests/'.$request->json('data.id').'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'Procede'])->assertSuccessful();
+        $this->postIdempotent('/api/v1/point-redemption-requests/'.$request->json('data.id').'/deliver', ['reference' => 'ENTREGA-001'])->assertSuccessful()->assertJsonPath('data.status', 'DELIVERED');
+        $this->assertSame(20, $account->fresh()->balance);
+        $this->assertSame(0, $account->fresh()->reserved);
+        $period->update(['point_value' => '9.0000']);
+        $this->assertDatabaseHas('point_redemption_requests', ['id' => $request->json('data.id'), 'point_value_snapshot' => '2.0000', 'monetary_value' => '20.0000']);
+    }
+
+    public function test_pago_tardio_descuenta_floor_una_sola_vez_y_no_negativo(): void
+    {
+        config()->set('points.late_discount_rate', '0.200000');
+        $account = CuentaPuntos::create(['distributor_id' => $this->distributorUser->distribuidora->id, 'balance' => 11]);
+        $runId = (string) Str::uuid();
+        DB::table('relation_process_runs')->insert(['id' => $runId, 'cutoff_at' => now(), 'status' => 'COMPLETED', 'attempt' => 1, 'configuration_snapshot' => '{}', 'created_at' => now(), 'updated_at' => now()]);
+        $relation = RelacionDistribuidora::create(['process_run_id' => $runId, 'distributor_id' => $this->distributorUser->distribuidora->id, 'branch_id' => $this->branch->id, 'cutoff_at' => now(), 'advance_period_start' => now(), 'advance_period_end' => now(), 'payment_deadline_at' => now(), 'payment_reference' => 'REL-LATE-POINTS', 'financial_status' => 'SETTLED', 'temporal_classification' => 'LATE', 'portfolio_total' => '1', 'misvales_total' => '1', 'reconciled_total' => '1', 'balance' => '0', 'header_snapshot' => [], 'bank_snapshot' => []]);
+        $service = app(ServicioPuntos::class);
+        $service->clasificar($relation);
+        $service->clasificar($relation);
+        $this->assertSame(9, $account->fresh()->balance);
+        $this->assertDatabaseCount('point_movements', 1);
+        $this->assertDatabaseHas('point_movements', ['discounted' => 2, 'balance_after' => 9]);
     }
 
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
