@@ -9861,7 +9861,8 @@
         "ext-mbstring": "*",
         "ext-openssl": "*",
         "ext-pdo": "*",
-        "ext-pdo_pgsql": "*",
+        "ext-pdo_mysql": "*",
+        "ext-redis": "*",
         "ext-sodium": "*"
     },
     "platform-dev": {},

@@ -24,7 +24,7 @@ return new class extends Migration
             $table->string('trace_id')->nullable();
             $table->ipAddress('ip_address')->nullable();
             $table->text('user_agent')->nullable();
-            $table->jsonb('metadata')->nullable();
+            $table->json('metadata')->nullable();
             $table->timestampTz('occurred_at');
             $table->timestampTz('created_at')->useCurrent();
 

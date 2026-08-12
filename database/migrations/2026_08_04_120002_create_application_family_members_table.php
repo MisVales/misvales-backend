@@ -20,7 +20,7 @@ return new class extends Migration
             $table->unsignedSmallInteger('declared_age')->nullable();
             $table->string('school_name')->nullable();
             $table->boolean('is_family_reference')->default(false);
-            $table->jsonb('details_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');

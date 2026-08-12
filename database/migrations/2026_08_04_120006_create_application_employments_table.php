@@ -17,8 +17,8 @@ return new class extends Migration
             $table->date('started_at')->nullable();
             $table->date('ended_at')->nullable();
             $table->boolean('is_current')->default(true);
-            $table->jsonb('reference_payload')->nullable();
-            $table->jsonb('details_payload')->nullable();
+            $table->json('reference_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');

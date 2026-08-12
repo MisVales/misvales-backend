@@ -86,7 +86,7 @@ class SessionController extends Controller
                 new SecurityAlertMail(
                     $userOwner,
                     'Sesión Revocada',
-                    'Una de tus sesiones en '.env('APP_NAME').' ha sido revocada de forma remota.',
+                    'Una de tus sesiones en '.config('app.name').' ha sido revocada de forma remota.',
                     [
                         'ip' => $request->ip(),
                         'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),

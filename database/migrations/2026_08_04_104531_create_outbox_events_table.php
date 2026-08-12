@@ -11,7 +11,7 @@ return new class extends Migration
         Schema::create('outbox_events', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('event_type')->index();
-            $table->jsonb('payload');
+            $table->json('payload');
             $table->string('status')->default('PENDING')->index();
             $table->text('error_message')->nullable();
             $table->timestampTz('processed_at')->nullable();

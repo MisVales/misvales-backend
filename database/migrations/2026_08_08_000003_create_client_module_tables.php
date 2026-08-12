@@ -54,6 +54,8 @@ return new class extends Migration
             $table->foreignUuid('address_proof_media_id')->nullable()->constrained('media_files')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
+            $table->char('current_fingerprint_unique', 64)->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, normalized_fingerprint_hmac, NULL)')->unique();
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->timestampsTz();
@@ -73,6 +75,7 @@ return new class extends Migration
             $table->boolean('is_current')->default(true);
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->unsignedInteger('lock_version')->default(1);
@@ -90,6 +93,7 @@ return new class extends Migration
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL, client_id, NULL)')->unique();
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->string('reason')->nullable();
             $table->timestampsTz();
@@ -120,7 +124,7 @@ return new class extends Migration
 
         DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_official_id_type_check CHECK (official_id_type IN ('INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'))");
         DB::statement('ALTER TABLE clients ADD CONSTRAINT clients_lock_version_check CHECK (lock_version >= 1)');
-        DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number ~ '^CLI-[0-9]{4}-[0-9]{6,}$')");
+        DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number REGEXP '^CLI-[0-9]{4}-[0-9]{6,}$')");
         DB::statement('ALTER TABLE client_addresses ADD CONSTRAINT client_addresses_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
         DB::statement('ALTER TABLE client_bank_accounts ADD CONSTRAINT client_bank_accounts_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
         DB::statement('ALTER TABLE client_bank_accounts ADD CONSTRAINT client_bank_accounts_lock_version_check CHECK (lock_version >= 1)');
@@ -130,19 +134,13 @@ return new class extends Migration
         DB::statement('ALTER TABLE client_portfolio_entries ADD CONSTRAINT client_portfolio_entries_amount_check CHECK (amount IS NULL OR amount > 0)');
         DB::statement('ALTER TABLE client_portfolio_entries ADD CONSTRAINT client_portfolio_entries_lock_version_check CHECK (lock_version >= 1)');
 
-        DB::statement('CREATE UNIQUE INDEX client_addresses_current_client_unique ON client_addresses (client_id) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_addresses_current_fingerprint_unique ON client_addresses (normalized_fingerprint_hmac) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_bank_accounts_current_client_unique ON client_bank_accounts (client_id) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_distributor_assignments_current_client_unique ON client_distributor_assignments (client_id) WHERE ends_at IS NULL');
-
         $this->crearProteccionContraEliminacion();
     }
 
     public function down(): void
     {
         foreach (['client_portfolio_entries', 'client_distributor_assignments', 'client_bank_accounts', 'client_addresses', 'clients'] as $table) {
-            DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion ON {$table}");
-            DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_deletion()");
+            DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion");
         }
 
         Schema::dropIfExists('client_portfolio_entries');
@@ -156,15 +154,7 @@ return new class extends Migration
     private function crearProteccionContraEliminacion(): void
     {
         foreach (['clients', 'client_addresses', 'client_bank_accounts', 'client_distributor_assignments', 'client_portfolio_entries'] as $table) {
-            DB::statement(<<<SQL
-                CREATE OR REPLACE FUNCTION prevent_{$table}_deletion()
-                RETURNS trigger AS \$\$
-                BEGIN
-                    RAISE EXCEPTION 'Los registros del módulo de clientes no se eliminan físicamente.';
-                END;
-                \$\$ LANGUAGE plpgsql
-            SQL);
-            DB::statement("CREATE TRIGGER trg_prevent_{$table}_deletion BEFORE DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_deletion()");
+            DB::statement("CREATE TRIGGER trg_prevent_{$table}_deletion BEFORE DELETE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Los registros del modulo de clientes no se eliminan fisicamente.'");
         }
     }
 };

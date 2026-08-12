@@ -10,9 +10,9 @@ return new class extends Migration
     public function up(): void
     {
         if (Schema::hasColumn('redemption_periods', 'point_value')) {
-            if (DB::connection()->getDriverName() === 'pgsql') {
-                DB::statement('ALTER TABLE redemption_periods ALTER COLUMN point_value DROP DEFAULT');
-            }
+            Schema::table('redemption_periods', function (Blueprint $table): void {
+                $table->decimal('point_value', 19, 4)->nullable()->default(null)->change();
+            });
         }
 
         if (! Schema::hasColumn('redemption_periods', 'point_value_configuration_version_id')) {
@@ -41,10 +41,9 @@ return new class extends Migration
     public function down(): void
     {
         if (Schema::hasColumn('redemption_periods', 'point_value')) {
-            $driver = DB::connection()->getDriverName();
-            if ($driver === 'pgsql') {
-                DB::statement('ALTER TABLE redemption_periods ALTER COLUMN point_value SET DEFAULT 1.0000');
-            }
+            Schema::table('redemption_periods', function (Blueprint $table): void {
+                $table->decimal('point_value', 19, 4)->nullable()->default(1)->change();
+            });
         }
 
         Schema::table('redemption_periods', function (Blueprint $table) {

@@ -33,7 +33,7 @@ class PasswordRecoveryMail extends Mailable implements ShouldQueue
 
     public function content(): Content
     {
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:4200');
+        $frontendUrl = config('production.frontend_url');
         $resetUrl = "{$frontendUrl}/auth/restablecer-contrasena?token={$this->token}&email={$this->user->email}";
 
         return new Content(

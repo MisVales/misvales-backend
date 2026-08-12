@@ -38,7 +38,7 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
         DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
-        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
+        DB::statement('CREATE UNIQUE INDEX credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key)');
     }
 
     public function down(): void

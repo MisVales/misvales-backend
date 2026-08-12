@@ -1,16 +1,14 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql') {
-            throw new RuntimeException('La alineación de esquema requiere PostgreSQL.');
-        }
-
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM distributors WHERE status = 'ACTIVE' AND (activated_at IS NULL OR activated_by IS NULL) LIMIT 20",
             'Distribuidoras ACTIVE sin evidencia de activación',
@@ -73,7 +71,11 @@ return new class extends Migration
         $this->recrearCheck('credit_increase_requests', 'credit_increase_requests_status_check', "status IN ('REQUESTED','REJECTED_BY_COORDINATOR','PREAUTHORIZED','REJECTED_BY_MANAGER','AUTHORIZED_PARTIAL','AUTHORIZED_TOTAL','COMPLETED')");
         $this->recrearCheck('credit_increase_requests', 'credit_increase_requests_manager_decision_check', "manager_decision IS NULL OR manager_decision IN ('APPROVE_REQUESTED','APPROVE_LOWER','REJECT')");
 
-        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS coordinator_distributor_active_distributor_unique ON coordinator_distributor_assignments (distributor_id) WHERE status = 'ACTIVE' AND valid_to IS NULL");
+        if (! Schema::hasColumn('coordinator_distributor_assignments', 'active_distributor_unique')) {
+            Schema::table('coordinator_distributor_assignments', function (Blueprint $table): void {
+                $table->uuid('active_distributor_unique')->nullable()->virtualAs("IF(status = 'ACTIVE' AND valid_to IS NULL, distributor_id, NULL)")->unique();
+            });
+        }
     }
 
     public function down(): void

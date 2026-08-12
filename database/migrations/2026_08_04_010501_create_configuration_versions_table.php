@@ -13,8 +13,9 @@ return new class extends Migration
             $table->uuid('id')->primary();
             $table->foreignUuid('configuration_definition_id')->constrained('configuration_definitions')->restrictOnDelete();
             $table->integer('version');
-            $table->jsonb('value');
+            $table->json('value');
             $table->string('status');
+            $table->uuid('current_published_definition_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, configuration_definition_id, NULL)")->unique();
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason');
@@ -28,12 +29,6 @@ return new class extends Migration
             $table->index(['configuration_definition_id', 'effective_from', 'effective_to']);
             $table->index(['status', 'effective_from']);
         });
-
-        DB::statement("
-            CREATE UNIQUE INDEX configuration_versions_open_published_unique
-            ON configuration_versions (configuration_definition_id)
-            WHERE status = 'PUBLISHED' AND effective_to IS NULL;
-        ");
 
         DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);');

@@ -24,6 +24,8 @@ return new class extends Migration
             $table->timestampTz('valid_from');
             $table->timestampTz('valid_to')->nullable();
             $table->string('status', 20);
+            $table->uuid('active_distributor_unique')->nullable()->virtualAs("IF(status = 'ACTIVE' AND valid_to IS NULL, distributor_id, NULL)")->unique();
+            $table->string('active_pair_unique', 110)->nullable()->virtualAs("IF(status = 'ACTIVE' AND valid_to IS NULL, CONCAT(coordinator_id, ':', distributor_id, ':', branch_id), NULL)")->unique();
 
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->foreignUuid('ended_by')->nullable()->constrained('users')->restrictOnDelete();
@@ -42,18 +44,6 @@ return new class extends Migration
 
         // 6.6 Índices
         // Una distribuidora solo puede tener un coordinador activo:
-        DB::statement("
-            CREATE UNIQUE INDEX coordinator_distributor_active_distributor_unique
-            ON coordinator_distributor_assignments (distributor_id)
-            WHERE status = 'ACTIVE' AND valid_to IS NULL;
-        ");
-
-        DB::statement("
-            CREATE UNIQUE INDEX coordinator_distributor_active_pair_unique
-            ON coordinator_distributor_assignments (coordinator_id, distributor_id, branch_id)
-            WHERE status = 'ACTIVE' AND valid_to IS NULL;
-        ");
-
         // 6.5 Constraints
         DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_status CHECK (status IN ('ACTIVE', 'ENDED', 'REASSIGNED'));");
         DB::statement('ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_valid_dates CHECK (valid_to IS NULL OR valid_to > valid_from);');
@@ -65,19 +55,12 @@ return new class extends Migration
         );");
 
         // Trigger para evitar eliminación física
-        DB::statement("
-            CREATE OR REPLACE FUNCTION prevent_cda_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'Las asignaciones anteriores no se eliminan físicamente.';
-            END;
-            $$ LANGUAGE plpgsql;
-        ");
-        DB::statement('
+        DB::unprepared(<<<'SQL'
             CREATE TRIGGER trg_prevent_cda_deletion
             BEFORE DELETE ON coordinator_distributor_assignments
-            FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
-        ');
+            FOR EACH ROW
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Las asignaciones anteriores no se eliminan fisicamente.'
+        SQL);
     }
 
     /**
@@ -85,8 +68,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
+        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion');
 
         Schema::dropIfExists('coordinator_distributor_assignments');
     }

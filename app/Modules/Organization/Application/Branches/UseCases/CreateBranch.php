@@ -31,7 +31,7 @@ final readonly class CreateBranch
     ): Branch {
         $branchCode = BranchCode::fromString(sprintf(
             'SUC-%03d',
-            (int) DB::scalar("SELECT nextval('branches_code_sequence')"),
+            (int) DB::scalar('SELECT NEXT VALUE FOR branches_code_sequence'),
         ));
         $validatedAddress = new ValidatedAddress(
             formatted: $address,

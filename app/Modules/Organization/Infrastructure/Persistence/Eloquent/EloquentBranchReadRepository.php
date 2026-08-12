@@ -24,8 +24,8 @@ final class EloquentBranchReadRepository implements BranchReadRepository
             ->when($criteria->search !== null, function ($query) use ($criteria): void {
                 $search = '%'.$criteria->search.'%';
                 $query->where(fn ($nested) => $nested
-                    ->where('code', 'ILIKE', $search)
-                    ->orWhere('name', 'ILIKE', $search));
+                    ->where('code', 'LIKE', $search)
+                    ->orWhere('name', 'LIKE', $search));
             })
             ->orderBy($criteria->sort, $criteria->direction);
 

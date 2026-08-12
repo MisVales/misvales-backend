@@ -14,8 +14,8 @@ return new class extends Migration {
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->foreignUuid('coordinator_id')->constrained('users')->restrictOnDelete();
             $table->string('status', 40)->default('DRAFT');
-            $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
-            $table->jsonb('pending_sections')->nullable();
+            $table->json('section_declarations')->default(DB::raw('JSON_OBJECT()'));
+            $table->json('pending_sections')->nullable();
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->foreignUuid('submitted_by')->nullable()->constrained('users')->restrictOnDelete();
             $table->timestampTz('submitted_at')->nullable();

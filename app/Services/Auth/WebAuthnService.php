@@ -42,7 +42,7 @@ class WebAuthnService
     {
         $rpEntity = PublicKeyCredentialRpEntity::create(
             config('app.name'),
-            parse_url(config('app.url'), PHP_URL_HOST) ?? 'localhost'
+            config('webauthn.rp_id')
         );
 
         if (! $user->webauthn_user_handle) {
@@ -108,13 +108,9 @@ class WebAuthnService
             throw new \Exception('Invalid challenge.');
         }
 
-        $expectedOrigin = config('app.url');
-        if (str_contains($expectedOrigin, 'localhost') || str_contains(config('frontend.url', 'localhost'), 'localhost')) {
-            // Bypass origin check for local dev
-        } else {
-            if ($clientData['origin'] !== $expectedOrigin) {
-                throw new \Exception('Invalid origin.');
-            }
+        $expectedOrigin = config('webauthn.origin');
+        if ($clientData['origin'] !== $expectedOrigin) {
+            throw new \Exception('Invalid origin.');
         }
 
         $authData = $attestation->authData;
@@ -131,7 +127,7 @@ class WebAuthnService
      */
     public function generateAuthenticationOptions(User $user, array $allowedCredentialsIds = []): PublicKeyCredentialRequestOptions
     {
-        $rpId = parse_url(config('app.url'), PHP_URL_HOST) ?? 'localhost';
+        $rpId = config('webauthn.rp_id');
         $challenge = random_bytes(32);
 
         $allowList = [];
@@ -172,11 +168,9 @@ class WebAuthnService
             throw new \Exception('Invalid challenge.');
         }
 
-        $expectedOrigin = config('app.url');
-        if (! str_contains($expectedOrigin, 'localhost') && ! str_contains(config('frontend.url', 'localhost'), 'localhost')) {
-            if ($clientData['origin'] !== $expectedOrigin) {
-                throw new \Exception('Invalid origin.');
-            }
+        $expectedOrigin = config('webauthn.origin');
+        if ($clientData['origin'] !== $expectedOrigin) {
+            throw new \Exception('Invalid origin.');
         }
 
         $authDataRaw = $this->base64url_decode($authenticatorDataJSON);

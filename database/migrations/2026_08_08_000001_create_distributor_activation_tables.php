@@ -29,7 +29,7 @@ return new class extends Migration
         DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_status_check CHECK (status IN ('PENDING_ACTIVATION', 'ACTIVE', 'DISABLED'))");
         DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_activation_check CHECK (status <> 'ACTIVE' OR (activated_at IS NOT NULL AND activated_by IS NOT NULL))");
         DB::statement('ALTER TABLE distributors ADD CONSTRAINT distributors_lock_version_check CHECK (lock_version >= 1)');
-        DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number ~ '^DIS-[0-9]{4}-[0-9]{6,}$')");
+        DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number REGEXP '^DIS-[0-9]{4}-[0-9]{6,}$')");
 
         Schema::table('coordinator_distributor_assignments', function (Blueprint $table): void {
             $table->foreign('distributor_id')->references('id')->on('distributors')->restrictOnDelete();
@@ -37,6 +37,7 @@ return new class extends Migration
 
         Schema::table('user_role_scopes', function (Blueprint $table): void {
             $table->foreignUuid('scope_id')->nullable()->after('scope_type')->constrained('distributors')->restrictOnDelete();
+            $table->string('active_distributor_scope_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'DISTRIBUTOR', CONCAT(user_id, ':', role_id, ':', scope_id), NULL)")->unique();
             $table->index(['scope_type', 'scope_id', 'status']);
         });
         DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
@@ -47,10 +48,6 @@ return new class extends Migration
             OR (scope_type = 'BRANCH' AND branch_id IS NOT NULL AND scope_id IS NULL)
             OR (scope_type = 'DISTRIBUTOR' AND branch_id IS NOT NULL AND scope_id IS NOT NULL)
         )");
-        DB::statement("CREATE UNIQUE INDEX user_role_scopes_active_distributor_unique
-            ON user_role_scopes (user_id, role_id, scope_id)
-            WHERE status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'DISTRIBUTOR'");
-
         Schema::table('audit_logs', function (Blueprint $table): void {
             $table->string('trace_id')->nullable()->index()->after('request_id');
         });
@@ -61,6 +58,7 @@ return new class extends Migration
             $table->foreignUuid('category_version_id')->constrained('category_versions')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            $table->uuid('current_distributor_unique')->nullable()->virtualAs('IF(ends_at IS NULL, distributor_id, NULL)')->unique();
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->string('reason')->nullable();
             $table->timestampsTz();
@@ -69,7 +67,6 @@ return new class extends Migration
             $table->index(['category_version_id', 'starts_at']);
         });
 
-        DB::statement('CREATE UNIQUE INDEX distributor_category_current_unique ON distributor_category_assignments (distributor_id) WHERE ends_at IS NULL');
         DB::statement('ALTER TABLE distributor_category_assignments ADD CONSTRAINT distributor_category_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
 
         Schema::create('credit_lines', function (Blueprint $table): void {
@@ -106,6 +103,7 @@ return new class extends Migration
             $table->timestampTz('created_at')->useCurrent();
 
             $table->unique(['type', 'source_type', 'source_id']);
+            $table->unique('idempotency_key');
             $table->unique(['credit_line_id', 'sequence']);
             $table->index(['credit_line_id', 'occurred_at']);
             $table->index(['distributor_id', 'occurred_at']);
@@ -113,7 +111,6 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_amount_check CHECK (amount > 0)');
         DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
-        DB::statement('CREATE UNIQUE INDEX credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
 
         Schema::create('credit_usage_restrictions', function (Blueprint $table): void {
             $table->uuid('id')->primary();
@@ -121,6 +118,7 @@ return new class extends Migration
             $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
             $table->string('type', 48);
             $table->string('status', 20)->default('ACTIVE');
+            $table->uuid('current_credit_line_unique')->nullable()->virtualAs("IF(status IN ('ACTIVE', 'RESERVED'), credit_line_id, NULL)")->unique();
             $table->decimal('base_total', 19, 4);
             $table->decimal('tolerance_amount', 19, 4);
             $table->foreignUuid('configuration_version_id')->constrained('configuration_versions')->restrictOnDelete();
@@ -151,35 +149,15 @@ return new class extends Migration
             OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
             OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
         )");
-        DB::statement("CREATE UNIQUE INDEX credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
 
-        DB::statement(<<<'SQL'
-            CREATE OR REPLACE FUNCTION prevent_distributor_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'Las distribuidoras no se eliminan físicamente.';
-            END;
-            $$ LANGUAGE plpgsql
-        SQL);
-        DB::statement('CREATE TRIGGER trg_prevent_distributor_deletion BEFORE DELETE ON distributors FOR EACH ROW EXECUTE FUNCTION prevent_distributor_deletion()');
-
-        DB::statement(<<<'SQL'
-            CREATE OR REPLACE FUNCTION prevent_distributor_category_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'El historial de categorías no se elimina físicamente.';
-            END;
-            $$ LANGUAGE plpgsql
-        SQL);
-        DB::statement('CREATE TRIGGER trg_prevent_distributor_category_deletion BEFORE DELETE ON distributor_category_assignments FOR EACH ROW EXECUTE FUNCTION prevent_distributor_category_deletion()');
+        DB::statement("CREATE TRIGGER trg_prevent_distributor_deletion BEFORE DELETE ON distributors FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Las distribuidoras no se eliminan fisicamente.'");
+        DB::statement("CREATE TRIGGER trg_prevent_distributor_category_deletion BEFORE DELETE ON distributor_category_assignments FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'El historial de categorias no se elimina fisicamente.'");
     }
 
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_category_deletion ON distributor_category_assignments');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_category_deletion()');
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_deletion ON distributors');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_deletion()');
+        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_category_deletion');
+        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_deletion');
 
         Schema::dropIfExists('credit_usage_restrictions');
         Schema::dropIfExists('credit_line_movements');

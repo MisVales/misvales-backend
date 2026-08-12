@@ -18,7 +18,7 @@ return new class extends Migration {
             $table->timestampTz('visited_at')->nullable();
             $table->string('result', 50)->nullable();
             $table->text('observations')->nullable();
-            $table->jsonb('differences_payload')->nullable();
+            $table->json('differences_payload')->nullable();
             $table->decimal('latitude', 10, 7)->nullable();
             $table->decimal('longitude', 10, 7)->nullable();
             $table->decimal('location_accuracy_meters', 10, 2)->nullable();

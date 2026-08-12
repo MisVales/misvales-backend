@@ -15,6 +15,8 @@ return new class extends Migration
 
             $table->string('scope_type', 20)->nullable();
             $table->string('status', 20)->nullable();
+            $table->string('active_global_unique', 80)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'GLOBAL', CONCAT(user_id, ':', role_id), NULL)")->unique();
+            $table->string('active_branch_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND branch_id IS NOT NULL, CONCAT(user_id, ':', role_id, ':', branch_id), NULL)")->unique();
             $table->timestampsTz();
         });
 
@@ -38,22 +40,6 @@ return new class extends Migration
             $table->index(['scope_type', 'status']);
         });
 
-        DB::statement(<<<'SQL'
-            CREATE UNIQUE INDEX user_role_scopes_active_global_unique
-            ON user_role_scopes (user_id, role_id, scope_type)
-            WHERE status = 'ACTIVE'
-              AND revoked_at IS NULL
-              AND scope_type = 'GLOBAL';
-        SQL);
-
-        DB::statement(<<<'SQL'
-            CREATE UNIQUE INDEX user_role_scopes_active_branch_unique
-            ON user_role_scopes (user_id, role_id, branch_id, scope_type)
-            WHERE status = 'ACTIVE'
-              AND revoked_at IS NULL
-              AND branch_id IS NOT NULL
-        SQL);
-
         // 10. Checks requeridos
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_type CHECK (scope_type IN ('GLOBAL', 'BRANCH'));");
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_urs_status CHECK (status IN ('ACTIVE', 'ENDED', 'REVOKED'));");
@@ -67,25 +53,17 @@ return new class extends Migration
             (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
         );");
 
-        DB::statement(<<<'SQL'
-            CREATE OR REPLACE FUNCTION prevent_urs_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'No se deben eliminar físicamente asignaciones anteriores.';
-            END;
-            $$ LANGUAGE plpgsql;
-        SQL);
-        DB::statement('
+        DB::unprepared(<<<'SQL'
             CREATE TRIGGER trg_prevent_urs_deletion
             BEFORE DELETE ON user_role_scopes
-            FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
-        ');
+            FOR EACH ROW
+            SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'No se deben eliminar fisicamente asignaciones anteriores.'
+        SQL);
     }
 
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
+        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion');
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
@@ -116,7 +94,5 @@ return new class extends Migration
             $table->dropColumn(['scope_type', 'status', 'created_at', 'updated_at']);
         });
 
-        DB::statement('CREATE UNIQUE INDEX user_role_scopes_global_unique ON user_role_scopes (user_id, role_id) WHERE branch_id IS NULL AND revoked_at IS NULL');
-        DB::statement('CREATE UNIQUE INDEX user_role_scopes_branch_unique ON user_role_scopes (user_id, role_id, branch_id) WHERE branch_id IS NOT NULL AND revoked_at IS NULL');
     }
 };

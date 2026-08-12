@@ -46,7 +46,11 @@ return new class extends Migration
             OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
             OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
         )");
-        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
+        if (! Schema::hasColumn('credit_usage_restrictions', 'current_credit_line_unique')) {
+            Schema::table('credit_usage_restrictions', function (Blueprint $table): void {
+                $table->uuid('current_credit_line_unique')->nullable()->virtualAs("IF(status IN ('ACTIVE', 'RESERVED'), credit_line_id, NULL)")->unique();
+            });
+        }
     }
 
     public function down(): void

@@ -19,18 +19,11 @@ return new class extends Migration
         });
 
         DB::statement('CREATE SEQUENCE IF NOT EXISTS branches_code_sequence START WITH 1');
-        DB::statement('ALTER SEQUENCE branches_code_sequence OWNED BY branches.code');
-        DB::statement(<<<'SQL'
-            SELECT setval(
-                'branches_code_sequence',
-                COALESCE((
-                    SELECT MAX(CAST(substring(code FROM 5) AS BIGINT))
-                    FROM branches
-                    WHERE code ~ '^SUC-[0-9]+$'
-                ), 0) + 1,
-                false
-            )
-            SQL);
+        $next = ((int) DB::table('branches')
+            ->where('code', 'regexp', '^SUC-[0-9]+$')
+            ->selectRaw('MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)) AS sequence_value')
+            ->value('sequence_value')) + 1;
+        DB::statement("ALTER SEQUENCE branches_code_sequence RESTART WITH {$next}");
     }
 
     public function down(): void

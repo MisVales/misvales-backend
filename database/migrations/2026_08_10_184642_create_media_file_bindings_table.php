@@ -30,7 +30,7 @@ return new class extends Migration
             DB::statement("
                 INSERT INTO media_file_bindings (id, media_file_id, owner_type, owner_id, purpose, created_by, created_at, updated_at)
                 SELECT
-                    gen_random_uuid(),
+                    UUID(),
                     id,
                     'verification_visit',
                     verification_visit_id,

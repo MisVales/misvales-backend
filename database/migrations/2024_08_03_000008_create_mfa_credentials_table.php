@@ -28,7 +28,7 @@ return new class extends Migration
             $table->string('credential_identifier')->nullable();
             $table->text('public_key')->nullable();
             $table->unsignedBigInteger('sign_count')->nullable();
-            $table->jsonb('transports')->nullable();
+            $table->json('transports')->nullable();
             $table->string('aaguid')->nullable();
             $table->string('attestation_format')->nullable();
             $table->string('rp_id')->nullable();

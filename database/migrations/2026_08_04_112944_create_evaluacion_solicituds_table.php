@@ -12,7 +12,7 @@ return new class extends Migration {
             $table->uuid('verification_visit_id');
             $table->string('result', 50);
             $table->text('reason');
-            $table->jsonb('evaluation_payload')->nullable();
+            $table->json('evaluation_payload')->nullable();
             $table->uuid('evaluated_by');
             $table->timestampTz('evaluated_at');
             $table->timestampsTz();

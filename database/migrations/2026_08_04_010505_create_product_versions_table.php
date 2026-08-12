@@ -19,6 +19,7 @@ return new class extends Migration
             $table->decimal('insurance_amount', 19, 4);
             $table->smallInteger('fortnights');
             $table->string('status');
+            $table->uuid('current_published_product_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, product_id, NULL)")->unique();
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason');
@@ -32,12 +33,6 @@ return new class extends Migration
             $table->index(['product_id', 'effective_from', 'effective_to']);
             $table->index(['status', 'effective_from']);
         });
-
-        DB::statement("
-            CREATE UNIQUE INDEX product_versions_open_published_unique
-            ON product_versions (product_id)
-            WHERE status = 'PUBLISHED' AND effective_to IS NULL;
-        ");
 
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0);');

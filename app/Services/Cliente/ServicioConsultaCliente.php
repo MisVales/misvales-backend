@@ -102,10 +102,10 @@ final class ServicioConsultaCliente
             ->when($filtros['search'] ?? null, function (Builder $query, string $search): void {
                 $search = trim($search);
                 $query->where(function (Builder $subconsulta) use ($search): void {
-                    $subconsulta->where('client_number', 'ilike', "%{$search}%")
-                        ->orWhere('first_name', 'ilike', "%{$search}%")
-                        ->orWhere('first_last_name', 'ilike', "%{$search}%")
-                        ->orWhere('second_last_name', 'ilike', "%{$search}%");
+                    $subconsulta->where('client_number', 'like', "%{$search}%")
+                        ->orWhere('first_name', 'like', "%{$search}%")
+                        ->orWhere('first_last_name', 'like', "%{$search}%")
+                        ->orWhere('second_last_name', 'like', "%{$search}%");
                 });
             })
             ->when($filtros['branch_id'] ?? null, fn (Builder $query, string $id) => $query->whereHas('asignacionVigente', fn (Builder $a) => $a->where('branch_id', $id)))

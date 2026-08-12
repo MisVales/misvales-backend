@@ -15,6 +15,7 @@ return new class extends Migration
             $table->integer('version');
             $table->decimal('profit_rate', 9, 6);
             $table->string('status');
+            $table->uuid('current_published_category_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, category_id, NULL)")->unique();
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason');
@@ -27,12 +28,6 @@ return new class extends Migration
             $table->index(['category_id', 'status']);
             $table->index(['category_id', 'effective_from', 'effective_to']);
         });
-
-        DB::statement("
-            CREATE UNIQUE INDEX category_versions_open_published_unique
-            ON category_versions (category_id)
-            WHERE status = 'PUBLISHED' AND effective_to IS NULL;
-        ");
 
         DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_rate CHECK (profit_rate >= 0 AND profit_rate <= 1);');

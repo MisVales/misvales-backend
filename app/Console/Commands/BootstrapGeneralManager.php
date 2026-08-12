@@ -33,14 +33,14 @@ class BootstrapGeneralManager extends Command
      */
     public function handle()
     {
-        if (! env('INITIAL_GENERAL_MANAGER_ENABLED', true)) {
+        if (! config('production.initial_manager.enabled', false)) {
             $this->info('General Manager bootstrap is disabled in .env.');
 
             return;
         }
 
-        $email = env('INITIAL_GENERAL_MANAGER_EMAIL');
-        $name = env('INITIAL_GENERAL_MANAGER_NAME');
+        $email = config('production.initial_manager.email');
+        $name = config('production.initial_manager.name');
 
         if (empty($email) || empty($name)) {
             $this->error('Missing INITIAL_GENERAL_MANAGER_EMAIL or INITIAL_GENERAL_MANAGER_NAME in .env.');
