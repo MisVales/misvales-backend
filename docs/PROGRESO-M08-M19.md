@@ -198,3 +198,24 @@ Actividad: commits y publicación de `develop`.
 Último comando ejecutado: `php artisan test` completo.
 Resultado: 302 pruebas y 1537 aserciones aprobadas; vertical M08-M19 validada técnicamente.
 Siguiente paso exacto: crear commits backend/frontend, sincronizar y publicar `develop` si la red lo permite.
+
+## M19 — CIERRE
+Backend: almacenamiento privado, readiness, métricas, heartbeat, backup verificable y E2E integrados.
+Frontend: estado operativo integrado al centro de operación y suite Angular 22 global corregida.
+Migraciones: testing limpio y estado completo aprobados; migración M19 aplicada.
+Endpoints: `POST /media`, `GET /media/{media}/download`, `GET /health/readiness` y `GET /metrics`.
+Permisos: carga, descarga por sucursal y descarga global con validación de propietario/contexto.
+Eventos: auditoría de carga/descarga; heartbeat operativo persistido; outbox financiero existente preservado.
+Pruebas backend: 302 pruebas, 1537 aserciones, APROBADAS.
+Pruebas frontend: 41 archivos, 92 pruebas y build productivo, APROBADOS.
+Prueba humana: BLOQUEO_EXTERNO — `test@gmail.com` no existe en la base local y no se recreó sin canal seguro para su credencial.
+Errores pendientes: Pint global conserva deuda histórica fuera del alcance; PHPStan/lint/e2e no están configurados.
+Commit backend funcional M19: `4bd5e2f`.
+Commit frontend M19: `e414fb0`.
+Estado: COMPLETO TÉCNICAMENTE; publicación y sesión humana condicionadas a red/cuenta local.
+
+## Resumen Git M08-M19
+Backend SHA inicial: `21e101b533f8684e7a7cd3982943b1fef578f8c5`.
+Frontend SHA inicial: `332d7f187d855cca67e95f8386097ca7cb009097`.
+Backend commits: `ce0c238`, `c949c3d`, `6f60a84`, `07c254d`, `62a2c8a`, `d28d962`, `7156900`, `fd84a9a`, `b93c1e5`, `4e10d5d`, `08be2dd`, `4bd5e2f`.
+Frontend commits: `3e3354f`, `19bd82d`, `9c24994`, `326b2ee`, `0bbfc5c`, `b2d8618`, `fe5f592`, `99e16d8`, `b1b5fc1`, `90bdfbc`, `a60a837`, `e414fb0`.
