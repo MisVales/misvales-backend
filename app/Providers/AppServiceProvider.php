@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RedemptionPeriod;
 use App\Models\SolicitudDistribuidora;
+use App\Models\Vale;
 use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
 use App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository;
 use App\Modules\Organization\Application\Branches\AddressValidator;
@@ -40,6 +41,7 @@ use App\Policies\BranchPolicy;
 use App\Policies\CoordinatorAssignmentPolicy;
 use App\Policies\DistribuidoraPolicy;
 use App\Policies\SolicitudDistribuidoraPolicy;
+use App\Policies\ValePolicy;
 use App\Services\Distribuidora\AuditorDistribuidora;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
@@ -91,6 +93,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(CoordinatorDistributorAssignment::class, CoordinatorAssignmentPolicy::class);
         Gate::policy(Distribuidora::class, DistribuidoraPolicy::class);
         Gate::policy(SolicitudDistribuidora::class, SolicitudDistribuidoraPolicy::class);
+        Gate::policy(Vale::class, ValePolicy::class);
 
         ConfigurationDefinition::observe(VersionObserver::class);
         ConfigurationVersion::observe(VersionObserver::class);

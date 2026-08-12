@@ -14,7 +14,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | Módulo | Backend | Frontend | Integración | Tests | Estado |
 |---|---|---|---|---|---|
 | M08 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M09 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M09 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M10 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M11 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M12 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -59,11 +59,30 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Resultado frontend: APROBADO; bundle Angular generado.
 - Prueba humana local: autenticación con la cuenta técnica local indicada, acceso a `/distribuidoras/lineas-credito` y `/distribuidoras/incrementos-linea`, estados vacíos reales y sin errores de consola.
 - Nota de datos: la cuenta técnica tiene alcance global, pero el ambiente local no contiene líneas ni solicitudes M08; las mutaciones se validaron mediante pruebas HTTP con factories para los actores requeridos.
+- Commit backend M08: `ce0c238` — `feat: completar integración de líneas de crédito`.
+- Commit frontend M08: `3e3354f` — `feat: integrar líneas de crédito e incrementos`.
+- Publicación M08: PENDIENTE. `git push origin develop` falló en ambos repositorios porque no existe conectividad a `github.com:443` desde la sesión actual; no se modificó historial ni remoto.
+
+### 2026-08-12 — implementación y validación M09
+- Estado inicial: no existían tablas, modelos, endpoints, servicios, pruebas ni feature Angular de vales; se reutilizaron M03 catálogos versionados, M06 clientes/asignaciones y M08 línea/restricción.
+- Migración: `2026_08_12_000001_create_voucher_module_tables.php`; crea secuencia de folios, bloqueos operativos por morosidad, vales, snapshot, parcialidades, claves/índices/checks/FK y protección contra eliminación física.
+- Backend: enums, modelos, excepción de dominio, calculador decimal, servicio transaccional, Policy, Request, Resource y `ValeController`.
+- Endpoints: catálogo elegible, preview autoritativo, generación idempotente, listado por alcance y detalle; no existe endpoint genérico de cambio de estado.
+- Reglas cubiertas: PREVALE global, VALE_DIGITAL posterior y tras transferencia, distribuidora activa, morosidad, asociación vigente, producto publicado/activo, categoría vigente, línea, regla 50 %, folio PostgreSQL no reutilizable, snapshot y parcialidades con residuo en la última.
+- Contrato: `docs/openapi.yml` ampliado con códigos de dominio, schemas y cinco operaciones M09.
+- Pruebas backend M09: APROBADAS, 12 pruebas y 63 aserciones; incluyen cálculo, precisión, residuo, primer/segundo vale, transferencia, 20 folios únicos, morosidad, adeudo informativo no bloqueante, producto, saldo, propiedad, regla 50 %, snapshot y administrador solo lectura.
+- Migración limpia PostgreSQL: APROBADA hasta M09. Se corrigieron creación idempotente de secuencia y función de protección para convivir con `migrate:fresh`.
+- Pruebas combinadas M08+M09 previas a los dos casos finales: APROBADAS, 27 pruebas y 113 aserciones.
+- Frontend: nueva feature `vales`, cliente HTTP, rutas con guard, navegación por permisos, búsqueda de cliente, producto, preview financiero, explicación de rango, confirmación, folio, siguiente paso e historial.
+- Frontend tests combinados M08+M09: APROBADOS, 8 pruebas.
+- Build Angular: APROBADO.
+- Prueba humana: sesión técnica local autenticada como gerente general; `/vales` carga en modo consulta, muestra estado vacío real y no expone el formulario de distribuidora. Las mutaciones se validaron con actors/factories porque la cuenta técnica debe conservar separación de funciones.
+- Incidencia local: la migración limpia eliminó roles del ambiente compartido; se restauraron exclusivamente con `RolesAndPermissionsSeeder` y la sesión técnica volvió a autenticar. No se crearon credenciales nuevas.
 
 ## Checkpoint actual
 Módulo: M09
-Actividad: inventario previo de prevales, vales digitales y motor financiero existente.
+Actividad: revisión final, commits estables y registro de SHAs.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
-Último comando ejecutado: prueba humana local de las dos vistas M08 con sesión técnica.
-Resultado: autenticación y navegación correctas, endpoints respondieron sin errores de consola; ambiente sin datos M08.
-Siguiente paso exacto: crear commits M08 enfocados en backend y frontend, registrar SHAs, y auditar código/migraciones/rutas/pruebas existentes de M09 antes de crear archivos.
+Último comando ejecutado: pruebas enfocadas M09 después de casos de transferencia y reserva de 20 folios.
+Resultado: APROBADO, 12 pruebas y 63 aserciones.
+Siguiente paso exacto: ejecutar validación combinada final M08+M09, revisar diffs, crear commits M09 enfocados y comenzar auditoría M10.

@@ -91,6 +91,11 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'credit_lines', 'action' => 'reject_assigned', 'code' => 'credit_increase_requests.reject_assigned', 'description' => 'Rechazar operativamente solicitudes asignadas'],
             ['module' => 'credit_lines', 'action' => 'decide_branch', 'code' => 'credit_increase_requests.decide_branch', 'description' => 'Decidir solicitudes de sucursal'],
             ['module' => 'credit_lines', 'action' => 'decide_global', 'code' => 'credit_increase_requests.decide_global', 'description' => 'Decidir solicitudes globalmente'],
+            ['module' => 'vouchers', 'action' => 'create_own', 'code' => 'vouchers.create_own', 'description' => 'Generar vales propios'],
+            ['module' => 'vouchers', 'action' => 'view_own', 'code' => 'vouchers.view_own', 'description' => 'Consultar vales propios'],
+            ['module' => 'vouchers', 'action' => 'view_assigned', 'code' => 'vouchers.view_assigned', 'description' => 'Consultar vales asignados'],
+            ['module' => 'vouchers', 'action' => 'view_branch', 'code' => 'vouchers.view_branch', 'description' => 'Consultar vales de sucursal'],
+            ['module' => 'vouchers', 'action' => 'view_global', 'code' => 'vouchers.view_global', 'description' => 'Consultar vales globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -172,6 +177,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                     'credit_lines.view_branch', 'credit_line_movements.view_branch',
                     'credit_increase_requests.view_branch', 'credit_increase_requests.decide_branch',
+                    'vouchers.view_branch',
                 ]);
             }
 
@@ -181,6 +187,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                     'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
+                    'vouchers.view_global',
                 ]);
             }
 
@@ -192,6 +199,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_lines.view_assigned', 'credit_line_movements.view_assigned',
                     'credit_increase_requests.view_assigned', 'credit_increase_requests.preauthorize_assigned',
                     'credit_increase_requests.reject_assigned',
+                    'vouchers.view_assigned',
                 ]);
             }
 
@@ -202,6 +210,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
                     'credit_lines.view_own', 'credit_line_movements.view_own', 
                     'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
+                    'vouchers.create_own', 'vouchers.view_own',
                 ]);
             }
         }

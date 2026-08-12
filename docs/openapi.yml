@@ -37,7 +37,7 @@ components:
             code:
               type: string
               example: CLIENT_CURP_EXISTS
-              enum: [CLIENT_CURP_EXISTS, CLIENT_ADDRESS_EXISTS, CLIENT_NOT_FOUND, CLIENT_SCOPE_DENIED, CLIENT_ASSIGNMENT_NOT_ACTIVE, CLIENT_BANK_ACCOUNT_INVALID, CLIENT_BANK_ACCOUNT_CONFLICT, CLIENT_PORTFOLIO_ENTRY_INVALID, CLIENT_PORTFOLIO_BALANCE_NEGATIVE, CLIENT_PORTFOLIO_ENTRY_IMMUTABLE, RESOURCE_VERSION_CONFLICT, AUTH_SCOPE_DENIED, CLIENT_VALIDATION_FAILED]
+              enum: [CLIENT_CURP_EXISTS, CLIENT_ADDRESS_EXISTS, CLIENT_NOT_FOUND, CLIENT_SCOPE_DENIED, CLIENT_ASSIGNMENT_NOT_ACTIVE, CLIENT_BANK_ACCOUNT_INVALID, CLIENT_BANK_ACCOUNT_CONFLICT, CLIENT_PORTFOLIO_ENTRY_INVALID, CLIENT_PORTFOLIO_BALANCE_NEGATIVE, CLIENT_PORTFOLIO_ENTRY_IMMUTABLE, RESOURCE_VERSION_CONFLICT, AUTH_SCOPE_DENIED, CLIENT_VALIDATION_FAILED, VOUCHER_CREATE_FORBIDDEN, DISTRIBUTOR_NOT_ACTIVE, DISTRIBUTOR_DELINQUENCY_BLOCK, CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR, PRODUCT_NOT_AVAILABLE, DISTRIBUTOR_CATEGORY_NOT_AVAILABLE, CREDIT_INSUFFICIENT, CREDIT_50_PERCENT_RULE_NOT_SATISFIED]
             message: { type: string }
             fields: { type: object, additionalProperties: true }
             details: { type: object, additionalProperties: true }
@@ -142,6 +142,31 @@ components:
         entries_count: { type: integer }
         has_overdue_entries: { type: boolean }
         is_transfer_balance_zero: { type: boolean }
+    VoucherInput:
+      type: object
+      required: [client_id, product_version_id]
+      properties:
+        client_id: { type: string, format: uuid }
+        product_version_id: { type: string, format: uuid }
+    Voucher:
+      type: object
+      required: [id, folio, type, status, capital, misvales_total, distributor_profit_total, client_total, fortnights_count]
+      properties:
+        id: { type: string, format: uuid }
+        folio: { type: string, pattern: '^VAL-\d{4}-\d{8}$' }
+        type: { type: string, enum: [PREVALE, VALE_DIGITAL] }
+        status: { type: string, enum: [GENERATED, CASH_VALIDATION, CORRECTION_PENDING, RELEASED, CASHED, REJECTED, CANCELLED] }
+        capital: { type: string, pattern: '^\d+(\.\d{4})$' }
+        loan_commission_amount: { type: string, pattern: '^\d+(\.\d{4})$' }
+        interest_total: { type: string, pattern: '^\d+(\.\d{4})$' }
+        insurance_amount: { type: string, pattern: '^\d+(\.\d{4})$' }
+        misvales_total: { type: string, pattern: '^\d+(\.\d{4})$' }
+        distributor_profit_total: { type: string, pattern: '^\d+(\.\d{4})$' }
+        client_total: { type: string, pattern: '^\d+(\.\d{4})$' }
+        client_payment_per_fortnight: { type: string, pattern: '^\d+(\.\d{4})$' }
+        fortnights_count: { type: integer, minimum: 1 }
+        financial_snapshot: { type: object, additionalProperties: true }
+        installments: { type: array, items: { type: object, additionalProperties: true } }
 
 paths:
   /auth/invitations/inspect:
@@ -585,3 +610,63 @@ paths:
         '404': { description: Movimiento o cliente inexistente }
         '409': { description: RESOURCE_VERSION_CONFLICT }
         '422': { description: Importe, tipo, cliente o distribuidora son inmutables }
+
+  /voucher-products:
+    get:
+      summary: Listar versiones de producto elegibles para generar vales
+      tags: [Vouchers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Productos activos con versión publicada vigente }
+        '403': { description: Solo una distribuidora autorizada puede generar }
+
+  /vouchers/preview:
+    post:
+      summary: Previsualizar cálculo financiero autoritativo
+      tags: [Vouchers]
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VoucherInput' } } }
+      responses:
+        '200': { description: Tipo, elegibilidad, línea, rango y cálculo confirmados por Laravel }
+        '403': { description: Sin permiso, content: { application/json: { schema: { $ref: '#/components/schemas/DomainError' } } } }
+        '404': { description: Cliente no asociado }
+        '409': { description: Producto, categoría, morosidad, línea o restricción impiden generar }
+        '422': { description: Identificadores inválidos }
+
+  /vouchers:
+    get:
+      summary: Listar vales conforme a propiedad y alcance
+      tags: [Vouchers]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Página de vales visibles }
+        '403': { description: Sin permiso de consulta }
+    post:
+      summary: Generar prevale o vale digital
+      tags: [Vouchers]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: Idempotency-Key, in: header, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content: { application/json: { schema: { $ref: '#/components/schemas/VoucherInput' } } }
+      responses:
+        '201': { description: Vale, folio, snapshot y parcialidades creados, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Voucher' } } } } } }
+        '403': { description: Sin permiso }
+        '404': { description: Cliente no asociado }
+        '409': { description: Regla de negocio o concurrencia rechazada }
+        '422': { description: Entrada inválida }
+
+  /vouchers/{voucher}:
+    get:
+      summary: Consultar detalle y parcialidades de un vale
+      tags: [Vouchers]
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - { name: voucher, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        '200': { description: Vale visible, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Voucher' } } } } } }
+        '403': { description: Fuera de alcance }
+        '404': { description: Vale inexistente }

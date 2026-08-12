@@ -25,6 +25,7 @@ use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\UserController;
+use App\Http\Controllers\Api\V1\ValeController;
 use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
@@ -280,5 +281,12 @@ Route::prefix('v1')->group(function () {
         Route::post('credit-increase-requests/{solicitud}/reject-by-coordinator', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'rejectByCoordinator']);
         Route::post('credit-increase-requests/{solicitud}/manager-decision', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'decide'])
             ->middleware('idempotency');
+
+        // Módulo 09 - Prevales, vales digitales y motor financiero
+        Route::get('voucher-products', [ValeController::class, 'products']);
+        Route::post('vouchers/preview', [ValeController::class, 'preview']);
+        Route::post('vouchers', [ValeController::class, 'store'])->middleware('idempotency');
+        Route::get('vouchers', [ValeController::class, 'index']);
+        Route::get('vouchers/{vale}', [ValeController::class, 'show']);
     });
 });
