@@ -1,32 +1,40 @@
 <?php
 
+use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
+use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\ClienteController;
 use App\Http\Controllers\Api\V1\ConfiguracionController;
 use App\Http\Controllers\Api\V1\CoordinatorAssignmentController;
+use App\Http\Controllers\Api\V1\Credito\CrearSolicitudIncrementoController;
+use App\Http\Controllers\Api\V1\Credito\LineaCreditoConsultaController;
+use App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController;
+use App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
 use App\Http\Controllers\Api\V1\InvitationListController;
+use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PeriodoCanjeController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProductoController;
-use App\Http\Controllers\Api\V1\SolicitudDistribuidoraController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\SessionController;
+use App\Http\Controllers\Api\V1\SolicitudDistribuidoraController;
+use App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\ValeController;
-use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
@@ -63,8 +71,6 @@ Route::prefix('v1')->group(function () {
         Route::post('password/forgot', [ForgotPasswordController::class, 'forgotPassword'])->middleware('throttle:forgot_password');
         Route::post('password/reset', [ResetPasswordController::class, 'resetPassword']);
 
-
-
         // Rutas protegidas de la API (Zero Trust Layer)
         Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
             Route::post('logout', [AuthController::class, 'logout']);
@@ -73,16 +79,16 @@ Route::prefix('v1')->group(function () {
 
     // Rutas públicas o protegidas para el catálogo de direcciones
     Route::prefix('address')->group(function () {
-        Route::get('states', [\App\Http\Controllers\AddressController::class, 'getStates']);
-        Route::get('states/{estado}/municipalities', [\App\Http\Controllers\AddressController::class, 'getMunicipalities']);
-        Route::get('zip-codes/{code}', [\App\Http\Controllers\AddressController::class, 'getInfoByZipCode']);
-        Route::post('autocomplete', [\App\Http\Controllers\AddressController::class, 'autocomplete']);
-        Route::post('geocode', [\App\Http\Controllers\AddressController::class, 'geocode']);
+        Route::get('states', [AddressController::class, 'getStates']);
+        Route::get('states/{estado}/municipalities', [AddressController::class, 'getMunicipalities']);
+        Route::get('zip-codes/{code}', [AddressController::class, 'getInfoByZipCode']);
+        Route::post('autocomplete', [AddressController::class, 'autocomplete']);
+        Route::post('geocode', [AddressController::class, 'geocode']);
     });
 
     // Perfil y Permisos
     Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
-        
+
         // Módulo 4 - Solicitud Distribuidora
         Route::get('distributor-applications', [SolicitudDistribuidoraController::class, 'index']);
         Route::post('distributor-applications', [SolicitudDistribuidoraController::class, 'store']);
@@ -272,15 +278,15 @@ Route::prefix('v1')->group(function () {
             ->middleware('permission:clients.manage_portfolio');
 
         // Módulo 08 - Líneas de Crédito e Incrementos
-        Route::get('distributors/{distributor}/credit-line', [\App\Http\Controllers\Api\V1\Credito\LineaCreditoConsultaController::class, 'show']);
-        Route::get('distributors/{distributor}/credit-line/movements', [\App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController::class, 'index']);
-        Route::post('distributors/{distributor}/credit-increase-requests', [\App\Http\Controllers\Api\V1\Credito\CrearSolicitudIncrementoController::class, 'store'])->middleware('idempotency');
-        Route::get('me/credit-line', [\App\Http\Controllers\Api\V1\LineaCreditoController::class, 'me']);
-        Route::get('credit-increase-requests', [\App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController::class, 'index']);
-        Route::get('credit-increase-requests/{solicitud}', [\App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController::class, 'show']);
-        Route::post('credit-increase-requests/{solicitud}/preauthorize', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'preauthorize']);
-        Route::post('credit-increase-requests/{solicitud}/reject-by-coordinator', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'rejectByCoordinator']);
-        Route::post('credit-increase-requests/{solicitud}/manager-decision', [\App\Http\Controllers\Api\V1\SolicitudIncrementoLineaController::class, 'decide'])
+        Route::get('distributors/{distributor}/credit-line', [LineaCreditoConsultaController::class, 'show']);
+        Route::get('distributors/{distributor}/credit-line/movements', [MovimientoLineaCreditoConsultaController::class, 'index']);
+        Route::post('distributors/{distributor}/credit-increase-requests', [CrearSolicitudIncrementoController::class, 'store'])->middleware('idempotency');
+        Route::get('me/credit-line', [LineaCreditoController::class, 'me']);
+        Route::get('credit-increase-requests', [SolicitudIncrementoLineaConsultaController::class, 'index']);
+        Route::get('credit-increase-requests/{solicitud}', [SolicitudIncrementoLineaConsultaController::class, 'show']);
+        Route::post('credit-increase-requests/{solicitud}/preauthorize', [SolicitudIncrementoLineaController::class, 'preauthorize']);
+        Route::post('credit-increase-requests/{solicitud}/reject-by-coordinator', [SolicitudIncrementoLineaController::class, 'rejectByCoordinator']);
+        Route::post('credit-increase-requests/{solicitud}/manager-decision', [SolicitudIncrementoLineaController::class, 'decide'])
             ->middleware('idempotency');
 
         // Módulo 09 - Prevales, vales digitales y motor financiero
@@ -299,5 +305,10 @@ Route::prefix('v1')->group(function () {
         Route::get('voucher-modification-requests', [CajaValeController::class, 'listModifications']);
         Route::post('voucher-modification-requests/{solicitud}/decision', [CajaValeController::class, 'decideModification'])->middleware('idempotency');
         Route::post('voucher-modification-requests/{solicitud}/apply', [CajaValeController::class, 'applyModification'])->middleware('idempotency');
+
+        // Módulo 11 - Cortes, parcialidades y relaciones
+        Route::get('relations', [RelacionDistribuidoraController::class, 'index']);
+        Route::get('relations/{relacion}', [RelacionDistribuidoraController::class, 'show']);
+        Route::get('relations/{relacion}/download', [RelacionDistribuidoraController::class, 'download']);
     });
 });

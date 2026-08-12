@@ -670,3 +670,50 @@ paths:
         '200': { description: Vale visible, content: { application/json: { schema: { type: object, properties: { data: { $ref: '#/components/schemas/Voucher' } } } } } }
         '403': { description: Fuera de alcance }
         '404': { description: Vale inexistente }
+
+  /cashier/vouchers/search:
+    get:
+      summary: Buscar vales de la sucursal para caja
+      tags: [Voucher Cashier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: search, in: query, required: true, schema: { type: string, minLength: 2 } }]
+      responses: { '200': { description: Vales de la sucursal }, '403': { description: Sin permiso de caja } }
+
+  /cashier/vouchers/{voucher}/release:
+    post:
+      summary: Liberar un vale tras validar identidad
+      tags: [Voucher Cashier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: voucher, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Vale liberado }, '409': { description: Estado o versión inválidos } }
+
+  /cashier/vouchers/{voucher}/cash:
+    post:
+      summary: Registrar el depósito externo y feriar el vale
+      tags: [Voucher Cashier]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: voucher, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Vale feriado y línea actualizada }, '409': { description: Revalidación financiera fallida } }
+
+  /relations:
+    get:
+      summary: Listar relaciones conforme al alcance
+      tags: [Relations]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Página de relaciones visibles }, '403': { description: Sin alcance } }
+
+  /relations/{relation}:
+    get:
+      summary: Consultar estado de cuenta, partidas y snapshots
+      tags: [Relations]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: relation, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Relación con partidas }, '404': { description: Fuera de alcance o inexistente } }
+
+  /relations/{relation}/download:
+    get:
+      summary: Descargar documento histórico de relación
+      tags: [Relations]
+      security: [{ bearerAuth: [] }]
+      parameters: [{ name: relation, in: path, required: true, schema: { type: string, format: uuid } }]
+      responses: { '200': { description: Documento HTML descargable }, '403': { description: Descarga no autorizada }, '404': { description: Fuera de alcance } }

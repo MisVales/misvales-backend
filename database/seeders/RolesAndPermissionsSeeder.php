@@ -99,6 +99,12 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'vouchers', 'action' => 'cash_branch', 'code' => 'vouchers.cash_branch', 'description' => 'Operar caja y feriado en sucursal'],
             ['module' => 'voucher_modifications', 'action' => 'authorize_branch', 'code' => 'voucher_modifications.authorize_branch', 'description' => 'Autorizar correcciones de sucursal'],
             ['module' => 'voucher_modifications', 'action' => 'authorize_global', 'code' => 'voucher_modifications.authorize_global', 'description' => 'Autorizar correcciones globalmente'],
+            ['module' => 'relations', 'action' => 'view_own', 'code' => 'relations.view_own', 'description' => 'Consultar relaciones propias'],
+            ['module' => 'relations', 'action' => 'view_branch', 'code' => 'relations.view_branch', 'description' => 'Consultar relaciones de sucursal'],
+            ['module' => 'relations', 'action' => 'view_global', 'code' => 'relations.view_global', 'description' => 'Consultar relaciones globalmente'],
+            ['module' => 'relations', 'action' => 'download_own', 'code' => 'relations.download_own', 'description' => 'Descargar relaciones propias'],
+            ['module' => 'relations', 'action' => 'download_branch', 'code' => 'relations.download_branch', 'description' => 'Descargar relaciones de sucursal'],
+            ['module' => 'relations', 'action' => 'download_global', 'code' => 'relations.download_global', 'description' => 'Descargar relaciones globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -182,6 +188,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.view_branch', 'credit_increase_requests.decide_branch',
                     'vouchers.view_branch',
                     'voucher_modifications.authorize_branch',
+                    'relations.view_branch', 'relations.download_branch',
                 ]);
             }
 
@@ -192,6 +199,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'clients.view_bank_accounts', 'clients.view_portfolio',
                     'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                     'vouchers.view_global',
+                    'relations.view_global',
                 ]);
             }
 
@@ -213,14 +221,15 @@ class RolesAndPermissionsSeeder extends Seeder
                     'distributors.view', 'distributors.view_category_history', 'distributors.view_initial_credit',
                     'clients.view', 'clients.create', 'clients.view_bank_accounts',
                     'clients.manage_bank_accounts', 'clients.view_portfolio', 'clients.manage_portfolio',
-                    'credit_lines.view_own', 'credit_line_movements.view_own', 
+                    'credit_lines.view_own', 'credit_line_movements.view_own',
                     'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                     'vouchers.create_own', 'vouchers.view_own',
+                    'relations.view_own', 'relations.download_own',
                 ]);
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch']);
             }
         }
     }

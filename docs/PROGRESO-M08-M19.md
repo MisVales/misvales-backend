@@ -16,7 +16,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M08 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M09 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M10 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M11 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M11 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M12 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M13 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M14 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -92,10 +92,19 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Pruebas frontend M09-M10: APROBADAS, 6 pruebas con jsdom. Build Angular y formato: APROBADOS.
 - Prueba humana: el controlador local no conservó la navegación al abrir una pestaña nueva; se registra la limitación sin declarar evidencia visual inexistente.
 
+### 2026-08-12 — implementación y validación M11
+- Persistencia: ejecuciones de proceso, relaciones y partidas con unicidad por distribuidora/corte, referencia única y vínculo único de cada parcialidad.
+- Corte: comando `relations:generate`, scheduler configurable en `America/Monterrey`, reintentos registrados y selección de todas las parcialidades exigibles de vales ya feriados, incluidos vales antiguos.
+- Configuración: día 25, 00:05 y límite inicial de 20 días; periodo anticipado y datos bancarios deben estar publicados/configurados o el proceso falla cerrado y registra el error.
+- Snapshots: encabezado operativo, línea/disponible cuando existe fuente, banco, producto, cliente, folio, componentes financieros, totales y estados. Campos sin fuente autoritativa todavía se conservan nulos.
+- API/frontend: listado por propiedad/sucursal/global, detalle, referencia copiable, partidas, totales y descarga autorizada; administrador consulta pero no descarga.
+- Pruebas backend combinadas M08-M11: APROBADAS, 22 pruebas y 130 aserciones. Migración limpia y rutas API: APROBADAS.
+- Pruebas frontend M09-M11: APROBADAS, 8 pruebas. Build Angular y verificaciones de formato: APROBADOS.
+
 ## Checkpoint actual
-Módulo: M11
-Actividad: auditoría inicial del contrato de expediente y entrega posterior al feriado.
+Módulo: M12
+Actividad: auditoría inicial de archivo bancario y conciliación manual.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
 Último comando ejecutado: commits M09 enfocados en backend y frontend.
 Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: leer el contrato completo M11, inventariar código existente y mantener el límite de que M11 consume únicamente vales ya feriados.
+Siguiente paso exacto: leer el contrato M12 e implementar importación privada de Excel sin integración bancaria.

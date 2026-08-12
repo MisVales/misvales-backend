@@ -4,3 +4,8 @@ use Illuminate\Support\Facades\Schedule;
 
 Schedule::command('organization:publish-outbox --limit=100')
     ->everyMinute();
+
+Schedule::command('relations:generate')
+    ->monthlyOn((int) config('relations.cutoff_day'), config('relations.cutoff_time'))
+    ->timezone(config('relations.timezone'))
+    ->withoutOverlapping();
