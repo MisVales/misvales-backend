@@ -15,9 +15,11 @@ use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Redis;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use Mockery;
 use Tests\TestCase;
 
 final class CierreOperativoApiTest extends TestCase
@@ -62,11 +64,32 @@ final class CierreOperativoApiTest extends TestCase
 
     public function test_readiness_verifica_dependencias_y_metricas_no_exponen_pii(): void
     {
+        Storage::fake('private');
+        $redis = Mockery::mock();
+        $redis->shouldReceive('ping')->once()->andReturn(true);
+        Redis::shouldReceive('connection')->once()->with('health')->andReturn($redis);
         $this->artisan('operations:heartbeat')->assertSuccessful();
         $this->getJson('/api/v1/health/readiness')->assertOk()->assertJsonPath('status', 'ready')->assertJsonPath('checks.postgresql', true)->assertJsonPath('checks.private_storage', true)->assertJsonPath('checks.scheduler', true);
         $metrics = $this->get('/api/v1/metrics')->assertOk()->assertHeader('content-type', 'text/plain; version=0.0.4; charset=UTF-8')->getContent();
         self::assertStringContainsString('misvales_failed_jobs', $metrics);
         self::assertStringNotContainsString('password', strtolower($metrics));
+    }
+
+    public function test_readiness_degrada_sin_esperar_una_dependencia_redis_caida(): void
+    {
+        Storage::fake('private');
+        $redis = Mockery::mock();
+        $redis->shouldReceive('ping')->once()->andThrow(new \RuntimeException('Redis no disponible'));
+        Redis::shouldReceive('connection')->once()->with('health')->andReturn($redis);
+        $this->artisan('operations:heartbeat')->assertSuccessful();
+
+        $startedAt = microtime(true);
+        $this->getJson('/api/v1/health/readiness')
+            ->assertServiceUnavailable()
+            ->assertJsonPath('status', 'not_ready')
+            ->assertJsonPath('checks.redis', false);
+
+        self::assertLessThan(1.0, microtime(true) - $startedAt);
     }
 
     private function user(string $roleCode, ?string $branchId = null): User

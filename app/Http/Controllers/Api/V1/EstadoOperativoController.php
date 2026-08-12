@@ -14,7 +14,7 @@ final class EstadoOperativoController extends Controller
 {
     public function readiness(): JsonResponse
     {
-        $checks = ['postgresql' => $this->check(fn () => DB::selectOne('SELECT 1')), 'redis' => $this->check(fn () => Redis::connection('queue')->ping()), 'private_storage' => $this->storage(), 'scheduler' => $this->scheduler()];
+        $checks = ['postgresql' => $this->check(fn () => DB::selectOne('SELECT 1')), 'redis' => $this->check(fn () => Redis::connection('health')->ping()), 'private_storage' => $this->storage(), 'scheduler' => $this->scheduler()];
         $ready = ! in_array(false, $checks, true);
 
         return response()->json(['status' => $ready ? 'ready' : 'not_ready', 'checks' => $checks, 'failed_jobs' => DB::table('failed_jobs')->count(), 'queued_jobs' => config('queue.default') === 'database' ? DB::table('jobs')->count() : null, 'checked_at' => now()->toIso8601String()], $ready ? 200 : 503);
