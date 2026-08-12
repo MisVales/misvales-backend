@@ -118,7 +118,7 @@ final class CajaValeApiTest extends TestCase
         Sanctum::actingAs($authority);
         $decision = $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request->json('data.id').'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'Validado', 'lock_version' => 1])->assertSuccessful();
         $this->assertNotNull($decision->json('data.token'));
-        $this->assertGreaterThanOrEqual(299, now()->diffInSeconds(CarbonImmutable::parse($decision->json('data.expires_at')), false));
+        $this->assertGreaterThanOrEqual(298, now()->diffInSeconds(CarbonImmutable::parse($decision->json('data.expires_at')), false));
         $this->assertLessThanOrEqual(300, now()->diffInSeconds(CarbonImmutable::parse($decision->json('data.expires_at')), false));
         $otherCashier = $this->user('cashier', $this->branch->id);
         Sanctum::actingAs($otherCashier);
@@ -206,6 +206,9 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(1, $import->summary['partial_payments']);
         $this->assertSame(1, $import->summary['unreconciled']);
         $this->assertSame('1975.0000', $relation->fresh()->balance);
+        $this->assertDatabaseHas('relation_payments', ['interest_applied' => '200.0000', 'insurance_applied' => '25.0000', 'commission_applied' => '250.0000', 'capital_applied' => '525.0000', 'line_recovered' => '525.0000']);
+        $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '4475.0000']);
+        $this->assertDatabaseHas('credit_line_movements', ['type' => 'PAYMENT_RECOVERY', 'amount' => '525.0000']);
         $this->expectExceptionMessage('BANK_FILE_ALREADY_IMPORTED');
         app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
     }

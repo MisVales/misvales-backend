@@ -18,7 +18,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M10 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M11 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M12 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M13 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M13 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M14 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M15 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M16 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -110,10 +110,20 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Pruebas backend combinadas M08-M12: APROBADAS, 24 pruebas y 138 aserciones; incluyen XLSX real, columna ausente, doble archivo, abono y referencia inexistente. Migración limpia aprobada.
 - Pruebas frontend M11-M12: APROBADAS, 3 pruebas. Build Angular y formato: APROBADOS.
 
+### 2026-08-12 — implementación y validación M13
+- Libro financiero: pagos y allocations inmutables por relación/partida/componente, con un único allocation por movimiento bancario.
+- Orden: recargo, interés, seguro, comisión y capital; ganancia de categoría no reduce saldo exigible ni recupera línea.
+- Recuperación: solo capital aplicado reduce `used_balance`, nunca debajo de cero; movimiento `PAYMENT_RECOVERY` y saldo materializado se guardan en la misma transacción.
+- Determinismo: partidas ordenadas por vencimiento, folio y número; reintento del mismo movimiento es rechazado sin doble aplicación.
+- Liquidación: momento preciso y clasificación EARLY/ON_TIME/LATE conforme a periodo anticipado y fecha límite congelados.
+- Frontend: detalle de pagos, allocations, línea recuperada, saldo y comportamiento dentro del estado de cuenta.
+- Caso numérico validado: pago 1000 = interés 200 + seguro 25 + comisión 250 + capital/recuperación 525; used_balance 5000 → 4475.
+- Pruebas M13: APROBADAS dentro de 10 pruebas/65 aserciones del flujo M10-M13; frontend 3 pruebas y build Angular aprobados.
+
 ## Checkpoint actual
-Módulo: M13
-Actividad: auditoría inicial del libro financiero de pagos y recuperación de línea.
+Módulo: M14
+Actividad: auditoría inicial de recargos, excedentes, saldos a favor y devoluciones.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
 Último comando ejecutado: commits M09 enfocados en backend y frontend.
 Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: implementar aplicación contable por orden obligatorio y recuperación exclusiva de capital.
+Siguiente paso exacto: implementar recargo único, ledger de excedentes y devolución autorizada sin exceder la línea total.

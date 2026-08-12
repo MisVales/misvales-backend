@@ -28,7 +28,7 @@ final class RelacionDistribuidoraController extends Controller
     {
         $this->authorizeView($relacion, $request);
 
-        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario'])]);
+        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'pagos'])]);
     }
 
     public function download(RelacionDistribuidora $relacion, Request $request): Response
