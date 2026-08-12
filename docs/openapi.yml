@@ -737,3 +737,38 @@ paths:
       tags: [Bank Reconciliation]
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: Movimientos conciliados, excedentes, duplicados y no conciliados } }
+
+  /surpluses:
+    get:
+      summary: Consultar excedentes por propiedad y alcance
+      tags: [Surpluses and Refunds]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Excedentes disponibles, reservados o consumidos } }
+
+  /surpluses/{surplus}/credit-balance:
+    post:
+      summary: Elegir saldo a favor para relaciones posteriores
+      tags: [Surpluses and Refunds]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Excedente convertido en saldo a favor }, '409': { description: Decisión ya tomada } }
+
+  /surpluses/{surplus}/refund-requests:
+    post:
+      summary: Reservar excedente y solicitar devolución
+      tags: [Surpluses and Refunds]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Solicitud creada sin ejecutar operación bancaria }, '409': { description: Decisión ya tomada } }
+
+  /refund-requests/{refund}/decision:
+    post:
+      summary: Autorizar o rechazar devolución por alcance
+      tags: [Surpluses and Refunds]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Decisión auditada } }
+
+  /refund-requests/{refund}/execute:
+    post:
+      summary: Registrar devolución externa ejecutada con evidencia
+      tags: [Surpluses and Refunds]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Ejecución manual registrada }, '409': { description: Solicitud no autorizada } }

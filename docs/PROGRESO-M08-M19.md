@@ -19,7 +19,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M11 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M12 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M13 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M14 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M14 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M15 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M16 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M17 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -120,10 +120,20 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Caso numérico validado: pago 1000 = interés 200 + seguro 25 + comisión 250 + capital/recuperación 525; used_balance 5000 → 4475.
 - Pruebas M13: APROBADAS dentro de 10 pruebas/65 aserciones del flujo M10-M13; frontend 3 pruebas y build Angular aprobados.
 
+### 2026-08-12 — implementación y validación M14
+- Recargo: configuración inicial 300, evaluación 08:30 y unicidad relación/tipo. Sin archivo bancario procesado antes de 08:00 se difiere, audita y no altera saldo.
+- Excedente: solo el saldo exigible se aplica; remanente queda PENDING_DECISION y se notifica mediante estado persistente, sin ampliar línea.
+- Saldo a favor: elección explícita, consumo FIFO en relaciones posteriores, aplicación parcial/total por el mismo allocator contable de M13 y conservación del remanente.
+- Devolución: reserva exclusiva, autorización/rechazo por alcance y registro posterior por cajera con método, referencia y evidencia privada; no existe integración bancaria.
+- Invariantes: disponible+reservado nunca supera el original; el mismo monto no puede estar disponible y reservado; decisiones/reintentos no duplican recargo ni consumo.
+- Frontend: excedentes propios, elección de destino, historial, bandeja gerencial y captura de ejecución manual para cajera.
+- Pruebas backend combinadas M08-M14: APROBADAS, 26 pruebas y 161 aserciones; pruebas enfocadas de excedente/devolución: 2 pruebas y 22 aserciones. Migración limpia aprobada.
+- Frontend M11-M14: 4 pruebas y build Angular aprobados.
+
 ## Checkpoint actual
-Módulo: M14
-Actividad: auditoría inicial de recargos, excedentes, saldos a favor y devoluciones.
+Módulo: M15
+Actividad: auditoría inicial del libro de puntos y canjes.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
 Último comando ejecutado: commits M09 enfocados en backend y frontend.
 Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: implementar recargo único, ledger de excedentes y devolución autorizada sin exceder la línea total.
+Siguiente paso exacto: implementar puntos exclusivamente por liquidación anticipada y canjes contra periodos publicados.

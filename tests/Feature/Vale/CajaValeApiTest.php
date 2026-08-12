@@ -14,10 +14,15 @@ use App\Models\Cliente;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
 use App\Models\Distribuidora;
+use App\Models\ExcedenteDistribuidora;
+use App\Models\ImportacionArchivoBancario;
 use App\Models\LineaCredito;
+use App\Models\MediaFile;
+use App\Models\MovimientoBancario;
 use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RelacionDistribuidora;
+use App\Models\RelacionPartidaDistribuidora;
 use App\Models\RestriccionUsoCredito;
 use App\Models\Role;
 use App\Models\SolicitudModificacionVale;
@@ -25,6 +30,8 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
+use App\Services\Excedente\ServicioExcedente;
+use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -225,6 +232,74 @@ final class CajaValeApiTest extends TestCase
         }
         $this->assertDatabaseHas('bank_file_imports', ['status' => 'REJECTED', 'error' => 'BANK_FILE_REQUIRED_COLUMNS_MISSING']);
         $this->assertDatabaseCount('bank_movements', 0);
+    }
+
+    public function test_recargo_es_unico_y_se_difiere_sin_archivo_bancario_valido(): void
+    {
+        config()->set('relations.advance_period_days', 10);
+        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
+        $this->voucher->update(['status' => 'CASHED']);
+        $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDays(30)]);
+        app(ServicioGeneracionRelacion::class)->generar(now('America/Monterrey')->subDays(25)->toImmutable());
+        $relation = RelacionDistribuidora::firstOrFail();
+        $relation->update(['payment_deadline_at' => now()->subDay()->endOfDay()]);
+        $service = app(ServicioEvaluacionRecargo::class);
+        $this->assertSame(1, $service->evaluar(now('America/Monterrey')->toImmutable())['deferred']);
+        $this->assertSame('2975.0000', $relation->fresh()->balance);
+        ImportacionArchivoBancario::create(['private_path' => 'private/test.xlsx', 'file_hash' => hash('sha256', 'fee-file'), 'uploaded_by' => $this->cashier->id, 'branch_id' => $this->branch->id, 'status' => 'PROCESSED', 'created_at' => $relation->payment_deadline_at->addHours(2), 'updated_at' => $relation->payment_deadline_at->addHours(2)]);
+        $this->assertSame(1, $service->evaluar(now('America/Monterrey')->toImmutable())['applied']);
+        $this->assertSame(0, $service->evaluar(now('America/Monterrey')->toImmutable())['applied']);
+        $this->assertSame('3275.0000', $relation->fresh()->balance);
+        $this->assertDatabaseCount('relation_late_fees', 1);
+    }
+
+    public function test_excedente_no_se_duplica_y_puede_convertirse_en_saldo_a_favor(): void
+    {
+        Storage::fake('local');
+        config()->set('relations.advance_period_days', 10);
+        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
+        $this->voucher->update(['status' => 'CASHED']);
+        $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDay()]);
+        app(ServicioGeneracionRelacion::class)->generar(now('America/Monterrey')->toImmutable());
+        $relation = RelacionDistribuidora::firstOrFail();
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([[$relation->payment_reference, '4000', '2026-08-12 10:00:00', 'BANK-SURPLUS', 'Excedente']]), $this->cashier, $this->branch->id);
+        $surplus = ExcedenteDistribuidora::firstOrFail();
+        $this->assertSame('1025.0000', $surplus->available_amount);
+        $this->assertSame('PENDING_DECISION', $surplus->status);
+        app(ServicioExcedente::class)->elegirCredito($surplus, $this->distributorUser);
+        $this->assertSame('CREDIT_BALANCE', $surplus->fresh()->status);
+        $installment = $this->voucher->parcialidades()->create(['number' => 2, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->addDays(15)]);
+        $next = $relation->replicate(['id', 'payment_reference', 'cutoff_at', 'created_at', 'updated_at']);
+        $next->id = (string) Str::uuid();
+        $next->payment_reference = 'REL-NEXT-999';
+        $next->cutoff_at = now()->addMonth();
+        $next->portfolio_total = '3100';
+        $next->misvales_total = '2975';
+        $next->reconciled_total = '0';
+        $next->balance = '2975';
+        $next->financial_status = 'PENDING';
+        $next->settled_at = null;
+        $next->temporal_classification = null;
+        $next->save();
+        RelacionPartidaDistribuidora::create(['relation_id' => $next->id, 'voucher_installment_id' => $installment->id, 'snapshot' => ['folio' => $this->voucher->folio, 'installment' => 2, 'total_installments' => 4, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'client_payment' => '3100', 'misvales_payment' => '2975'], 'portfolio_amount' => '3100', 'misvales_amount' => '2975']);
+        app(ServicioExcedente::class)->aplicarDisponibles($next);
+        $this->assertSame('1950.0000', $next->fresh()->balance);
+        $this->assertSame('CONSUMED', $surplus->fresh()->status);
+        $this->assertDatabaseHas('relation_payments', ['source_type' => 'CREDIT_BALANCE', 'amount' => '1025.0000', 'capital_applied' => '550.0000']);
+
+        $movement = MovimientoBancario::create(['import_id' => ImportacionArchivoBancario::firstOrFail()->id, 'row_number' => 3, 'original_row' => [], 'payment_reference' => $relation->payment_reference, 'amount' => '300', 'paid_at' => now(), 'bank_folio' => 'BANK-REFUND', 'concept' => 'Excedente devolución', 'classification' => 'SURPLUS', 'relation_id' => $relation->id, 'surplus_amount' => '300']);
+        $refundSurplus = ExcedenteDistribuidora::create(['distributor_id' => $this->distributorUser->distribuidora->id, 'bank_movement_id' => $movement->id, 'original_amount' => '300', 'available_amount' => '300']);
+        $request = app(ServicioExcedente::class)->solicitarDevolucion($refundSurplus, $this->distributorUser);
+        $this->assertSame('0.0000', $refundSurplus->fresh()->available_amount);
+        $this->assertSame('300.0000', $refundSurplus->fresh()->reserved_amount);
+        $manager = $this->user('branch_manager', $this->branch->id);
+        Sanctum::actingAs($manager);
+        $this->postIdempotent('/api/v1/refund-requests/'.$request->id.'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'Procede'])->assertSuccessful()->assertJsonPath('data.status', 'AUTHORIZED');
+        $media = MediaFile::create(['file_type' => 'DOCUMENT', 'disk' => 'local', 'path' => 'private/refund.pdf', 'original_name' => 'refund.pdf', 'mime_type' => 'application/pdf', 'size_bytes' => 10, 'sha256' => hash('sha256', 'refund'), 'uploaded_by' => $this->cashier->id]);
+        Sanctum::actingAs($this->cashier);
+        $this->postIdempotent('/api/v1/refund-requests/'.$request->id.'/execute', ['method' => 'TRANSFERENCIA_EXTERNA', 'reference' => 'REF-001', 'evidence_media_id' => $media->id])->assertSuccessful()->assertJsonPath('data.status', 'EXECUTED');
+        $this->assertSame('REFUNDED', $refundSurplus->fresh()->status);
+        $this->assertSame('0.0000', $refundSurplus->fresh()->reserved_amount);
     }
 
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile

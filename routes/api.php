@@ -20,6 +20,7 @@ use App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController
 use App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\ExcedenteController;
 use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
@@ -320,5 +321,13 @@ Route::prefix('v1')->group(function () {
         Route::post('bank-movements/{movimiento}/manual-reconciliation-requests', [ConciliacionBancariaController::class, 'requestManual']);
         Route::post('manual-reconciliation-requests/{solicitud}/decision', [ConciliacionBancariaController::class, 'decideManual']);
         Route::post('manual-reconciliation-requests/{solicitud}/execute', [ConciliacionBancariaController::class, 'executeManual']);
+
+        // Módulo 14 - Recargos, excedentes y devoluciones
+        Route::get('surpluses', [ExcedenteController::class, 'index']);
+        Route::post('surpluses/{excedente}/credit-balance', [ExcedenteController::class, 'credit'])->middleware('idempotency');
+        Route::post('surpluses/{excedente}/refund-requests', [ExcedenteController::class, 'refund'])->middleware('idempotency');
+        Route::get('refund-requests', [ExcedenteController::class, 'refunds']);
+        Route::post('refund-requests/{solicitud}/decision', [ExcedenteController::class, 'decide'])->middleware('idempotency');
+        Route::post('refund-requests/{solicitud}/execute', [ExcedenteController::class, 'execute'])->middleware('idempotency');
     });
 });

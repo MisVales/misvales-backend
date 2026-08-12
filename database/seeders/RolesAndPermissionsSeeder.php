@@ -115,6 +115,12 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'manual_reconciliation', 'action' => 'authorize_branch', 'code' => 'manual_reconciliation.authorize_branch', 'description' => 'Autorizar conciliación manual de sucursal'],
             ['module' => 'manual_reconciliation', 'action' => 'authorize_global', 'code' => 'manual_reconciliation.authorize_global', 'description' => 'Autorizar conciliación manual global'],
             ['module' => 'manual_reconciliation', 'action' => 'execute_branch', 'code' => 'manual_reconciliation.execute_branch', 'description' => 'Ejecutar conciliación manual autorizada'],
+            ['module' => 'surpluses', 'action' => 'view_own', 'code' => 'surpluses.view_own', 'description' => 'Consultar excedentes propios'],
+            ['module' => 'surpluses', 'action' => 'view_branch', 'code' => 'surpluses.view_branch', 'description' => 'Consultar excedentes de sucursal'],
+            ['module' => 'surpluses', 'action' => 'view_global', 'code' => 'surpluses.view_global', 'description' => 'Consultar excedentes globalmente'],
+            ['module' => 'refunds', 'action' => 'authorize_branch', 'code' => 'refunds.authorize_branch', 'description' => 'Autorizar devoluciones de sucursal'],
+            ['module' => 'refunds', 'action' => 'authorize_global', 'code' => 'refunds.authorize_global', 'description' => 'Autorizar devoluciones globalmente'],
+            ['module' => 'refunds', 'action' => 'execute_branch', 'code' => 'refunds.execute_branch', 'description' => 'Registrar devolución externa ejecutada'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -201,6 +207,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'relations.view_branch', 'relations.download_branch',
                     'bank_imports.view_branch', 'bank_movements.view_branch',
                     'manual_reconciliation.authorize_branch',
+                    'surpluses.view_branch', 'refunds.authorize_branch',
                 ]);
             }
 
@@ -213,6 +220,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'vouchers.view_global',
                     'relations.view_global',
                     'bank_imports.view_global', 'bank_movements.view_global',
+                    'surpluses.view_global',
                 ]);
             }
 
@@ -241,11 +249,12 @@ class RolesAndPermissionsSeeder extends Seeder
                     'vouchers.create_own', 'vouchers.view_own',
                     'relations.view_own', 'relations.download_own',
                     'payment_clarifications.create_own',
+                    'surpluses.view_own',
                 ]);
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch']);
             }
         }
     }

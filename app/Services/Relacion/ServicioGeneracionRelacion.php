@@ -5,6 +5,7 @@ namespace App\Services\Relacion;
 use App\Models\AuditLog;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
+use App\Services\Excedente\ServicioExcedente;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -13,6 +14,8 @@ use Throwable;
 
 final class ServicioGeneracionRelacion
 {
+    public function __construct(private ServicioExcedente $surpluses) {}
+
     public function generar(CarbonImmutable $corte): int
     {
         $config = config('relations');
@@ -51,6 +54,7 @@ final class ServicioGeneracionRelacion
                 DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $item->distributor_profit, 'base_payment' => $item->misvales_payment, 'surcharge' => '0.0000', 'client_payment' => $item->client_payment, 'misvales_payment' => $item->misvales_payment, 'reconciled_payments' => '0.0000', 'balance' => $item->misvales_payment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $item->client_payment, 'misvales_amount' => $item->misvales_payment, 'created_at' => now()]);
             }
             AuditLog::create(['entity_type' => 'distributor_relation', 'event_name' => 'RelationGenerated', 'entity_id' => $relation->id, 'new_value' => ['cutoff_at' => $cutoff->toIso8601String(), 'items' => $items->count(), 'balance' => $misvales], 'result' => 'SUCCESS']);
+            $this->surpluses->aplicarDisponibles($relation);
         }
 
         return $groups->count();

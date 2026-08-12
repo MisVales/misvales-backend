@@ -3,10 +3,12 @@
 namespace App\Services\Pago;
 
 use App\Enums\TipoMovimientoLineaCredito;
+use App\Models\ExcedenteDistribuidora;
 use App\Models\MovimientoBancario;
 use App\Models\MovimientoLineaCredito;
 use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use RuntimeException;
@@ -15,15 +17,25 @@ final class ServicioAplicacionPago
 {
     public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation): PagoRelacion
     {
-        return DB::transaction(function () use ($movement, $relation): PagoRelacion {
+        return $this->distribuir($movement, $relation, 'BANK_MOVEMENT', $movement->id);
+    }
+
+    public function aplicarSaldoFavor(string $amount, CarbonImmutable $paidAt, RelacionDistribuidora $relation, string $surplusId): PagoRelacion
+    {
+        return $this->distribuir(new MovimientoBancario(['amount' => $amount, 'paid_at' => $paidAt]), $relation, 'CREDIT_BALANCE', $surplusId);
+    }
+
+    private function distribuir(MovimientoBancario $movement, RelacionDistribuidora $relation, string $sourceType, string $sourceId): PagoRelacion
+    {
+        return DB::transaction(function () use ($movement, $relation, $sourceType, $sourceId): PagoRelacion {
             $relation = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
-            if (PagoRelacion::where('bank_movement_id', $movement->id)->exists()) {
+            if (PagoRelacion::where('source_type', $sourceType)->where('source_id', $sourceId)->exists()) {
                 throw new RuntimeException('PAYMENT_ALREADY_ALLOCATED');
             }
             $available = bccomp($movement->amount, $relation->balance, 4) > 0 ? $relation->balance : $movement->amount;
             $applied = $available;
             $totals = ['SURCHARGE' => '0.0000', 'INTEREST' => '0.0000', 'INSURANCE' => '0.0000', 'LOAN_COMMISSION' => '0.0000', 'CAPITAL' => '0.0000'];
-            $payment = PagoRelacion::create(['relation_id' => $relation->id, 'bank_movement_id' => $movement->id, 'amount' => $applied, 'applied_at' => $movement->paid_at]);
+            $payment = PagoRelacion::create(['relation_id' => $relation->id, 'bank_movement_id' => $movement->exists ? $movement->id : null, 'source_type' => $sourceType, 'source_id' => $sourceId, 'amount' => $applied, 'applied_at' => $movement->paid_at]);
             $surchargePaid = (string) PagoRelacion::where('relation_id', $relation->id)->whereKeyNot($payment->id)->sum('surcharge_applied');
             $surchargePending = bcsub($relation->surcharge_total, $surchargePaid, 4);
             if (bccomp($surchargePending, '0', 4) > 0) {
@@ -67,7 +79,12 @@ final class ServicioAplicacionPago
             }$relation->save();
             $payment->update(['surcharge_applied' => $totals['SURCHARGE'], 'interest_applied' => $totals['INTEREST'], 'insurance_applied' => $totals['INSURANCE'], 'commission_applied' => $totals['LOAN_COMMISSION'], 'capital_applied' => $totals['CAPITAL'], 'line_recovered' => $recovered]);
             $surplus = bcsub($movement->amount, $applied, 4);
-            $movement->update(['relation_id' => $relation->id, 'classification' => bccomp($surplus, '0', 4) > 0 ? 'SURPLUS' : (bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT'), 'applied_amount' => $applied, 'surplus_amount' => $surplus]);
+            if ($movement->exists) {
+                $movement->update(['relation_id' => $relation->id, 'classification' => bccomp($surplus, '0', 4) > 0 ? 'SURPLUS' : (bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT'), 'applied_amount' => $applied, 'surplus_amount' => $surplus]);
+            }
+            if ($movement->exists && bccomp($surplus, '0', 4) > 0) {
+                ExcedenteDistribuidora::firstOrCreate(['bank_movement_id' => $movement->id], ['distributor_id' => $relation->distributor_id, 'original_amount' => $surplus, 'available_amount' => $surplus, 'status' => 'PENDING_DECISION']);
+            }
 
             return $payment->fresh();
         });

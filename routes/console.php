@@ -9,3 +9,5 @@ Schedule::command('relations:generate')
     ->monthlyOn((int) config('relations.cutoff_day'), config('relations.cutoff_time'))
     ->timezone(config('relations.timezone'))
     ->withoutOverlapping();
+
+Schedule::command('relations:evaluate-late-fees')->dailyAt(config('surcharges.evaluation_time'))->timezone(config('relations.timezone'))->withoutOverlapping();
