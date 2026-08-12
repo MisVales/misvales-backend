@@ -97,32 +97,49 @@ class EvolucionEsquemaTest extends TestCase
         $this->assertDatabaseHas('distributors', ['id' => $distribuidora->id, 'status' => 'DISABLED', 'activated_by' => $actor->id]);
     }
 
-    public function test_restriccion_cumple_ciclo_y_unicidad_vigente(): void
+    public function test_restriccion_cumple_integridad_referencial_ciclo_y_unicidad_vigente(): void
     {
-        $restriccion = RestriccionUsoCredito::factory()->create();
+        $restriccion = RestriccionUsoCredito::factory()->create([
+            'status' => 'ACTIVE',
+            'reserved_voucher_id' => null,
+            'reserved_at' => null,
+        ]);
         $this->esperarViolacion(fn () => RestriccionUsoCredito::factory()->create([
             'credit_line_id' => $restriccion->credit_line_id,
             'distributor_id' => $restriccion->distributor_id,
         ]));
 
-        $voucher = (string) str()->uuid();
-        $restriccion->update(['status' => 'RESERVED', 'reserved_voucher_id' => $voucher, 'reserved_at' => now()]);
-        $restriccion->update(['status' => 'CONSUMED', 'consumed_at' => now()]);
+        $this->esperarViolacion(fn () => $restriccion->update([
+            'status' => 'RESERVED',
+            'reserved_voucher_id' => (string) str()->uuid(),
+            'reserved_at' => now(),
+        ]));
+        $restriccion = $restriccion->fresh();
+        $restriccion->update([
+            'status' => 'CANCELLED',
+            'reserved_voucher_id' => null,
+            'reserved_at' => null,
+            'cancelled_at' => now(),
+        ]);
 
         RestriccionUsoCredito::factory()->create([
             'credit_line_id' => $restriccion->credit_line_id,
             'distributor_id' => $restriccion->distributor_id,
+            'status' => 'ACTIVE',
+            'reserved_voucher_id' => null,
+            'reserved_at' => null,
         ]);
-        $this->assertSame('CONSUMED', $restriccion->refresh()->status->value);
+        $this->assertSame('CANCELLED', $restriccion->refresh()->status->value);
 
-        $activa = RestriccionUsoCredito::factory()->create();
+        $activa = RestriccionUsoCredito::factory()->create([
+            'status' => 'ACTIVE',
+            'reserved_voucher_id' => null,
+            'reserved_at' => null,
+        ]);
         $activa->update(['status' => 'CANCELLED', 'cancelled_at' => now()]);
         $this->assertSame('CANCELLED', $activa->refresh()->status->value);
 
-        $reservada = RestriccionUsoCredito::factory()->reserved()->create();
-        $voucherReservado = $reservada->reserved_voucher_id;
-        $reservada->update(['status' => 'CANCELLED', 'cancelled_at' => now()]);
-        $this->assertSame($voucherReservado, $reservada->refresh()->reserved_voucher_id);
+        $this->esperarViolacion(fn () => RestriccionUsoCredito::factory()->reserved()->create());
     }
 
     public function test_movimientos_rechazan_snapshots_estructuralmente_imposibles(): void

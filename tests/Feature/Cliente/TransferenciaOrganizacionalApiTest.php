@@ -4,12 +4,18 @@ namespace Tests\Feature\Cliente;
 
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\AsignacionCategoriaDistribuidora;
 use App\Models\AsignacionClienteDistribuidora;
 use App\Models\Branch;
+use App\Models\Category;
+use App\Models\CategoryVersion;
 use App\Models\Cliente;
 use App\Models\CoordinatorDistributorAssignment;
 use App\Models\Distribuidora;
+use App\Models\LineaCredito;
 use App\Models\MovimientoCarteraCliente;
+use App\Models\Product;
+use App\Models\ProductVersion;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -38,6 +44,12 @@ final class TransferenciaOrganizacionalApiTest extends TestCase
         $coordinator = $this->user('coordinator', $branch->id);
         $origin = Distribuidora::factory()->active()->create(['user_id' => $originUser->id, 'branch_id' => $branch->id]);
         $receiver = Distribuidora::factory()->active()->create(['user_id' => $receiverUser->id, 'branch_id' => $branch->id]);
+        LineaCredito::factory()->create(['distributor_id' => $receiver->id, 'total_authorized' => '30000.0000', 'used_balance' => '0.0000']);
+        $category = Category::query()->create(['code' => 'TRANSFER-E2E', 'status' => 'ACTIVE', 'created_by' => $receiverUser->id]);
+        $categoryVersion = CategoryVersion::query()->create(['category_id' => $category->id, 'version' => 1, 'name' => 'Transferencia', 'profit_percentage' => '0.050000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'E2E', 'created_by' => $receiverUser->id, 'published_by' => $receiverUser->id, 'published_at' => now()]);
+        AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $receiver->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $receiverUser->id, 'reason' => 'E2E']);
+        $product = Product::query()->create(['code' => 'TRANSFER-10000', 'status' => 'ACTIVE', 'created_by' => $receiverUser->id]);
+        $productVersion = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale transferencia', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'E2E', 'created_by' => $receiverUser->id, 'published_by' => $receiverUser->id, 'published_at' => now()]);
         CoordinatorDistributorAssignment::query()->create(['coordinator_id' => $coordinator->id, 'distributor_id' => $origin->id, 'branch_id' => $branch->id, 'valid_from' => now()->subDay(), 'status' => 'ACTIVE', 'assigned_by' => $coordinator->id]);
         $client = Cliente::factory()->create(['created_by' => $originUser->id]);
         $assignment = AsignacionClienteDistribuidora::factory()->create(['client_id' => $client->id, 'distributor_id' => $origin->id, 'branch_id' => $branch->id, 'starts_at' => now()->subDay(), 'ends_at' => null, 'assigned_by' => $originUser->id]);
@@ -58,6 +70,9 @@ final class TransferenciaOrganizacionalApiTest extends TestCase
         $this->assertDatabaseMissing('client_distributor_assignments', ['id' => $assignment->id, 'ends_at' => null]);
         $this->assertDatabaseHas('client_distributor_assignments', ['client_id' => $client->id, 'distributor_id' => $receiver->id, 'ends_at' => null]);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'CLIENT_TRANSFER_COMPLETED']);
+        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $client->id, 'product_version_id' => $productVersion->id])
+            ->assertSuccessful()
+            ->assertJsonPath('data.type', 'VALE_DIGITAL');
     }
 
     public function test_rechazos_no_cambian_asignacion_y_transiciones_no_se_saltan(): void

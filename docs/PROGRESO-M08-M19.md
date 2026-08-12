@@ -21,10 +21,10 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 | M13 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M14 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M15 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M16 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
-| M17 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
-| M18 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
-| M19 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M16 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
+| M17 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
+| M18 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
+| M19 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 
 ## Registro
 
@@ -175,10 +175,26 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Backend M18 enfocado: 4 pruebas y 157 aserciones APROBADAS; incluyen destinatarios reales, reintento sin duplicados, propiedad de lectura, ejecución de los 22 reportes, auditoría inmutable, sanitización y correlación.
 - Frontend M18: spec HTTP y build Angular APROBADOS.
 
+### 2026-08-12 — implementación y validación M19
+- Archivos privados: carga centralizada con extensión, MIME real, tamaño máximo, hash SHA-256, propietario, contexto y alcance; movimiento a `storage/app/private` con nombre UUID y descarga autorizada `no-store`, sin URL pública permanente.
+- Seguridad: permisos `media.upload`, `media.download_branch` y `media.download_global`; validación de propietario real; denegación por defecto; idempotencia y rate limit; auditoría sin cuerpos ni secretos.
+- Operación: heartbeat del scheduler cada minuto; readiness real de PostgreSQL, Redis, storage privado y scheduler; métricas Prometheus agregadas sin PII. Verificación local: estado `ready`, cero jobs fallidos y worker drenado con `--stop-when-empty`.
+- Respaldo: scripts PowerShell para PostgreSQL, archivos privados y configuración operativa; respaldo real generado fuera del repositorio y restaurado en una base aislada, con resultado `RESTORE_VERIFIED`, sin tocar la base fuente.
+- Infraestructura: se documentó topología para Cloudflare, balanceador, Nginx, Laravel, Angular, PostgreSQL principal/réplica de lectura tolerante a lag, Redis privado, workers y observabilidad. No se modificó el checkout Docker porque contiene trabajo concurrente no autorizado.
+- Frontend: el centro de operación consulta readiness y muestra por dependencia el estado operativo; la suite global quedó corregida para Angular 22 eliminando inicializaciones duplicadas de TestBed.
+- E2E financiero: recorrido único aprobado desde prevale/caja/feriado hasta dos XLSX, recuperación parcial de línea, liquidación anticipada y puntos; recorrido tardío aprobado con archivo procesado, recargo único, tres vencimientos, alerta, decisión manual, bloqueo, regularización, retiro y nuevo vale; movilidad aprobada desde saldo cero hasta transferencia completa y siguiente `VALE_DIGITAL`.
+- Contrato: endpoints de media, readiness y métricas documentados en `docs/openapi.yml`; 235 rutas API y seis procesos programados verificados.
+- Migraciones: `migrate:fresh --env=testing --seed --force` y `migrate:status --env=testing` aprobados, incluida `2026_08_12_000011_harden_private_media`.
+- Pruebas backend: suite completa final APROBADA, 302 pruebas y 1537 aserciones, incluidos los E2E financiero, tardío y de movilidad ya enlazados.
+- Pruebas frontend: 41 archivos y 92 pruebas APROBADAS; build productivo APROBADO. No existen scripts `lint` ni `e2e` en `package.json`.
+- Calidad: PHPStan no está instalado/configurado. `pint --test` global mantiene deuda histórica fuera de M08-M19; todos los PHP modificados para M19 y los E2E pasan Pint enfocado. `git diff --check` aprobado.
+- Prueba humana: `test@gmail.com` no existe actualmente en la base local después de la migración fresca previa. No se recreó porque hacerlo sin un canal secreto expondría o inventaría su credencial. Las sesiones y alcances se probaron mediante HTTP/Sanctum y la API local real.
+- Bloqueos externos: publicación pendiente de reintentar contra GitHub; la sesión técnica humana queda pendiente de restauración segura de la cuenta indicada.
+
 ## Checkpoint actual
-Módulo: M18
-Actividad: regresión acumulada, contrato y commits enfocados.
-Último archivo modificado: contrato OpenAPI, progreso y centro de operación Angular.
-Último comando ejecutado: pruebas M18, spec Angular y build.
-Resultado: vertical M18 aprobada; falta regresión acumulada M08-M18.
-Siguiente paso exacto: ejecutar regresión M08-M18, crear commits M18 y comenzar el cierre técnico M19.
+Módulo: M19
+Actividad: commits y publicación de `develop`.
+Último archivo modificado: progreso M08-M19 y pruebas E2E integradas.
+Último comando ejecutado: `php artisan test` completo.
+Resultado: 302 pruebas y 1537 aserciones aprobadas; vertical M08-M19 validada técnicamente.
+Siguiente paso exacto: crear commits backend/frontend, sincronizar y publicar `develop` si la red lo permite.

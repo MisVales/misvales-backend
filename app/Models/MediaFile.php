@@ -1,12 +1,15 @@
 <?php
+
 namespace App\Models;
 
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class MediaFile extends Model {
-    use \Illuminate\Database\Eloquent\Factories\HasFactory;
+class MediaFile extends Model
+{
+    use HasFactory;
     use HasUuids, SoftDeletes;
 
     protected $table = 'media_files';
@@ -19,15 +22,20 @@ class MediaFile extends Model {
         'mime_type',
         'size_bytes',
         'sha256',
-        'uploaded_by'
+        'uploaded_by',
+        'validation_status',
+        'validated_at',
     ];
+
+    protected $casts = ['validated_at' => 'immutable_datetime'];
 
     protected $hidden = [
         'path',
-        'disk'
+        'disk',
     ];
 
-    public function bindings() {
+    public function bindings()
+    {
         return $this->hasMany(MediaFileBinding::class);
     }
 }

@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\ArchivoPrivadoController;
 use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
@@ -21,6 +22,7 @@ use App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController
 use App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\EstadoOperativoController;
 use App\Http\Controllers\Api\V1\ExcedenteController;
 use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\LineaCreditoController;
@@ -60,6 +62,8 @@ Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
 });
 
 Route::prefix('v1')->group(function () {
+    Route::get('health/readiness', [EstadoOperativoController::class, 'readiness'])->middleware('throttle:60,1');
+    Route::get('metrics', [EstadoOperativoController::class, 'metrics'])->middleware('throttle:60,1');
     Route::prefix('auth')->group(function () {
         Route::post('invitations/inspect', [InvitationController::class, 'inspect'])->middleware('throttle:inspect_invitation');
         Route::post('invitations/resend', [InvitationController::class, 'resend'])->middleware('throttle:resend_invitation');
@@ -366,5 +370,7 @@ Route::prefix('v1')->group(function () {
         Route::get('reports/{report}', [CentroOperacionController::class, 'report']);
         Route::get('audit-logs', [CentroOperacionController::class, 'audits']);
         Route::get('operational-logs', [CentroOperacionController::class, 'logs']);
+        Route::post('media', [ArchivoPrivadoController::class, 'store'])->middleware(['idempotency', 'throttle:20,1']);
+        Route::get('media/{media}/download', [ArchivoPrivadoController::class, 'download'])->middleware('throttle:60,1');
     });
 });

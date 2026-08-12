@@ -149,6 +149,9 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'audit', 'action' => 'view_global', 'code' => 'audit.view_global', 'description' => 'Consultar auditoría inmutable global'],
             ['module' => 'logs', 'action' => 'view_branch', 'code' => 'logs.view_branch', 'description' => 'Consultar logs estructurados de sucursal'],
             ['module' => 'logs', 'action' => 'view_global', 'code' => 'logs.view_global', 'description' => 'Consultar logs estructurados globales'],
+            ['module' => 'media', 'action' => 'upload', 'code' => 'media.upload', 'description' => 'Cargar archivos privados en contextos autorizados'],
+            ['module' => 'media', 'action' => 'download_branch', 'code' => 'media.download_branch', 'description' => 'Descargar archivos privados de sucursal'],
+            ['module' => 'media', 'action' => 'download_global', 'code' => 'media.download_global', 'description' => 'Descargar archivos privados globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -240,6 +243,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
                     'client_transfers.view', 'organization_changes.view', 'organization_changes.manage_branch',
                     'notifications.view_own', 'reports.view_branch', 'audit.view_branch', 'logs.view_branch',
+                    'media.upload', 'media.download_branch',
                 ]);
             }
 
@@ -256,6 +260,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'risk.view_global',
                     'client_transfers.view', 'organization_changes.view',
                     'notifications.view_own', 'reports.view_global', 'audit.view_global', 'logs.view_global',
+                    'media.download_global',
                 ]);
             }
 
@@ -274,6 +279,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'risk.view_assigned', 'delinquency_removal.request_assigned',
                     'client_transfers.view', 'client_transfers.decide_assigned',
                     'notifications.view_own',
+                    'media.upload', 'media.download_branch',
                 ]);
             }
 
@@ -292,15 +298,16 @@ class RolesAndPermissionsSeeder extends Seeder
                     'risk.view_own',
                     'client_transfers.view', 'client_transfers.initiate_own', 'client_transfers.receive_own',
                     'notifications.view_own',
+                    'media.upload',
                 ]);
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch', 'notifications.view_own']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch', 'notifications.view_own', 'media.upload', 'media.download_branch']);
             }
 
             if ($roleData['code'] === 'verifier') {
-                $this->assignPerms($role, ['notifications.view_own']);
+                $this->assignPerms($role, ['notifications.view_own', 'media.upload', 'media.download_branch']);
             }
         }
     }
