@@ -805,3 +805,45 @@ paths:
       tags: [Points]
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: Canje entregado y movimiento creado }, '409': { description: Canje no autorizado } }
+
+  /risk-alerts:
+    get:
+      summary: Consultar alertas de riesgo por alcance
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Alertas visibles con evidencia de relaciones vencidas }, '403': { description: Sin alcance } }
+
+  /risk-alerts/{alert}/decision:
+    post:
+      summary: Aplicar o descartar formalmente la morosidad
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Decisión gerencial auditada }, '409': { description: Alerta ya decidida } }
+
+  /me/delinquency-status:
+    get:
+      summary: Consultar bloqueo propio por morosidad
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Estado propio y continuidad de pagos y aclaraciones }, '403': { description: No es distribuidora } }
+
+  /distributors/{distributor}/delinquency-removal-requests:
+    post:
+      summary: Preparar retiro de morosidad tras regularización financiera
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '201': { description: Solicitud creada por coordinador asignado }, '409': { description: Aún existe saldo vencido o no hay bloqueo } }
+
+  /delinquency-removal-requests:
+    get:
+      summary: Consultar solicitudes de retiro por alcance
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Solicitudes visibles } }
+
+  /delinquency-removal-requests/{request}/decision:
+    post:
+      summary: Autorizar o rechazar retiro de morosidad
+      tags: [Distributor Risk]
+      security: [{ bearerAuth: [] }]
+      responses: { '200': { description: Decisión gerencial e historial preservado }, '409': { description: Solicitud ya decidida } }

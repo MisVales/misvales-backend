@@ -126,6 +126,15 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'points', 'action' => 'authorize_branch', 'code' => 'points.authorize_branch', 'description' => 'Autorizar canjes de sucursal'],
             ['module' => 'points', 'action' => 'authorize_global', 'code' => 'points.authorize_global', 'description' => 'Autorizar canjes globalmente'],
             ['module' => 'points', 'action' => 'deliver_branch', 'code' => 'points.deliver_branch', 'description' => 'Registrar entrega de canje en sucursal'],
+            ['module' => 'risk', 'action' => 'view_assigned', 'code' => 'risk.view_assigned', 'description' => 'Consultar alertas de distribuidoras asignadas'],
+            ['module' => 'risk', 'action' => 'view_own', 'code' => 'risk.view_own', 'description' => 'Consultar bloqueo propio de morosidad'],
+            ['module' => 'risk', 'action' => 'view_branch', 'code' => 'risk.view_branch', 'description' => 'Consultar alertas de sucursal'],
+            ['module' => 'risk', 'action' => 'view_global', 'code' => 'risk.view_global', 'description' => 'Consultar alertas globalmente'],
+            ['module' => 'delinquency', 'action' => 'decide_branch', 'code' => 'delinquency.decide_branch', 'description' => 'Decidir morosidad de sucursal'],
+            ['module' => 'delinquency', 'action' => 'decide_global', 'code' => 'delinquency.decide_global', 'description' => 'Decidir morosidad globalmente'],
+            ['module' => 'delinquency_removal', 'action' => 'request_assigned', 'code' => 'delinquency_removal.request_assigned', 'description' => 'Preparar retiro asignado'],
+            ['module' => 'delinquency_removal', 'action' => 'decide_branch', 'code' => 'delinquency_removal.decide_branch', 'description' => 'Decidir retiro en sucursal'],
+            ['module' => 'delinquency_removal', 'action' => 'decide_global', 'code' => 'delinquency_removal.decide_global', 'description' => 'Decidir retiro globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -214,6 +223,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'manual_reconciliation.authorize_branch',
                     'surpluses.view_branch', 'refunds.authorize_branch',
                     'points.authorize_branch', 'points.deliver_branch',
+                    'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
                 ]);
             }
 
@@ -227,6 +237,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'relations.view_global',
                     'bank_imports.view_global', 'bank_movements.view_global',
                     'surpluses.view_global',
+                    'risk.view_global',
                 ]);
             }
 
@@ -242,6 +253,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'voucher_modifications.authorize_branch',
                     'bank_movements.view_branch',
                     'manual_reconciliation.authorize_branch',
+                    'risk.view_assigned', 'delinquency_removal.request_assigned',
                 ]);
             }
 
@@ -257,6 +269,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'payment_clarifications.create_own',
                     'surpluses.view_own',
                     'points.view_own', 'points.redeem_own',
+                    'risk.view_own',
                 ]);
             }
 

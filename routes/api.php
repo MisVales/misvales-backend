@@ -30,6 +30,7 @@ use App\Http\Controllers\Api\V1\ProductoController;
 use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
 use App\Http\Controllers\Api\V1\SecurityEventController;
@@ -337,5 +338,13 @@ Route::prefix('v1')->group(function () {
         Route::get('point-redemption-requests', [PuntosController::class, 'requests']);
         Route::post('point-redemption-requests/{solicitud}/decision', [PuntosController::class, 'decide'])->middleware('idempotency');
         Route::post('point-redemption-requests/{solicitud}/deliver', [PuntosController::class, 'deliver'])->middleware('idempotency');
+
+        // Módulo 16 - Riesgo y morosidad exclusiva de distribuidora
+        Route::get('risk-alerts', [RiesgoDistribuidoraController::class, 'alerts']);
+        Route::get('me/delinquency-status', [RiesgoDistribuidoraController::class, 'me']);
+        Route::post('risk-alerts/{alerta}/decision', [RiesgoDistribuidoraController::class, 'decide'])->middleware('idempotency');
+        Route::post('distributors/{distribuidora}/delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'requestRemoval'])->middleware('idempotency');
+        Route::get('delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'removals']);
+        Route::post('delinquency-removal-requests/{solicitud}/decision', [RiesgoDistribuidoraController::class, 'decideRemoval'])->middleware('idempotency');
     });
 });

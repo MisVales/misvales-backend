@@ -139,10 +139,21 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Pruebas backend combinadas M08-M15: APROBADAS, 28 pruebas y 175 aserciones; incluyen anticipado, floor tardío una vez, periodo cerrado, reserva, snapshot y entrega. Migración limpia aprobada.
 - Frontend M11-M15: 5 pruebas y build Angular aprobados.
 
+### 2026-08-12 — implementación y validación M16
+- Detección: el proceso programado evalúa únicamente relaciones vencidas de distribuidoras y crea alerta al tercer incumplimiento consecutivo; nunca marca morosidad automáticamente ni traslada la deuda al cliente.
+- Decisión: gerente de sucursal o general revisa evidencia y aplica o descarta; aplicar crea un bloqueo operativo que impide nuevos vales mediante el control existente de M09.
+- Continuidad: el bloqueo no impide consulta, pagos ni aclaraciones; la distribuidora ve el motivo y esas capacidades en su estado propio.
+- Regularización: saldo vencido cero permite al coordinador asignado preparar el retiro, pero no desbloquea; solo una decisión gerencial posterior libera el bloqueo y todo el historial permanece.
+- Persistencia: alertas, decisiones y solicitudes de retiro con actores, motivos, fechas, relaciones evidencia, saldos y estados; comando diario y permisos por propiedad/asignación/sucursal/global.
+- Frontend: pantalla diferenciada para distribuidora, coordinador, gerencias y administrador de solo lectura; alertas, evidencia, aplicación, preparación y decisión de retiro.
+- Contrato: seis operaciones M16 documentadas en `docs/openapi.yml`.
+- Backend M08-M16: migración limpia con seed APROBADA; 30 pruebas y 181 aserciones APROBADAS.
+- Frontend M16: spec HTTP aislado APROBADO y build Angular APROBADO. La ejecución directa de varios specs con Vitest no es válida en este proyecto porque cada spec histórico inicializa el entorno Angular; el spec M16 se validó mediante `ng test --include`.
+
 ## Checkpoint actual
 Módulo: M16
-Actividad: auditoría inicial de riesgo, morosidad y regularización de distribuidora.
-Último archivo modificado: docs/PROGRESO-M08-M19.md
-Último comando ejecutado: commits M09 enfocados en backend y frontend.
-Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
-Siguiente paso exacto: implementar detección de relaciones incumplidas y decisión formal de morosidad solo sobre la distribuidora.
+Actividad: cierre técnico M16 y preparación de commits enfocados.
+Último archivo modificado: docs/openapi.yml y feature Angular `riesgo`.
+Último comando ejecutado: `ng test --watch=false --include=src/app/features/riesgo/riesgo-api.service.spec.ts`.
+Resultado: backend 30 pruebas/181 aserciones, migración limpia y build Angular aprobados; spec M16 aprobado.
+Siguiente paso exacto: confirmar diff enfocado, crear commits M16 en ambos repositorios y comenzar auditoría M17.

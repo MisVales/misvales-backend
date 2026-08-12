@@ -5,6 +5,7 @@ namespace Tests\Feature\Vale;
 use App\Enums\EstadoVale;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\AlertaRiesgoDistribuidora;
 use App\Models\AsignacionCategoriaDistribuidora;
 use App\Models\AsignacionClienteDistribuidora;
 use App\Models\Branch;
@@ -13,6 +14,7 @@ use App\Models\CategoryVersion;
 use App\Models\Cliente;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
+use App\Models\CoordinatorDistributorAssignment;
 use App\Models\CuentaPuntos;
 use App\Models\Distribuidora;
 use App\Models\ExcedenteDistribuidora;
@@ -36,6 +38,7 @@ use App\Services\Excedente\ServicioExcedente;
 use App\Services\Puntos\ServicioPuntos;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
+use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -145,10 +148,10 @@ final class CajaValeApiTest extends TestCase
         $request = $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/modification-requests", ['fields' => ['curp'], 'reason' => 'Error'])->json('data');
         $authority = $this->user('branch_manager', $this->branch->id);
         Sanctum::actingAs($authority);
-        $decision = $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request['id'].'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'Sí', 'lock_version' => 1])->json('data');
+        $decision = $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request['id'].'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'SÃ­', 'lock_version' => 1])->json('data');
         Sanctum::actingAs($this->cashier);
         $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request['id'].'/apply', ['token' => 'DEADBEEF', 'lock_version' => 2, 'changes' => ['curp' => 'GODE561231HDFABC09']])->assertStatus(422)->assertJsonPath('error.code', 'MODIFICATION_TOKEN_INVALID');
-        $address = ['street' => 'Uno', 'exterior_number' => '1', 'neighborhood' => 'Centro', 'postal_code' => '64000', 'municipality' => 'Monterrey', 'city' => 'Monterrey', 'state' => 'Nuevo León', 'country' => 'MX'];
+        $address = ['street' => 'Uno', 'exterior_number' => '1', 'neighborhood' => 'Centro', 'postal_code' => '64000', 'municipality' => 'Monterrey', 'city' => 'Monterrey', 'state' => 'Nuevo LeÃ³n', 'country' => 'MX'];
         $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request['id'].'/apply', ['token' => $decision['token'], 'lock_version' => 2, 'changes' => ['address' => $address]])->assertForbidden()->assertJsonPath('error.code', 'MODIFICATION_FIELD_NOT_AUTHORIZED');
         SolicitudModificacionVale::query()->whereKey($request['id'])->update(['token_expires_at' => now()->subSecond()]);
         $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request['id'].'/apply', ['token' => $decision['token'], 'lock_version' => 2, 'changes' => ['curp' => 'GODE561231HDFABC09']])->assertStatus(409)->assertJsonPath('error.code', 'MODIFICATION_TOKEN_EXPIRED');
@@ -230,7 +233,7 @@ final class CajaValeApiTest extends TestCase
         $file = $this->xlsx([], ['referencia de pago', 'monto', 'fecha', 'folio bancario']);
         try {
             app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
-            $this->fail('Debió fallar');
+            $this->fail('DebiÃ³ fallar');
         } catch (\RuntimeException $e) {
             $this->assertSame('BANK_FILE_REQUIRED_COLUMNS_MISSING', $e->getMessage());
         }
@@ -292,7 +295,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('CONSUMED', $surplus->fresh()->status);
         $this->assertDatabaseHas('relation_payments', ['source_type' => 'CREDIT_BALANCE', 'amount' => '1025.0000', 'capital_applied' => '550.0000']);
 
-        $movement = MovimientoBancario::create(['import_id' => ImportacionArchivoBancario::firstOrFail()->id, 'row_number' => 3, 'original_row' => [], 'payment_reference' => $relation->payment_reference, 'amount' => '300', 'paid_at' => now(), 'bank_folio' => 'BANK-REFUND', 'concept' => 'Excedente devolución', 'classification' => 'SURPLUS', 'relation_id' => $relation->id, 'surplus_amount' => '300']);
+        $movement = MovimientoBancario::create(['import_id' => ImportacionArchivoBancario::firstOrFail()->id, 'row_number' => 3, 'original_row' => [], 'payment_reference' => $relation->payment_reference, 'amount' => '300', 'paid_at' => now(), 'bank_folio' => 'BANK-REFUND', 'concept' => 'Excedente devoluciÃ³n', 'classification' => 'SURPLUS', 'relation_id' => $relation->id, 'surplus_amount' => '300']);
         $refundSurplus = ExcedenteDistribuidora::create(['distributor_id' => $this->distributorUser->distribuidora->id, 'bank_movement_id' => $movement->id, 'original_amount' => '300', 'available_amount' => '300']);
         $request = app(ServicioExcedente::class)->solicitarDevolucion($refundSurplus, $this->distributorUser);
         $this->assertSame('0.0000', $refundSurplus->fresh()->available_amount);
@@ -340,6 +343,42 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(9, $account->fresh()->balance);
         $this->assertDatabaseCount('point_movements', 1);
         $this->assertDatabaseHas('point_movements', ['discounted' => 2, 'balance_after' => 9]);
+    }
+
+    public function test_tres_relaciones_alertan_sin_morosidad_y_retiro_exige_regularizacion_y_decision(): void
+    {
+        $d = $this->distributorUser->distribuidora;
+        $run = (string) Str::uuid();
+        DB::table('relation_process_runs')->insert(['id' => $run, 'cutoff_at' => now()->subMonths(3), 'status' => 'COMPLETED', 'attempt' => 1, 'configuration_snapshot' => '{}', 'created_at' => now(), 'updated_at' => now()]);
+        foreach ([3, 2, 1] as $m) {
+            RelacionDistribuidora::create(['process_run_id' => $run, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'cutoff_at' => now()->subMonths($m), 'advance_period_start' => now()->subMonths($m), 'advance_period_end' => now()->subMonths($m), 'payment_deadline_at' => now()->subMonths($m)->endOfMonth(), 'payment_reference' => 'REL-RISK-'.$m, 'financial_status' => 'OVERDUE', 'portfolio_total' => '100', 'misvales_total' => '100', 'balance' => '100', 'header_snapshot' => [], 'bank_snapshot' => []]);
+        }
+        $service = app(ServicioMorosidadDistribuidora::class);
+        $alert = $service->evaluar($d);
+        $this->assertNotNull($alert);
+        $this->assertDatabaseMissing('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'ACTIVE']);
+        $manager = $this->user('branch_manager', $this->branch->id);
+        $service->decidir($alert, $manager, true, 'Tres incumplimientos confirmados');
+        $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'type' => 'DELINQUENCY', 'status' => 'ACTIVE']);
+        $coordinator = $this->user('coordinator', $this->branch->id);
+        CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinator->id, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'status' => 'ACTIVE', 'valid_from' => now()->subDay(), 'valid_to' => null, 'assigned_by' => $manager->id]);
+        $this->expectExceptionMessage('DISTRIBUTOR_NOT_REGULARIZED');
+        $service->solicitarRetiro($d, $coordinator, 'Regularizada');
+    }
+
+    public function test_regularizacion_no_desbloquea_hasta_retiro_autorizado(): void
+    {
+        $d = $this->distributorUser->distribuidora;
+        $alert = AlertaRiesgoDistribuidora::create(['distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'consecutive_defaults' => 3, 'relation_ids' => [], 'overdue_balance' => '0']);
+        $manager = $this->user('branch_manager', $this->branch->id);
+        $service = app(ServicioMorosidadDistribuidora::class);
+        $service->decidir($alert, $manager, true, 'Historial');
+        $coordinator = $this->user('coordinator', $this->branch->id);
+        CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinator->id, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'status' => 'ACTIVE', 'valid_from' => now()->subDay(), 'valid_to' => null, 'assigned_by' => $manager->id]);
+        $request = $service->solicitarRetiro($d, $coordinator, 'Saldo vencido cero');
+        $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'ACTIVE']);
+        $service->decidirRetiro($request, $manager, true, 'Autoriza retiro');
+        $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
     }
 
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
