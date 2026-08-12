@@ -5,13 +5,19 @@ namespace Tests\Feature\Credito;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\Branch;
+use App\Models\ConfigurationDefinition;
+use App\Models\ConfigurationVersion;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
-use App\Models\OutboxEvent;
-use App\Models\RestriccionUsoCredito;
+use App\Models\Role;
 use App\Models\User;
+use App\Models\UserRoleScope;
+use App\Services\ConfiguracionServicio;
+use App\Services\Credito\AuditorIncrementos;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
@@ -26,19 +32,19 @@ class CreditIncreaseApiTest extends TestCase
         $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
 
         // Evitar efectos secundarios de auditoría y resolver tolerancia fija
-        $this->mock(\App\Services\Credito\AuditorIncrementos::class, function ($mock) {
+        $this->mock(AuditorIncrementos::class, function ($mock) {
             $mock->shouldReceive('registrar')->andReturn();
         });
 
         $autorConfiguracion = User::factory()->create(['state' => 'ACTIVE']);
-        $definicion = \App\Models\ConfigurationDefinition::query()->create([
+        $definicion = ConfigurationDefinition::query()->create([
             'key' => 'CREDIT_TOLERANCE_AMOUNT',
             'name' => 'Tolerancia',
             'value_type' => 'DECIMAL',
             'status' => 'ACTIVE',
             'created_by' => $autorConfiguracion->id,
         ]);
-        $version = \App\Models\ConfigurationVersion::query()->create([
+        $version = ConfigurationVersion::query()->create([
             'configuration_definition_id' => $definicion->id,
             'version' => 1,
             'value' => '500.0000',
@@ -49,7 +55,7 @@ class CreditIncreaseApiTest extends TestCase
             'published_by' => $autorConfiguracion->id,
             'published_at' => now(),
         ]);
-        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) use ($version) {
+        $this->mock(ConfiguracionServicio::class, function ($mock) use ($version) {
             $mock->shouldReceive('resolver')->with('CREDIT_TOLERANCE_AMOUNT')->andReturn([
                 'value' => '500.0000',
                 'version_id' => $version->id,
@@ -63,7 +69,7 @@ class CreditIncreaseApiTest extends TestCase
 
         $distributor = $this->usuarioConRol('distributor', $branch->id);
 
-        \App\Models\Distribuidora::factory()->active()->create([
+        Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
@@ -91,7 +97,7 @@ class CreditIncreaseApiTest extends TestCase
 
         Sanctum::actingAs($distributor);
 
-        $key = (string) \Illuminate\Support\Str::uuid();
+        $key = (string) Str::uuid();
 
         $response = $this->withHeader('Idempotency-Key', $key)
             ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
@@ -118,7 +124,7 @@ class CreditIncreaseApiTest extends TestCase
     {
         $branch = Branch::factory()->create();
         $distributor = $this->usuarioConRol('distributor', $branch->id);
-        \App\Models\Distribuidora::factory()->active()->create([
+        Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
@@ -140,7 +146,7 @@ class CreditIncreaseApiTest extends TestCase
 
         Sanctum::actingAs($distributor);
 
-        $resp = $this->withHeader('Idempotency-Key', (string) \Illuminate\Support\Str::uuid())
+        $resp = $this->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
                 'requested_amount' => '5000.0000',
                 'request_reason' => 'Necesidad temporal',
@@ -164,7 +170,7 @@ class CreditIncreaseApiTest extends TestCase
 
         // Rechazar operativamente sobre una nueva solicitud
         Sanctum::actingAs($distributor);
-        $resp2 = $this->withHeader('Idempotency-Key', (string) \Illuminate\Support\Str::uuid())
+        $resp2 = $this->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
                 'requested_amount' => '2000.0000',
                 'request_reason' => 'Otro motivo',
@@ -186,7 +192,7 @@ class CreditIncreaseApiTest extends TestCase
         $branch = Branch::factory()->create();
         $distributor = $this->usuarioConRol('distributor', $branch->id);
 
-        \App\Models\Distribuidora::factory()->active()->create([
+        Distribuidora::factory()->active()->create([
             'id' => $distributor->id,
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
@@ -212,7 +218,7 @@ class CreditIncreaseApiTest extends TestCase
         ]);
 
         Sanctum::actingAs($distributor);
-        $resp = $this->withHeader('Idempotency-Key', (string) \Illuminate\Support\Str::uuid())
+        $resp = $this->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
                 'requested_amount' => '5000.0000',
                 'request_reason' => 'Demanda',
@@ -231,7 +237,7 @@ class CreditIncreaseApiTest extends TestCase
         $manager = $this->usuarioConRol('branch_manager', $branch->id);
         Sanctum::actingAs($manager);
 
-        $dec = $this->withHeader('Idempotency-Key', (string) \Illuminate\Support\Str::uuid())
+        $dec = $this->withHeader('Idempotency-Key', (string) Str::uuid())
             ->postJson("/api/v1/credit-increase-requests/{$requestId}/manager-decision", [
                 'decision' => 'APPROVE_REQUESTED',
                 'reason' => 'Historial favorable',
@@ -257,18 +263,44 @@ class CreditIncreaseApiTest extends TestCase
         ]);
     }
 
+    public function test_admin_credit_line_capabilities_are_read_only(): void
+    {
+        $branch = Branch::factory()->create();
+        $distributorUser = $this->usuarioConRol('distributor', $branch->id);
+        Distribuidora::factory()->active()->create([
+            'id' => $distributorUser->id,
+            'user_id' => $distributorUser->id,
+            'branch_id' => $branch->id,
+            'distributor_number' => sprintf('DIS-%d-%06d', now()->year, rand(1, 999999)),
+        ]);
+        LineaCredito::factory()->create([
+            'distributor_id' => $distributorUser->id,
+            'total_authorized' => '20000.0000',
+            'used_balance' => '5000.0000',
+        ]);
+
+        Sanctum::actingAs($this->usuarioConRol('admin'));
+
+        $this->getJson("/api/v1/distributors/{$distributorUser->id}/credit-line")
+            ->assertSuccessful()
+            ->assertJsonPath('data.capabilities.can_request_increase', false)
+            ->assertJsonPath('data.capabilities.can_review_increase', false)
+            ->assertJsonPath('data.capabilities.can_decide_increase', false)
+            ->assertJsonPath('data.capabilities.can_view_movements', true);
+    }
+
     private function usuarioConRol(string $rol, ?string $sucursalId = null): User
     {
-        $email = \Illuminate\Support\Str::uuid().'@example.test';
+        $email = Str::uuid().'@example.test';
         $usuario = User::factory()->create([
             'email' => $email,
             'normalized_email' => $email,
             'state' => 'ACTIVE',
         ]);
 
-        $role = \App\Models\Role::query()->where('code', $rol)->firstOrFail();
+        $role = Role::query()->where('code', $rol)->firstOrFail();
 
-        \App\Models\UserRoleScope::query()->create([
+        UserRoleScope::query()->create([
             'user_id' => $usuario->id,
             'role_id' => $role->id,
             'branch_id' => $sucursalId,

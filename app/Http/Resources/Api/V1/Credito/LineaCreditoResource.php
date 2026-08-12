@@ -19,9 +19,9 @@ class LineaCreditoResource extends JsonResource
         $restriccionVigente = $this->restricciones()
             ->whereIn('status', ['ACTIVE', 'RESERVED'])
             ->first();
-            
+
         $reglaCincuenta = $evaluador->evaluar($restriccionVigente, $saldos['available_balance']);
-        
+
         $ultimoMovimiento = $this->movimientos()
             ->orderBy('sequence', 'desc')
             ->first();
@@ -50,19 +50,22 @@ class LineaCreditoResource extends JsonResource
     private function getCapabilities($user): array
     {
         // Distribuidora puede solicitar si es dueña de la línea
-        $isOwner = $user->hasRole('distributor') && $user->id === $this->distributor_id;
-        
+        $isOwner = $user->hasPermissionTo('credit_increase_requests.create_own')
+            && $user->id === $this->distributor_id;
+
         // Coordinador/Gerente pueden revisar (el alcance ya está filtrado por el query)
-        $isReviewer = $user->hasRole('coordinator');
-        $isDecider = $user->hasRole('branch_manager') || $user->hasRole('general_manager') || $user->hasRole('admin');
-        
+        $isReviewer = $user->hasPermissionTo('credit_increase_requests.preauthorize_assigned')
+            || $user->hasPermissionTo('credit_increase_requests.reject_assigned');
+        $isDecider = $user->hasPermissionTo('credit_increase_requests.decide_branch')
+            || $user->hasPermissionTo('credit_increase_requests.decide_global');
+
         // Revisar si hay una solicitud activa
         $hasActiveRequest = SolicitudIncrementoLinea::where('credit_line_id', $this->id)
             ->whereIn('status', ['REQUESTED', 'PREAUTHORIZED'])
             ->exists();
 
         return [
-            'can_request_increase' => $isOwner && !$hasActiveRequest,
+            'can_request_increase' => $isOwner && ! $hasActiveRequest,
             'can_review_increase' => $isReviewer,
             'can_decide_increase' => $isDecider,
             'can_view_movements' => true,
