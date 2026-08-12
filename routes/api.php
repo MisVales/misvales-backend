@@ -26,6 +26,7 @@ use App\Http\Controllers\Api\V1\SecurityEventController;
 use App\Http\Controllers\Api\V1\SessionController;
 use App\Http\Controllers\Api\V1\UserController;
 use App\Http\Controllers\Api\V1\ValeController;
+use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\VerificacionDistribuidora\AutorizacionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
@@ -288,5 +289,15 @@ Route::prefix('v1')->group(function () {
         Route::post('vouchers', [ValeController::class, 'store'])->middleware('idempotency');
         Route::get('vouchers', [ValeController::class, 'index']);
         Route::get('vouchers/{vale}', [ValeController::class, 'show']);
+
+        // Módulo 10 - Caja, modificaciones autorizadas y feriado
+        Route::get('cashier/vouchers/search', [CajaValeController::class, 'search']);
+        Route::get('cashier/vouchers/{vale}', [CajaValeController::class, 'show']);
+        Route::post('cashier/vouchers/{vale}/release', [CajaValeController::class, 'release'])->middleware('idempotency');
+        Route::post('cashier/vouchers/{vale}/cash', [CajaValeController::class, 'cash'])->middleware('idempotency');
+        Route::post('cashier/vouchers/{vale}/modification-requests', [CajaValeController::class, 'requestModification'])->middleware('idempotency');
+        Route::get('voucher-modification-requests', [CajaValeController::class, 'listModifications']);
+        Route::post('voucher-modification-requests/{solicitud}/decision', [CajaValeController::class, 'decideModification'])->middleware('idempotency');
+        Route::post('voucher-modification-requests/{solicitud}/apply', [CajaValeController::class, 'applyModification'])->middleware('idempotency');
     });
 });

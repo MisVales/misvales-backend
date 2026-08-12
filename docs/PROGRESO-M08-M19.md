@@ -15,7 +15,7 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 |---|---|---|---|---|---|
 | M08 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M09 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
-| M10 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
+| M10 | COMPLETO | COMPLETO | COMPLETO | APROBADO | COMPLETO |
 | M11 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M12 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
 | M13 | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE | PENDIENTE |
@@ -78,11 +78,24 @@ Frontend cambios locales preexistentes: login.html, dashboard.html, admin-layout
 - Build Angular: APROBADO.
 - Prueba humana: sesión técnica local autenticada como gerente general; `/vales` carga en modo consulta, muestra estado vacío real y no expone el formulario de distribuidora. Las mutaciones se validaron con actors/factories porque la cuenta técnica debe conservar separación de funciones.
 - Incidencia local: la migración limpia eliminó roles del ambiente compartido; se restauraron exclusivamente con `RolesAndPermissionsSeeder` y la sesión técnica volvió a autenticar. No se crearon credenciales nuevas.
+- Validación combinada final M08+M09: APROBADA, 29 pruebas y 138 aserciones; Pint enfocado y `git diff --check` aprobados.
+- Commit backend M09: `c949c3d` — `feat: implementar prevales y motor financiero`.
+- Commit frontend M09: `19bd82d` — `feat: integrar generación de prevales y vales`.
+
+### 2026-08-12 — implementación y validación M10
+- Backend: búsqueda por sucursal, liberación, feriado manual y modificación autorizada de CURP/domicilio, sin integración bancaria inventada.
+- Seguridad: permisos por alcance; token criptográfico de 8 caracteres, hash persistido, vigencia de cinco minutos, un solo uso y vínculo con cajero, vale, cliente, sucursal y campos autorizados.
+- Persistencia: solicitudes de modificación, transacciones de caja, estados/actores/fechas, unicidad de transacción y bloqueo/versionado contra doble feriado.
+- Invariantes: saldo y restricciones se revalidan en la transacción; el usado aumenta y la restricción se consume únicamente al feriar; auditoría y outbox son atómicos.
+- Frontend: pantalla de caja/feriado con búsqueda, datos enmascarados, liberación, corrección, confirmación del depósito externo y bandeja de autorizaciones.
+- Pruebas backend combinadas M08-M10: APROBADAS, 19 pruebas y 115 aserciones.
+- Pruebas frontend M09-M10: APROBADAS, 6 pruebas con jsdom. Build Angular y formato: APROBADOS.
+- Prueba humana: el controlador local no conservó la navegación al abrir una pestaña nueva; se registra la limitación sin declarar evidencia visual inexistente.
 
 ## Checkpoint actual
-Módulo: M09
-Actividad: revisión final, commits estables y registro de SHAs.
+Módulo: M11
+Actividad: auditoría inicial del contrato de expediente y entrega posterior al feriado.
 Último archivo modificado: docs/PROGRESO-M08-M19.md
-Último comando ejecutado: pruebas enfocadas M09 después de casos de transferencia y reserva de 20 folios.
-Resultado: APROBADO, 12 pruebas y 63 aserciones.
-Siguiente paso exacto: ejecutar validación combinada final M08+M09, revisar diffs, crear commits M09 enfocados y comenzar auditoría M10.
+Último comando ejecutado: commits M09 enfocados en backend y frontend.
+Resultado: backend `c949c3d`; frontend `19bd82d`. Los seis cambios visuales preexistentes permanecen sin stage ni commit.
+Siguiente paso exacto: leer el contrato completo M11, inventariar código existente y mantener el límite de que M11 consume únicamente vales ya feriados.

@@ -96,6 +96,9 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'vouchers', 'action' => 'view_assigned', 'code' => 'vouchers.view_assigned', 'description' => 'Consultar vales asignados'],
             ['module' => 'vouchers', 'action' => 'view_branch', 'code' => 'vouchers.view_branch', 'description' => 'Consultar vales de sucursal'],
             ['module' => 'vouchers', 'action' => 'view_global', 'code' => 'vouchers.view_global', 'description' => 'Consultar vales globalmente'],
+            ['module' => 'vouchers', 'action' => 'cash_branch', 'code' => 'vouchers.cash_branch', 'description' => 'Operar caja y feriado en sucursal'],
+            ['module' => 'voucher_modifications', 'action' => 'authorize_branch', 'code' => 'voucher_modifications.authorize_branch', 'description' => 'Autorizar correcciones de sucursal'],
+            ['module' => 'voucher_modifications', 'action' => 'authorize_global', 'code' => 'voucher_modifications.authorize_global', 'description' => 'Autorizar correcciones globalmente'],
         ];
 
         foreach ($permissions as $permissionData) {
@@ -178,6 +181,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_lines.view_branch', 'credit_line_movements.view_branch',
                     'credit_increase_requests.view_branch', 'credit_increase_requests.decide_branch',
                     'vouchers.view_branch',
+                    'voucher_modifications.authorize_branch',
                 ]);
             }
 
@@ -200,6 +204,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.view_assigned', 'credit_increase_requests.preauthorize_assigned',
                     'credit_increase_requests.reject_assigned',
                     'vouchers.view_assigned',
+                    'voucher_modifications.authorize_branch',
                 ]);
             }
 
@@ -212,6 +217,10 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                     'vouchers.create_own', 'vouchers.view_own',
                 ]);
+            }
+
+            if ($roleData['code'] === 'cashier') {
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch']);
             }
         }
     }

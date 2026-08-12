@@ -24,6 +24,8 @@ final class Vale extends Model
             'status' => EstadoVale::class,
             'financial_snapshot' => 'array',
             'generated_at' => 'immutable_datetime',
+            'released_at' => 'immutable_datetime',
+            'cashed_at' => 'immutable_datetime',
             'capital' => 'decimal:4',
             'loan_commission_percentage' => 'decimal:6',
             'loan_commission_amount' => 'decimal:4',
