@@ -9,6 +9,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $isMysql = DB::getDriverName() === 'mysql';
+
         DB::statement('CREATE SEQUENCE IF NOT EXISTS client_number_seq START WITH 1 INCREMENT BY 1');
 
         Schema::create('clients', function (Blueprint $table): void {
@@ -37,7 +39,7 @@ return new class extends Migration
             $table->index('rfc_hmac');
         });
 
-        Schema::create('client_addresses', function (Blueprint $table): void {
+        Schema::create('client_addresses', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->boolean('is_current')->default(true);
@@ -54,8 +56,15 @@ return new class extends Migration
             $table->foreignUuid('address_proof_media_id')->nullable()->constrained('media_files')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
-            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
-            $table->char('current_fingerprint_unique', 64)->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, normalized_fingerprint_hmac, NULL)')->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unsignedTinyInteger('current_fingerprint_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_addresses_current_client_unique');
+                $table->unique(['normalized_fingerprint_hmac', 'current_fingerprint_unique'], 'client_addresses_current_fingerprint_unique');
+            } else {
+                $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
+                $table->char('current_fingerprint_unique', 64)->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, normalized_fingerprint_hmac, NULL)')->unique();
+            }
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->timestampsTz();
@@ -63,7 +72,7 @@ return new class extends Migration
             $table->index(['client_id', 'starts_at']);
         });
 
-        Schema::create('client_bank_accounts', function (Blueprint $table): void {
+        Schema::create('client_bank_accounts', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->string('bank_name');
@@ -75,7 +84,12 @@ return new class extends Migration
             $table->boolean('is_current')->default(true);
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
-            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_bank_accounts_current_unique');
+            } else {
+                $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL AND is_current = 1, client_id, NULL)')->unique();
+            }
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->unsignedInteger('lock_version')->default(1);
@@ -86,20 +100,25 @@ return new class extends Migration
             $table->index('clabe_hmac');
         });
 
-        Schema::create('client_distributor_assignments', function (Blueprint $table): void {
+        Schema::create('client_distributor_assignments', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
-            $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL, client_id, NULL)')->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_distributor_current_unique');
+            } else {
+                $table->uuid('current_client_unique')->nullable()->virtualAs('IF(ends_at IS NULL, client_id, NULL)')->unique();
+            }
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->string('reason')->nullable();
             $table->timestampsTz();
 
-            $table->index(['distributor_id', 'starts_at', 'ends_at']);
-            $table->index(['branch_id', 'starts_at', 'ends_at']);
+            $table->index(['distributor_id', 'starts_at', 'ends_at'], 'cda_distributor_dates_index');
+            $table->index(['branch_id', 'starts_at', 'ends_at'], 'cda_branch_dates_index');
         });
 
         Schema::create('client_portfolio_entries', function (Blueprint $table): void {

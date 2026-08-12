@@ -27,6 +27,15 @@ return new class extends Migration
 
     private function crearIndiceUnicoParcial(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('password_reset_tokens', function (Blueprint $table) {
+                $table->unsignedTinyInteger('active_unique')->nullable()->storedAs('IF(consumed_at IS NULL AND revoked_at IS NULL, 1, NULL)');
+                $table->unique(['user_id', 'active_unique'], 'password_reset_tokens_active_unique');
+            });
+
+            return;
+        }
+
         DB::statement('
             CREATE UNIQUE INDEX password_reset_tokens_active_unique 
             ON password_reset_tokens (user_id) 

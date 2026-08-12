@@ -55,7 +55,9 @@ return new class extends Migration
         $this->recrearFk('redemption_periods', 'point_value_configuration_version_id', 'configuration_versions');
 
         DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
-        DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
+        DB::statement(DB::getDriverName() === 'mysql'
+            ? 'DROP INDEX IF EXISTS application_evaluations_application_id_unique ON application_evaluations'
+            : 'DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
 
         $this->recrearCheck('distributors', 'distributors_activation_check', "status <> 'ACTIVE' OR (activated_at IS NOT NULL AND activated_by IS NOT NULL)");

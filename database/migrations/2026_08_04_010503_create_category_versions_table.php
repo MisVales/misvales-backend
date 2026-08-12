@@ -9,13 +9,20 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('category_versions', function (Blueprint $table) {
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::create('category_versions', function (Blueprint $table) use ($isMysql) {
             $table->uuid('id')->primary();
             $table->foreignUuid('category_id')->constrained('categories')->restrictOnDelete();
             $table->integer('version');
             $table->decimal('profit_rate', 9, 6);
             $table->string('status');
-            $table->uuid('current_published_category_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, category_id, NULL)")->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_published_category_id')->nullable()->storedAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, 1, NULL)");
+                $table->unique(['category_id', 'current_published_category_id'], 'catv_current_published_unique');
+            } else {
+                $table->uuid('current_published_category_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, category_id, NULL)")->unique();
+            }
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason');

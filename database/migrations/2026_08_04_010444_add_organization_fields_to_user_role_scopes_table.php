@@ -9,16 +9,38 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('user_role_scopes', function (Blueprint $table) {
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('user_role_scopes', function (Blueprint $table) {
+                $table->index('user_id', 'user_role_scopes_user_fk_index');
+                $table->index('role_id', 'user_role_scopes_role_fk_index');
+            });
+        }
+
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::table('user_role_scopes', function (Blueprint $table) use ($isMysql) {
             $table->dropIndex('user_role_scopes_global_unique');
             $table->dropIndex('user_role_scopes_branch_unique');
 
             $table->string('scope_type', 20)->nullable();
             $table->string('status', 20)->nullable();
-            $table->string('active_global_unique', 80)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'GLOBAL', CONCAT(user_id, ':', role_id), NULL)")->unique();
-            $table->string('active_branch_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND branch_id IS NOT NULL, CONCAT(user_id, ':', role_id, ':', branch_id), NULL)")->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('active_global_unique')->nullable()->storedAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'GLOBAL', 1, NULL)");
+                $table->unsignedTinyInteger('active_branch_unique')->nullable()->storedAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND branch_id IS NOT NULL, 1, NULL)");
+                $table->unique(['user_id', 'role_id', 'active_global_unique'], 'user_role_scopes_active_global_unique');
+                $table->unique(['user_id', 'role_id', 'branch_id', 'active_branch_unique'], 'user_role_scopes_active_branch_unique');
+            } else {
+                $table->string('active_global_unique', 80)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'GLOBAL', CONCAT(user_id, ':', role_id), NULL)")->unique();
+                $table->string('active_branch_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND branch_id IS NOT NULL, CONCAT(user_id, ':', role_id, ':', branch_id), NULL)")->unique();
+            }
             $table->timestampsTz();
         });
+
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('user_role_scopes', function (Blueprint $table) {
+                $table->dropColumn(['legacy_active_global_marker', 'legacy_active_branch_marker']);
+            });
+        }
 
         // Keep the Module 01 columns as the canonical assignment lifecycle:
         // assigned_at, revoked_at, assigned_by_user_id, revoked_by_user_id and
@@ -48,10 +70,37 @@ return new class extends Migration
             (scope_type = 'BRANCH' AND branch_id IS NOT NULL)
         );");
         DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (revoked_at IS NULL OR revoked_at > assigned_at);');
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
-            (status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) OR 
-            (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
-        );");
+        if ($isMysql) {
+            DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
+                (status = 'ACTIVE' AND revoked_at IS NULL) OR
+                (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
+            );");
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER trg_urs_status_consistency_insert
+                BEFORE INSERT ON user_role_scopes
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.status = 'ACTIVE' AND NEW.revoked_by_user_id IS NOT NULL THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Una asignacion activa no puede tener revocador.';
+                    END IF;
+                END
+            SQL);
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER trg_urs_status_consistency_update
+                BEFORE UPDATE ON user_role_scopes
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.status = 'ACTIVE' AND NEW.revoked_by_user_id IS NOT NULL THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Una asignacion activa no puede tener revocador.';
+                    END IF;
+                END
+            SQL);
+        } else {
+            DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
+                (status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) OR
+                (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
+            );");
+        }
 
         DB::unprepared(<<<'SQL'
             CREATE TRIGGER trg_prevent_urs_deletion

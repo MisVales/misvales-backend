@@ -66,7 +66,9 @@ return new class extends Migration
         }
 
         DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
-        DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
+        DB::statement(DB::getDriverName() === 'mysql'
+            ? 'DROP INDEX IF EXISTS application_evaluations_application_id_unique ON application_evaluations'
+            : 'DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
     }
 

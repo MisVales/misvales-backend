@@ -9,11 +9,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('application_residences', function (Blueprint $table) {
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::create('application_residences', function (Blueprint $table) use ($isMysql) {
             $table->uuid('id')->primary();
             $table->foreignUuid('application_id')->constrained('distributor_applications');
             $table->boolean('is_current')->default(true);
-            $table->uuid('current_application_unique')->nullable()->virtualAs('IF(is_current = 1, application_id, NULL)')->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_application_unique')->nullable()->storedAs('IF(is_current = 1, 1, NULL)');
+                $table->unique(['application_id', 'current_application_unique'], 'app_residences_current_unique');
+            } else {
+                $table->uuid('current_application_unique')->nullable()->virtualAs('IF(is_current = 1, application_id, NULL)')->unique();
+            }
             $table->string('street');
             $table->string('exterior_number', 32);
             $table->string('interior_number', 32)->nullable();

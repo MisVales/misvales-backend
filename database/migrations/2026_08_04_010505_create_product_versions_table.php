@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('product_versions', function (Blueprint $table) {
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::create('product_versions', function (Blueprint $table) use ($isMysql) {
             $table->uuid('id')->primary();
             $table->foreignUuid('product_id')->constrained('products')->restrictOnDelete();
             $table->integer('version');
@@ -19,7 +21,12 @@ return new class extends Migration
             $table->decimal('insurance_amount', 19, 4);
             $table->smallInteger('fortnights');
             $table->string('status');
-            $table->uuid('current_published_product_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, product_id, NULL)")->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_published_product_id')->nullable()->storedAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, 1, NULL)");
+                $table->unique(['product_id', 'current_published_product_id'], 'pv_current_published_unique');
+            } else {
+                $table->uuid('current_published_product_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, product_id, NULL)")->unique();
+            }
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason');

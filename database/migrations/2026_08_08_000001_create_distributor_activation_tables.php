@@ -9,6 +9,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $isMysql = DB::getDriverName() === 'mysql';
+
         DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_number_seq START WITH 1 INCREMENT BY 1');
 
         Schema::create('distributors', function (Blueprint $table): void {
@@ -35,9 +37,14 @@ return new class extends Migration
             $table->foreign('distributor_id')->references('id')->on('distributors')->restrictOnDelete();
         });
 
-        Schema::table('user_role_scopes', function (Blueprint $table): void {
+        Schema::table('user_role_scopes', function (Blueprint $table) use ($isMysql): void {
             $table->foreignUuid('scope_id')->nullable()->after('scope_type')->constrained('distributors')->restrictOnDelete();
-            $table->string('active_distributor_scope_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'DISTRIBUTOR', CONCAT(user_id, ':', role_id, ':', scope_id), NULL)")->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('active_distributor_scope_unique')->nullable()->storedAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'DISTRIBUTOR', 1, NULL)");
+                $table->unique(['user_id', 'role_id', 'scope_id', 'active_distributor_scope_unique'], 'urs_active_distributor_unique');
+            } else {
+                $table->string('active_distributor_scope_unique', 120)->nullable()->virtualAs("IF(status = 'ACTIVE' AND revoked_at IS NULL AND scope_type = 'DISTRIBUTOR', CONCAT(user_id, ':', role_id, ':', scope_id), NULL)")->unique();
+            }
             $table->index(['scope_type', 'scope_id', 'status']);
         });
         DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
@@ -52,19 +59,24 @@ return new class extends Migration
             $table->string('trace_id')->nullable()->index()->after('request_id');
         });
 
-        Schema::create('distributor_category_assignments', function (Blueprint $table): void {
+        Schema::create('distributor_category_assignments', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
             $table->foreignUuid('category_version_id')->constrained('category_versions')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
-            $table->uuid('current_distributor_unique')->nullable()->virtualAs('IF(ends_at IS NULL, distributor_id, NULL)')->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_distributor_unique')->nullable()->storedAs('IF(ends_at IS NULL, 1, NULL)');
+                $table->unique(['distributor_id', 'current_distributor_unique'], 'dca_current_distributor_unique');
+            } else {
+                $table->uuid('current_distributor_unique')->nullable()->virtualAs('IF(ends_at IS NULL, distributor_id, NULL)')->unique();
+            }
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->string('reason')->nullable();
             $table->timestampsTz();
 
-            $table->index(['distributor_id', 'starts_at', 'ends_at']);
-            $table->index(['category_version_id', 'starts_at']);
+            $table->index(['distributor_id', 'starts_at', 'ends_at'], 'dca_distributor_dates_index');
+            $table->index(['category_version_id', 'starts_at'], 'dca_category_start_index');
         });
 
         DB::statement('ALTER TABLE distributor_category_assignments ADD CONSTRAINT distributor_category_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
@@ -112,13 +124,18 @@ return new class extends Migration
         DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_amount_check CHECK (amount > 0)');
         DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
 
-        Schema::create('credit_usage_restrictions', function (Blueprint $table): void {
+        Schema::create('credit_usage_restrictions', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('credit_line_id')->constrained('credit_lines')->restrictOnDelete();
             $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
             $table->string('type', 48);
             $table->string('status', 20)->default('ACTIVE');
-            $table->uuid('current_credit_line_unique')->nullable()->virtualAs("IF(status IN ('ACTIVE', 'RESERVED'), credit_line_id, NULL)")->unique();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_credit_line_unique')->nullable()->storedAs("IF(status IN ('ACTIVE', 'RESERVED'), 1, NULL)");
+                $table->unique(['credit_line_id', 'current_credit_line_unique'], 'cur_current_credit_line_unique');
+            } else {
+                $table->uuid('current_credit_line_unique')->nullable()->virtualAs("IF(status IN ('ACTIVE', 'RESERVED'), credit_line_id, NULL)")->unique();
+            }
             $table->decimal('base_total', 19, 4);
             $table->decimal('tolerance_amount', 19, 4);
             $table->foreignUuid('configuration_version_id')->constrained('configuration_versions')->restrictOnDelete();
