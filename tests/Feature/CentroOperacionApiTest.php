@@ -49,9 +49,24 @@ final class CentroOperacionApiTest extends TestCase
         self::assertSame(0, app(ProyectorNotificaciones::class)->proyectar());
         $this->assertDatabaseCount('notification_deliveries', 4);
         $this->assertDatabaseCount('notifications', 4);
+        $this->assertDatabaseMissing('notification_deliveries', ['status' => 'FAILED']);
+        $this->assertDatabaseHas('notification_deliveries', ['status' => 'SENT', 'result' => 'DELIVERED', 'attempts' => 1]);
         foreach ([$general, $manager, $coordinator, $distributorUser] as $recipient) {
             $this->assertDatabaseHas('notifications', ['notifiable_id' => $recipient->id]);
         }
+    }
+
+    public function test_proyector_normaliza_payload_legacy_codificado_como_string(): void
+    {
+        $general = $this->user('general_manager');
+        OutboxEvent::query()->create([
+            'event_type' => 'CreditIncreaseRequested',
+            'payload' => json_encode(['user_id' => $general->id], JSON_THROW_ON_ERROR),
+            'status' => 'PENDING',
+        ]);
+
+        self::assertSame(1, app(ProyectorNotificaciones::class)->proyectar());
+        $this->assertDatabaseHas('notifications', ['notifiable_id' => $general->id]);
     }
 
     public function test_bandeja_contador_deep_link_y_lectura_son_solo_del_destinatario(): void

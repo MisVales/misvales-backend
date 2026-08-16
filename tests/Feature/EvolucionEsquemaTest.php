@@ -40,11 +40,13 @@ class EvolucionEsquemaTest extends TestCase
                 'verification_visits_application_id_foreign',
                 'application_corrections_application_id_foreign',
                 'application_evaluations_application_id_foreign',
-                'application_authorizations_application_id_foreign'
+                'application_authorizations_application_id_foreign',
+                'application_state_transitions_application_id_foreign',
+                'distributors_application_id_foreign'
               )
         SQL);
 
-        $this->assertCount(4, $filas);
+        $this->assertCount(6, $filas);
         foreach ($filas as $fila) {
             $this->assertSame('distributor_applications', $fila->destino);
             $this->assertSame('r', $fila->confdeltype);

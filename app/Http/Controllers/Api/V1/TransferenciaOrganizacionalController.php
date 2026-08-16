@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\EstadoDistribuidora;
 use App\Http\Controllers\Controller;
 use App\Models\Cliente;
 use App\Models\CoordinatorDistributorAssignment;
@@ -16,6 +17,53 @@ use Illuminate\Http\Request;
 
 final class TransferenciaOrganizacionalController extends Controller
 {
+    public function destinations(Request $request): JsonResponse
+    {
+        $actor = $request->user();
+        abort_unless(
+            $actor->hasPermissionTo('client_transfers.initiate_own')
+            || $actor->hasPermissionTo('organization_changes.manage_branch')
+            || $actor->hasPermissionTo('organization_changes.manage_global'),
+            403,
+        );
+        $filters = $request->validate(['search' => ['nullable', 'string', 'max:100']]);
+        $ownDistributorId = $actor->distribuidora()->value('id');
+        $query = Distribuidora::query()
+            ->select(['id', 'user_id', 'branch_id', 'distributor_number', 'status'])
+            ->with(['usuario:id,name', 'sucursal:id,name'])
+            ->where('status', EstadoDistribuidora::ACTIVA)
+            ->when($ownDistributorId, fn (Builder $builder, string $id) => $builder->whereKeyNot($id))
+            ->when($filters['search'] ?? null, function (Builder $builder, string $search): void {
+                $term = trim($search);
+                $builder->where(function (Builder $candidate) use ($term): void {
+                    $candidate->where('distributor_number', 'ilike', "%{$term}%")
+                        ->orWhereHas('usuario', fn (Builder $user) => $user->where('name', 'ilike', "%{$term}%"));
+                });
+            });
+
+        if (! $actor->hasPermissionTo('organization_changes.manage_global')
+            && $actor->hasPermissionTo('organization_changes.manage_branch')) {
+            $branches = $actor->roleScopes()
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereNotNull('branch_id')
+                ->pluck('branch_id');
+            $query->whereIn('branch_id', $branches);
+        }
+
+        $destinations = $query->orderBy('distributor_number')->limit(100)->get()->map(fn (Distribuidora $distributor): array => [
+            'id' => $distributor->id,
+            'distributor_number' => $distributor->distributor_number,
+            'full_name' => $distributor->usuario?->name,
+            'branch' => $distributor->sucursal ? [
+                'id' => $distributor->sucursal->id,
+                'name' => $distributor->sucursal->name,
+            ] : null,
+        ]);
+
+        return response()->json(['data' => $destinations]);
+    }
+
     public function index(Request $request): JsonResponse
     {
         $actor = $request->user();
@@ -64,6 +112,14 @@ final class TransferenciaOrganizacionalController extends Controller
         abort_unless($request->user()->hasPermissionTo('client_transfers.receive_own'), 403);
 
         return response()->json(['data' => $service->completar($transfer, $request->user())]);
+    }
+
+    public function cancel(Request $request, SolicitudTransferenciaCliente $transfer, ServicioTransferenciasOrganizacionales $service): JsonResponse
+    {
+        abort_unless($request->user()->hasPermissionTo('client_transfers.initiate_own'), 403);
+        $data = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        return response()->json(['data' => $service->cancelar($transfer, $request->user(), $data['reason'])]);
     }
 
     public function reassignClient(Request $request, Cliente $client, ServicioTransferenciasOrganizacionales $service): JsonResponse

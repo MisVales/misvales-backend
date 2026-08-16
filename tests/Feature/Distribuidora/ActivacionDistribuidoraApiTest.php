@@ -21,6 +21,7 @@ use App\Models\Category;
 use App\Models\CategoryVersion;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
+use App\Models\CoordinatorDistributorAssignment;
 use App\Models\DatosPersonalesSolicitud;
 use App\Models\Distribuidora;
 use App\Models\DistributorApplication;
@@ -85,6 +86,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
 
         $respuesta->assertSuccessful()
             ->assertJsonPath('data.application_id', $solicitud->id)
+            ->assertJsonPath('data.full_name', 'Ana López')
             ->assertJsonPath('data.status', 'PENDING_ACTIVATION')
             ->assertJsonPath('data.initial_credit.total_authorized', '15000.0000')
             ->assertJsonPath('data.initial_restriction.type', 'INITIAL_50_PERCENT');
@@ -129,6 +131,27 @@ class ActivacionDistribuidoraApiTest extends TestCase
         ]);
         self::assertSame(64, strlen((string) AccountInvitation::query()->value('token_hash')));
         Mail::assertQueued(ActivationInvitationMail::class, 1);
+    }
+
+    public function test_distribuidora_consulta_su_linea_inicial_por_la_relacion_con_su_usuario(): void
+    {
+        [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
+        $distribuidora = $this->activar($gerente, $solicitud, $version);
+        $distribuidora->usuario->forceFill(['state' => 'ACTIVE'])->save();
+        $distribuidora->forceFill([
+            'status' => 'ACTIVE',
+            'activated_at' => now(),
+            'activated_by' => $gerente->id,
+        ])->save();
+
+        Sanctum::actingAs($distribuidora->usuario);
+
+        $this->getJson('/api/v1/me/credit-line')
+            ->assertSuccessful()
+            ->assertJsonPath('data.distributor.id', $distribuidora->id)
+            ->assertJsonPath('data.distributor.full_name', 'Ana López')
+            ->assertJsonPath('data.total_authorized', '15000.0000')
+            ->assertJsonPath('data.capabilities.can_request_increase', true);
     }
 
     public function test_reintento_no_duplica_materializacion_ni_correo(): void
@@ -290,6 +313,35 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertNotNull($distribuidora->activated_at);
         self::assertSame('CONSUMED', $invitacion->refresh()->state);
         self::assertDatabaseHas('outbox_events', ['event_type' => 'DISTRIBUTOR_ACCESS_ACTIVATED']);
+    }
+
+    public function test_no_activa_distribuidora_si_falta_un_componente_obligatorio(): void
+    {
+        [$gerente, $solicitud, $version] = $this->escenarioAutorizado();
+        $distribuidora = $this->activar($gerente, $solicitud, $version);
+        CoordinatorDistributorAssignment::query()->where('distributor_id', $distribuidora->id)->update([
+            'status' => 'ENDED',
+            'valid_to' => now()->addSecond(),
+            'ended_by' => $gerente->id,
+            'end_reason' => 'Preparación del escenario de prueba',
+        ]);
+        $tokenIntercambio = Str::random(60);
+        $invitacion = AccountInvitation::query()->firstOrFail();
+        $invitacion->forceFill([
+            'state' => 'PREPARED',
+            'exchange_token_hash' => hash('sha256', $tokenIntercambio),
+            'exchange_expires_at' => now()->addMinutes(15),
+            'mfa_setup_completed_at' => now(),
+        ])->save();
+
+        $this->postJson('/api/v1/auth/invitations/complete', [
+            'exchange_token' => $tokenIntercambio,
+            'codes_safeguarded' => true,
+        ])->assertConflict()->assertJsonPath('error.code', 'DISTRIBUTOR_ACTIVATION_INCOMPLETE');
+
+        self::assertSame('PENDING_ACTIVATION', $distribuidora->usuario->refresh()->state);
+        self::assertSame('PENDING_ACTIVATION', $distribuidora->refresh()->status->value);
+        self::assertSame('PREPARED', $invitacion->refresh()->state);
     }
 
     public function test_exige_visita_y_evaluacion_favorables_sin_dejar_datos_parciales(): void

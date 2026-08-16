@@ -15,6 +15,11 @@ class EntregaNotificacion extends Model
 
     protected function casts(): array
     {
-        return ['delivered_at' => 'immutable_datetime'];
+        return [
+            'delivered_at' => 'immutable_datetime',
+            'failed_at' => 'immutable_datetime',
+            'last_attempt_at' => 'immutable_datetime',
+            'attempts' => 'integer',
+        ];
     }
 }

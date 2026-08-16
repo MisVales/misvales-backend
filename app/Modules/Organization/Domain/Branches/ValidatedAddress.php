@@ -8,7 +8,7 @@ final readonly class ValidatedAddress
 {
     public function __construct(
         public string $formatted,
-        public string $validationId,
+        public ?string $validationId,
         public ?string $placeId,
         public ?float $latitude,
         public ?float $longitude,
@@ -17,7 +17,7 @@ final readonly class ValidatedAddress
             throw new InvalidArgumentException('La dirección validada no es válida.');
         }
 
-        if (trim($validationId) === '') {
+        if ($validationId !== null && trim($validationId) === '') {
             throw new InvalidArgumentException('La dirección no contiene evidencia de validación.');
         }
     }

@@ -160,6 +160,7 @@ Route::prefix('v1')->group(function () {
         // Roles y Permisos (Punto 34)
         Route::get('permissions', [PermissionController::class, 'index']);
         Route::get('roles', [RoleController::class, 'index']);
+        Route::get('roles/assignable', [RoleController::class, 'assignable']);
         Route::get('roles/{id}', [RoleController::class, 'show']);
         Route::put('roles/{id}/permissions', [RoleController::class, 'syncPermissions']);
 
@@ -352,11 +353,13 @@ Route::prefix('v1')->group(function () {
         Route::post('distributors/{distribuidora}/delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'requestRemoval'])->middleware('idempotency');
         Route::get('delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'removals']);
         Route::post('delinquency-removal-requests/{solicitud}/decision', [RiesgoDistribuidoraController::class, 'decideRemoval'])->middleware('idempotency');
+        Route::get('client-transfer-destinations', [TransferenciaOrganizacionalController::class, 'destinations']);
         Route::get('client-transfers', [TransferenciaOrganizacionalController::class, 'index']);
         Route::post('clients/{client}/transfers', [TransferenciaOrganizacionalController::class, 'initiate'])->middleware('idempotency');
         Route::post('client-transfers/{transfer}/preaccept', [TransferenciaOrganizacionalController::class, 'preaccept'])->middleware('idempotency');
         Route::post('client-transfers/{transfer}/origin-decision', [TransferenciaOrganizacionalController::class, 'originDecision'])->middleware('idempotency');
         Route::post('client-transfers/{transfer}/complete', [TransferenciaOrganizacionalController::class, 'complete'])->middleware('idempotency');
+        Route::post('client-transfers/{transfer}/cancel', [TransferenciaOrganizacionalController::class, 'cancel'])->middleware('idempotency');
         Route::post('clients/{client}/administrative-reassignment', [TransferenciaOrganizacionalController::class, 'reassignClient'])->middleware('idempotency');
         Route::post('distributors/{distributor}/branch-change', [TransferenciaOrganizacionalController::class, 'changeBranch'])->middleware('idempotency');
         Route::post('distributors/{distributor}/coordinator-change', [TransferenciaOrganizacionalController::class, 'changeCoordinator'])->middleware('idempotency');

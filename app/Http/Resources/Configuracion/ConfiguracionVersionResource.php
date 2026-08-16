@@ -21,6 +21,7 @@ class ConfiguracionVersionResource extends JsonResource
             'version' => $this->version,
             'value' => $hideSensitive ? '***' : $this->value,
             'status' => $this->status->value,
+            'lock_version' => $this->lock_version,
             'effective_from' => $this->effective_from,
             'effective_to' => $this->effective_to,
             'reason' => $this->reason,

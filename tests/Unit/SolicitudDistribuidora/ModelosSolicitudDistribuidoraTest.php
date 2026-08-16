@@ -65,6 +65,7 @@ final class ModelosSolicitudDistribuidoraTest extends TestCase
             'MANAGER_AUTHORIZATION',
             'TERMINATED_UNFAVORABLE',
             'REJECTED',
+            'AUTHORIZED_PENDING_ACTIVATION',
             'ACTIVE',
         ], array_column(EstadoSolicitudDistribuidora::cases(), 'value'));
 

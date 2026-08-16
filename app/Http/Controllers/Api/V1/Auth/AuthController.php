@@ -13,8 +13,10 @@ use App\Services\Auth\MfaService;
 use App\Services\Auth\ProgressiveLockoutService;
 use App\Services\Auth\SessionPolicyService;
 use App\Services\Auth\WebAuthnService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
@@ -23,6 +25,8 @@ use Illuminate\Support\Str;
 
 class AuthController extends Controller
 {
+    private const REFRESH_COOKIE = 'misvales_refresh';
+
     /**
      * POST /api/v1/auth/login
      */
@@ -34,12 +38,17 @@ class AuthController extends Controller
         ]);
 
         $localLoginPath = base_path('bootstrap/local/dev-super-session.php');
-        if (app()->environment('local') && is_file($localLoginPath)) {
+        $localSuperSessionEmail = mb_strtolower(trim((string) config('bootstrap.local_super_session.email')));
+        if (app()->environment('local')
+            && (bool) config('bootstrap.local_super_session.enabled', false)
+            && $localSuperSessionEmail !== ''
+            && hash_equals($localSuperSessionEmail, mb_strtolower(trim((string) $request->email)))
+            && is_file($localLoginPath)) {
             $localLogin = require $localLoginPath;
             $localResponse = is_callable($localLogin) ? $localLogin($request) : null;
 
-            if ($localResponse !== null) {
-                return $localResponse;
+            if ($localResponse instanceof JsonResponse) {
+                return $this->secureLocalSessionResponse($localResponse);
             }
         }
 
@@ -491,9 +500,20 @@ class AuthController extends Controller
      */
     public function refresh(Request $request, SessionPolicyService $policyService)
     {
-        $request->validate(['refresh_token' => 'required|string']);
+        if (! $this->credentialOriginIsAllowed($request)) {
+            return response()->json([
+                'error' => 'ORIGIN_NOT_ALLOWED',
+                'message' => 'El origen de la solicitud no está autorizado.',
+            ], 403);
+        }
 
-        $hash = hash('sha256', $request->refresh_token);
+        $refreshToken = $request->cookie(self::REFRESH_COOKIE);
+
+        if (! is_string($refreshToken) || $refreshToken === '') {
+            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Refresh token inválido o expirado.'], 401);
+        }
+
+        $hash = hash('sha256', $refreshToken);
         $data = Cache::get("auth_refresh_{$hash}");
 
         if (! $data) {
@@ -515,7 +535,7 @@ class AuthController extends Controller
 
         // Validar inactividad en el refresco
         $policy = $policyService->getPolicyForUser($user);
-        if ($session->last_activity_at && $session->last_activity_at->diffInMinutes(now()) > $policy['inactivity']) {
+        if (! app()->environment('local') && $session->last_activity_at && $session->last_activity_at->diffInMinutes(now()) > $policy['inactivity']) {
             $session->update(['revoked_at' => now(), 'revocation_reason' => 'INACTIVITY_TIMEOUT_ON_REFRESH']);
             Cache::forget("auth_refresh_{$hash}");
 
@@ -568,7 +588,12 @@ class AuthController extends Controller
             $currentAccessToken->delete();
         }
 
-        return response()->noContent();
+        $refreshToken = $request->cookie(self::REFRESH_COOKIE);
+        if (is_string($refreshToken) && $refreshToken !== '') {
+            Cache::forget('auth_refresh_'.hash('sha256', $refreshToken));
+        }
+
+        return response()->noContent()->withCookie($this->forgetRefreshCookie());
     }
 
     /**
@@ -620,14 +645,76 @@ class AuthController extends Controller
         return response()->json([
             'message' => 'Autenticación exitosa.',
             'access_token' => $token->plainTextToken,
-            'refresh_token' => $rawRefreshToken,
             'expires_in' => $policy['access_token'] * 60, // En segundos
             'user' => [
                 'id' => $user->id,
                 'name' => $user->name,
                 'email' => $user->email,
             ],
-        ]);
+        ])->withCookie($this->makeRefreshCookie($rawRefreshToken, $policy['refresh_token']));
+    }
+
+    private function makeRefreshCookie(string $token, int $minutes): \Symfony\Component\HttpFoundation\Cookie
+    {
+        return Cookie::make(
+            self::REFRESH_COOKIE,
+            $token,
+            $minutes,
+            '/api/v1/auth',
+            config('session.domain'),
+            (bool) config('session.secure'),
+            true,
+            false,
+            (string) config('session.same_site', 'lax'),
+        );
+    }
+
+    private function forgetRefreshCookie(): \Symfony\Component\HttpFoundation\Cookie
+    {
+        return Cookie::forget(self::REFRESH_COOKIE, '/api/v1/auth', config('session.domain'));
+    }
+
+    private function secureLocalSessionResponse(JsonResponse $response): JsonResponse
+    {
+        $data = $response->getData(true);
+        $accessToken = $data['access_token'] ?? null;
+        $refreshToken = $data['refresh_token'] ?? null;
+
+        if (! is_string($accessToken) || ! is_string($refreshToken)) {
+            return $response;
+        }
+
+        $session = AuthSession::query()
+            ->where('session_identifier_hash', hash('sha256', $accessToken))
+            ->latest('created_at')
+            ->first();
+        $accessTokenId = (int) Str::before($accessToken, '|');
+
+        if ($session === null || $accessTokenId < 1) {
+            return $response;
+        }
+
+        Cache::put('auth_refresh_'.hash('sha256', $refreshToken), [
+            'user_id' => $session->user_id,
+            'session_id' => $session->id,
+            'access_token_id' => $accessTokenId,
+        ], now()->addHours(8));
+
+        unset($data['refresh_token']);
+        $response->setData($data);
+
+        return $response->withCookie($this->makeRefreshCookie($refreshToken, 8 * 60));
+    }
+
+    private function credentialOriginIsAllowed(Request $request): bool
+    {
+        $origin = $request->headers->get('Origin');
+
+        if (! is_string($origin) || $origin === '') {
+            return true;
+        }
+
+        return in_array($origin, config('cors.allowed_origins', []), true);
     }
 
     private function parseDeviceName(?string $userAgent): string

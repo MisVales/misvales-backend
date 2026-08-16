@@ -10,11 +10,15 @@ final class NotificacionEventoDominio extends Notification
 {
     use Queueable;
 
-    public function __construct(public readonly array $content, private readonly bool $critical = false) {}
+    public function __construct(
+        public readonly array $content,
+        private readonly bool $critical = false,
+        private readonly ?array $channels = null,
+    ) {}
 
     public function via(object $notifiable): array
     {
-        return $this->critical ? ['database', 'mail'] : ['database'];
+        return $this->channels ?? ($this->critical ? ['database', 'mail'] : ['database']);
     }
 
     public function toArray(object $notifiable): array

@@ -28,10 +28,12 @@ use App\Modules\Organization\Domain\Branches\Exceptions\InvalidBranchAddress;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
 use App\Services\Audit\SecurityAuditService;
+use App\Services\Credito\AuditorIncrementos;
 use App\Services\SolicitudDistribuidora\AuditorSolicitudDistribuidora;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
+use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
@@ -41,6 +43,7 @@ use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
 use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -52,6 +55,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->statefulApi();
+        $middleware->redirectGuestsTo(
+            fn (Request $request): ?string => $request->is('api/*') ? null : route('login'),
+        );
         // Tracker de sesiones y Zero Trust Suite
         $middleware->alias([
             'track.activity' => TrackSessionActivity::class,
@@ -223,7 +229,7 @@ return Application::configure(basePath: dirname(__DIR__))
                 try {
                     if ($request->user()) {
                         $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
-                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                        app(AuditorIncrementos::class)->registrar(
                             'EV-SCOPE-VIOLATION',
                             str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
                             is_string($routeId) ? $routeId : null,
@@ -237,7 +243,8 @@ return Application::configure(basePath: dirname(__DIR__))
                             'v1.0.0'
                         );
                     }
-                } catch (\Throwable $th) {}
+                } catch (Throwable $th) {
+                }
 
                 return response()->json(['error' => [
                     'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_SCOPE_DENIED' : 'CREDIT_INCREASE_SCOPE_DENIED',
@@ -252,26 +259,27 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->renderable(function (ValidationException $e, Request $request) use ($distributorError) {
-            if (! $request->is('api/v1/distributor-applications*')) {
-                return null;
+            $campos = $e->errors();
+
+            if ($request->is('api/v1/distributor-applications*')) {
+                $claves = array_keys($campos);
+                $mensajes = mb_strtolower(json_encode($campos, JSON_UNESCAPED_UNICODE) ?: '');
+                $code = match (true) {
+                    isset($campos['sections']) => 'DISTRIBUTOR_APPLICATION_INCOMPLETE',
+                    isset($campos['branch_id']) => 'DISTRIBUTOR_APPLICATION_BRANCH_INVALID',
+                    isset($campos['coordinator_id']) => 'DISTRIBUTOR_APPLICATION_COORDINATOR_INVALID',
+                    isset($campos['is_current']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_DUPLICATE',
+                    isset($campos['residence']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_REQUIRED',
+                    collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) && str_contains($mensajes, 'no aplicable') => 'DISTRIBUTOR_APPLICATION_SECTION_NOT_APPLICABLE',
+                    collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
+                    collect($claves)->contains(fn (string $key): bool => in_array($key, ['curp', 'rfc', 'official_id_number'], true)) => 'DISTRIBUTOR_APPLICATION_SENSITIVE_DATA_INVALID',
+                    default => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
+                };
+
+                return $distributorError($request, $code, 'Los datos enviados no cumplen las reglas de la solicitud.', 422, $campos);
             }
 
-            $campos = $e->errors();
-            $claves = array_keys($campos);
-            $mensajes = mb_strtolower(json_encode($campos, JSON_UNESCAPED_UNICODE) ?: '');
-            $code = match (true) {
-                isset($campos['sections']) => 'DISTRIBUTOR_APPLICATION_INCOMPLETE',
-                isset($campos['branch_id']) => 'DISTRIBUTOR_APPLICATION_BRANCH_INVALID',
-                isset($campos['coordinator_id']) => 'DISTRIBUTOR_APPLICATION_COORDINATOR_INVALID',
-                isset($campos['is_current']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_DUPLICATE',
-                isset($campos['residence']) => 'DISTRIBUTOR_APPLICATION_CURRENT_RESIDENCE_REQUIRED',
-                collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) && str_contains($mensajes, 'no aplicable') => 'DISTRIBUTOR_APPLICATION_SECTION_NOT_APPLICABLE',
-                collect($claves)->contains(fn (string $key): bool => str_starts_with($key, 'section_declarations.')) => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
-                collect($claves)->contains(fn (string $key): bool => in_array($key, ['curp', 'rfc', 'official_id_number'], true)) => 'DISTRIBUTOR_APPLICATION_SENSITIVE_DATA_INVALID',
-                default => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
-            };
-
-            return $distributorError($request, $code, 'Los datos enviados no cumplen las reglas de la solicitud.', 422, $campos);
+            return $distributorError($request, 'VALIDATION_FAILED', 'Revisa los campos indicados.', 422, $campos);
         });
 
         $exceptions->renderable(function (ConflictHttpException $e, Request $request) use ($distributorError) {
@@ -308,12 +316,12 @@ return Application::configure(basePath: dirname(__DIR__))
             );
         });
 
-        $exceptions->renderable(function (\Symfony\Component\HttpKernel\Exception\HttpException $e, Request $request) {
+        $exceptions->renderable(function (HttpException $e, Request $request) {
             if ($e->getStatusCode() === 409 && ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*'))) {
                 try {
                     if ($request->user()) {
                         $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
-                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                        app(AuditorIncrementos::class)->registrar(
                             'EV-CONCURRENCY',
                             str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
                             is_string($routeId) ? $routeId : null,
@@ -327,8 +335,9 @@ return Application::configure(basePath: dirname(__DIR__))
                             'v1.0.0'
                         );
                     }
-                } catch (\Throwable $th) {}
-                
+                } catch (Throwable $th) {
+                }
+
                 return response()->json(['error' => [
                     'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_VERSION_CONFLICT' : 'CREDIT_INCREASE_REQUEST_VERSION_CONFLICT',
                     'message' => $e->getMessage(),
@@ -339,12 +348,12 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
-        $exceptions->renderable(function (\Illuminate\Database\QueryException $e, Request $request) {
+        $exceptions->renderable(function (QueryException $e, Request $request) {
             if ($e->getCode() === '23505' && ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*'))) {
                 try {
                     if ($request->user()) {
                         $routeId = $request->route('solicitudId') ?? $request->route('id') ?? $request->route('linea');
-                        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+                        app(AuditorIncrementos::class)->registrar(
                             'EV-CONCURRENCY',
                             str_contains($request->path(), 'credit-lines') ? 'credit_lines' : 'credit_increase_requests',
                             is_string($routeId) ? $routeId : null,
@@ -353,13 +362,14 @@ return Application::configure(basePath: dirname(__DIR__))
                             null,
                             [],
                             [],
-                            'Violación de restricción única por concurrencia. ' . $e->getMessage(),
+                            'Violación de restricción única por concurrencia. '.$e->getMessage(),
                             'CONFLICT',
                             'v1.0.0'
                         );
                     }
-                } catch (\Throwable $th) {}
-                
+                } catch (Throwable $th) {
+                }
+
                 return response()->json(['error' => [
                     'code' => str_contains($request->path(), 'credit-lines') ? 'CREDIT_LINE_VERSION_CONFLICT' : 'CREDIT_INCREASE_REQUEST_VERSION_CONFLICT',
                     'message' => 'La operación fue rechazada porque otra petición concurrente ya fue procesada.',

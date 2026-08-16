@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReauthenticatesMfa;
 use App\Models\Role;
+use App\Services\Auth\RoleAssignmentPolicyService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 
@@ -21,6 +22,17 @@ class RoleController extends Controller
         Gate::authorize('viewAny', Role::class);
 
         return response()->json(Role::all());
+    }
+
+    /**
+     * GET /api/v1/roles/assignable
+     * Roles que el usuario autenticado puede asignar según su jerarquía.
+     */
+    public function assignable(Request $request, RoleAssignmentPolicyService $policyService)
+    {
+        Gate::authorize('viewAny', Role::class);
+
+        return response()->json($policyService->getAssignableRoles($request->user()));
     }
 
     /**

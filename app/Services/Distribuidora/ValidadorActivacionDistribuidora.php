@@ -14,6 +14,7 @@ use App\Models\ApplicationAuthorization;
 use App\Models\ApplicationEvaluation;
 use App\Models\Branch;
 use App\Models\CategoryVersion;
+use App\Models\Distribuidora;
 use App\Models\DistributorApplication;
 use App\Models\User;
 use App\Models\VerificationVisit;
@@ -21,6 +22,45 @@ use Carbon\CarbonInterface;
 
 class ValidadorActivacionDistribuidora
 {
+    public function validarComponentesObligatorios(Distribuidora $distribuidora): void
+    {
+        $distribuidora->load([
+            'solicitud.autorizacion',
+            'coordinadorVigente',
+            'categoriaVigente.versionCategoria.category',
+            'lineaCredito.movimientos',
+            'lineaCredito.restricciones',
+        ]);
+
+        $autorizacion = $distribuidora->solicitud?->autorizacion;
+        $linea = $distribuidora->lineaCredito;
+        $importe = $autorizacion?->initial_credit_line_amount;
+        $coordinadorValido = $distribuidora->coordinadorVigente?->branch_id === $distribuidora->branch_id;
+        $categoriaValida = $distribuidora->categoriaVigente !== null;
+        $lineaValida = $linea !== null
+            && $importe !== null
+            && bccomp($linea->total_authorized, $importe, 4) === 0
+            && $linea->movimientos->contains(fn ($movimiento) => $movimiento->type->value === 'INITIAL_AUTHORIZATION'
+                && bccomp($movimiento->amount, $importe, 4) === 0
+                && $movimiento->source_id === $autorizacion->id)
+            && $linea->restricciones->contains(fn ($restriccion) => $restriccion->type === 'INITIAL_50_PERCENT'
+                && $restriccion->status->value === 'ACTIVE'
+                && bccomp($restriccion->base_total, $importe, 4) === 0);
+
+        if ($autorizacion?->decision !== ApplicationAuthorizationDecision::APPROVED
+            || $importe === null
+            || bccomp($importe, '0.0000', 4) <= 0
+            || ! $coordinadorValido
+            || ! $categoriaValida
+            || ! $lineaValida) {
+            throw new ExcepcionDistribuidora(
+                'DISTRIBUTOR_ACTIVATION_INCOMPLETE',
+                'La distribuidora no cuenta con todos los componentes obligatorios para activarse.',
+                409,
+            );
+        }
+    }
+
     public function validarVerificacion(?VerificationVisit $visita, ?ApplicationEvaluation $evaluacion): void
     {
         if ($visita === null

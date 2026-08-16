@@ -11,11 +11,14 @@ class RolesAndPermissionsSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->seedPermissions();
-        $this->seedRoles();
+        $this->call([
+            RolesSeeder::class,
+            PermissionsSeeder::class,
+            RolePermissionsSeeder::class,
+        ]);
     }
 
-    private function seedPermissions(): void
+    public function seedPermissionCatalog(): void
     {
         $permissions = [
             ['module' => 'users', 'action' => 'view', 'code' => 'users.view', 'description' => 'Ver lista y detalle de usuarios'],
@@ -155,8 +158,34 @@ class RolesAndPermissionsSeeder extends Seeder
         ];
 
         foreach ($permissions as $permissionData) {
+            $permissionData['is_sensitive'] = $this->isSensitive($permissionData['action']);
+            $permissionData['is_active'] = true;
             Permission::updateOrCreate(['code' => $permissionData['code']], $permissionData);
         }
+    }
+
+    private function isSensitive(string $action): bool
+    {
+        return in_array($action, [
+            'activate',
+            'assign',
+            'assign_category',
+            'authorize_branch',
+            'authorize_global',
+            'cash_branch',
+            'create_branch',
+            'decide_branch',
+            'decide_global',
+            'execute_branch',
+            'manage',
+            'manage_branch',
+            'manage_global',
+            'manage_permissions',
+            'manage_state',
+            'resend_activation',
+            'revoke_global',
+            'update',
+        ], true);
     }
 
     private function seedRoles(): void
@@ -173,7 +202,6 @@ class RolesAndPermissionsSeeder extends Seeder
 
         foreach ($roles as $roleData) {
             $role = Role::updateOrCreate(['code' => $roleData['code']], $roleData);
-            $role->permissions()->detach(); // Reset permissions for clean seed
 
             if ($roleData['code'] === 'general_manager') {
                 $permissions = Permission::all();
@@ -184,7 +212,7 @@ class RolesAndPermissionsSeeder extends Seeder
                         'granted_at' => now(),
                     ];
                 }
-                $role->permissions()->sync($syncData);
+                $role->permissions()->syncWithoutDetaching($syncData);
             }
 
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {

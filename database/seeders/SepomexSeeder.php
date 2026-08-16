@@ -1,135 +1,204 @@
 <?php
 
+declare(strict_types=1);
+
 namespace Database\Seeders;
 
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\DB;
+use RuntimeException;
 
-class SepomexSeeder extends Seeder
+final class SepomexSeeder extends Seeder
 {
+    private const BATCH_SIZE = 2_000;
+
     public function run(): void
     {
-        $csvPath = 'C:\Users\saubt\Downloads\sepomex_seeder.csv';
+        $path = database_path('seeders/data/sepomex_seeder.csv');
 
-        if (!file_exists($csvPath)) {
-            $this->command->error("Archivo no encontrado: {$csvPath}");
-            return;
+        if (! is_file($path)) {
+            throw new RuntimeException("No existe el CSV de SEPOMEX requerido: {$path}");
         }
 
-        $this->command->info("Leyendo archivo CSV: {$csvPath}");
+        if (! is_readable($path)) {
+            throw new RuntimeException("El CSV de SEPOMEX no es legible: {$path}");
+        }
 
-        $file = fopen($csvPath, 'r');
-        $header = fgetcsv($file); // Saltar header
+        $handle = fopen($path, 'rb');
 
-        $estadosMap = [];
-        $municipiosMap = [];
-        $cpsMap = [];
-
-        $estadosBatch = [];
-        $municipiosBatch = [];
-        $cpsBatch = [];
-        $coloniasBatch = [];
+        if ($handle === false) {
+            throw new RuntimeException("No fue posible abrir el CSV de SEPOMEX: {$path}");
+        }
 
         DB::disableQueryLog();
 
-        $estadoIdCounter = 1;
-        $municipioIdCounter = 1;
-        $cpIdCounter = 1;
-        
-        $count = 0;
+        try {
+            $header = fgetcsv($handle, null, ',', '"', '');
+            $this->validateHeader($header);
 
-        while (($row = fgetcsv($file)) !== false) {
-            $cpCode = $row[0];
-            $coloniaName = $row[1];
-            $tipoAsentamiento = $row[2];
-            $municipioName = $row[3];
-            $estadoName = $row[4];
+            [$states, $municipalities, $postalCodes, $settlements] = $this->existingCatalog();
+            $nextStateId = ((int) DB::table('estados')->max('id')) + 1;
+            $nextMunicipalityId = ((int) DB::table('municipios')->max('id')) + 1;
+            $nextPostalCodeId = ((int) DB::table('codigos_postales')->max('id')) + 1;
+            $stateBatch = [];
+            $municipalityBatch = [];
+            $postalCodeBatch = [];
+            $settlementBatch = [];
+            $processed = 0;
+            $inserted = 0;
+            $rowNumber = 1;
+            $timestamp = now();
 
-            // 1. Estado
-            if (!isset($estadosMap[$estadoName])) {
-                $estadosMap[$estadoName] = $estadoIdCounter;
-                $estadosBatch[] = [
-                    'id' => $estadoIdCounter,
-                    'name' => $estadoName,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                $estadoIdCounter++;
+            while (($row = fgetcsv($handle, null, ',', '"', '')) !== false) {
+                $rowNumber++;
+                $this->validateRow($row, $rowNumber);
+
+                $postalCode = trim((string) $row[0]);
+                $settlementName = trim((string) $row[1]);
+                $settlementType = trim((string) $row[2]);
+                $municipalityName = trim((string) $row[3]);
+                $stateName = trim((string) $row[4]);
+
+                if (! isset($states[$stateName])) {
+                    $states[$stateName] = $nextStateId++;
+                    $stateBatch[] = ['id' => $states[$stateName], 'name' => $stateName, 'created_at' => $timestamp, 'updated_at' => $timestamp];
+                }
+
+                $stateId = $states[$stateName];
+                $municipalityKey = $this->key($stateId, $municipalityName);
+
+                if (! isset($municipalities[$municipalityKey])) {
+                    $municipalities[$municipalityKey] = $nextMunicipalityId++;
+                    $municipalityBatch[] = ['id' => $municipalities[$municipalityKey], 'estado_id' => $stateId, 'name' => $municipalityName, 'created_at' => $timestamp, 'updated_at' => $timestamp];
+                }
+
+                $municipalityId = $municipalities[$municipalityKey];
+                $postalCodeKey = $this->key($municipalityId, $postalCode);
+
+                if (! isset($postalCodes[$postalCodeKey])) {
+                    $postalCodes[$postalCodeKey] = $nextPostalCodeId++;
+                    $postalCodeBatch[] = ['id' => $postalCodes[$postalCodeKey], 'municipio_id' => $municipalityId, 'code' => $postalCode, 'created_at' => $timestamp, 'updated_at' => $timestamp];
+                }
+
+                $postalCodeId = $postalCodes[$postalCodeKey];
+                $settlementKey = $this->key($postalCodeId, $settlementName, $settlementType);
+
+                if (! isset($settlements[$settlementKey])) {
+                    $settlements[$settlementKey] = true;
+                    $settlementBatch[] = [
+                        'codigo_postal_id' => $postalCodeId,
+                        'name' => $settlementName,
+                        'settlement_type' => $settlementType !== '' ? $settlementType : null,
+                        'created_at' => $timestamp,
+                        'updated_at' => $timestamp,
+                    ];
+                    $inserted++;
+                }
+
+                $processed++;
+
+                if (count($settlementBatch) >= self::BATCH_SIZE) {
+                    $this->flush($stateBatch, $municipalityBatch, $postalCodeBatch, $settlementBatch);
+                }
             }
-            $estadoId = $estadosMap[$estadoName];
 
-            // 2. Municipio
-            $munKey = $estadoId . '_' . $municipioName;
-            if (!isset($municipiosMap[$munKey])) {
-                $municipiosMap[$munKey] = $municipioIdCounter;
-                $municipiosBatch[] = [
-                    'id' => $municipioIdCounter,
-                    'estado_id' => $estadoId,
-                    'name' => $municipioName,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                $municipioIdCounter++;
-            }
-            $municipioId = $municipiosMap[$munKey];
-
-            // 3. Código Postal
-            $cpKey = $municipioId . '_' . $cpCode;
-            if (!isset($cpsMap[$cpKey])) {
-                $cpsMap[$cpKey] = $cpIdCounter;
-                $cpsBatch[] = [
-                    'id' => $cpIdCounter,
-                    'municipio_id' => $municipioId,
-                    'code' => $cpCode,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ];
-                $cpIdCounter++;
-            }
-            $cpId = $cpsMap[$cpKey];
-
-            // 4. Colonia
-            $coloniasBatch[] = [
-                'codigo_postal_id' => $cpId,
-                'name' => $coloniaName,
-                'settlement_type' => $tipoAsentamiento,
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-
-            $count++;
-
-            // Insertar por lotes
-            if (count($coloniasBatch) >= 5000) {
-                $this->flushBatches($estadosBatch, $municipiosBatch, $cpsBatch, $coloniasBatch);
-                $this->command->info("Procesados {$count} registros...");
-            }
+            $this->flush($stateBatch, $municipalityBatch, $postalCodeBatch, $settlementBatch);
+            $this->synchronizeSequences();
+            $this->command?->info("SEPOMEX: {$processed} filas procesadas; {$inserted} colonias nuevas.");
+        } finally {
+            fclose($handle);
         }
-
-        // Flush remaining
-        $this->flushBatches($estadosBatch, $municipiosBatch, $cpsBatch, $coloniasBatch);
-        $this->command->info("Completado. Total: {$count} registros procesados.");
-
-        fclose($file);
     }
 
-    private function flushBatches(&$estados, &$municipios, &$cps, &$colonias)
+    /** @return array{array<string, int>, array<string, int>, array<string, int>, array<string, bool>} */
+    private function existingCatalog(): array
     {
-        if (count($estados) > 0) {
-            DB::table('estados')->insert($estados);
-            $estados = [];
+        $states = DB::table('estados')->pluck('id', 'name')->map(fn ($id): int => (int) $id)->all();
+        $municipalities = [];
+        $postalCodes = [];
+        $settlements = [];
+
+        foreach (DB::table('municipios')->get(['id', 'estado_id', 'name']) as $municipality) {
+            $municipalities[$this->key($municipality->estado_id, $municipality->name)] = (int) $municipality->id;
         }
-        if (count($municipios) > 0) {
-            DB::table('municipios')->insert($municipios);
-            $municipios = [];
+
+        foreach (DB::table('codigos_postales')->get(['id', 'municipio_id', 'code']) as $postalCode) {
+            $postalCodes[$this->key($postalCode->municipio_id, $postalCode->code)] = (int) $postalCode->id;
         }
-        if (count($cps) > 0) {
-            DB::table('codigos_postales')->insert($cps);
-            $cps = [];
+
+        foreach (DB::table('colonias')->orderBy('id')->cursor() as $settlement) {
+            $settlements[$this->key($settlement->codigo_postal_id, $settlement->name, $settlement->settlement_type ?? '')] = true;
         }
-        if (count($colonias) > 0) {
-            DB::table('colonias')->insert($colonias);
-            $colonias = [];
+
+        return [$states, $municipalities, $postalCodes, $settlements];
+    }
+
+    /** @param list<string>|false $header */
+    private function validateHeader(array|false $header): void
+    {
+        if ($header === false) {
+            throw new RuntimeException('El CSV de SEPOMEX está vacío.');
         }
+
+        $header[0] = ltrim((string) ($header[0] ?? ''), "\xEF\xBB\xBF");
+        $expected = ['codigo_postal', 'asentamiento', 'tipo_asentamiento', 'municipio', 'estado'];
+
+        if (array_slice($header, 0, 5) !== $expected) {
+            throw new RuntimeException('El encabezado del CSV de SEPOMEX no coincide con el contrato esperado.');
+        }
+    }
+
+    /** @param list<string|null> $row */
+    private function validateRow(array $row, int $rowNumber): void
+    {
+        if (count($row) < 5) {
+            throw new RuntimeException("Fila {$rowNumber} inválida en el CSV de SEPOMEX: se esperaban al menos cinco columnas.");
+        }
+
+        foreach ([0, 1, 3, 4] as $requiredColumn) {
+            if (trim((string) ($row[$requiredColumn] ?? '')) === '') {
+                throw new RuntimeException("Fila {$rowNumber} inválida en el CSV de SEPOMEX: contiene una columna obligatoria vacía.");
+            }
+        }
+    }
+
+    /** @param list<array<string, mixed>> $states
+     * @param  list<array<string, mixed>>  $municipalities
+     * @param  list<array<string, mixed>>  $postalCodes
+     * @param  list<array<string, mixed>>  $settlements
+     */
+    private function flush(array &$states, array &$municipalities, array &$postalCodes, array &$settlements): void
+    {
+        DB::transaction(function () use (&$states, &$municipalities, &$postalCodes, &$settlements): void {
+            if ($states !== []) {
+                DB::table('estados')->insert($states);
+            }
+            if ($municipalities !== []) {
+                DB::table('municipios')->insert($municipalities);
+            }
+            if ($postalCodes !== []) {
+                DB::table('codigos_postales')->insert($postalCodes);
+            }
+            if ($settlements !== []) {
+                DB::table('colonias')->insert($settlements);
+            }
+        });
+
+        $states = [];
+        $municipalities = [];
+        $postalCodes = [];
+        $settlements = [];
+    }
+
+    private function synchronizeSequences(): void
+    {
+        foreach (['estados', 'municipios', 'codigos_postales', 'colonias'] as $table) {
+            DB::statement("SELECT setval(pg_get_serial_sequence('{$table}', 'id'), COALESCE((SELECT MAX(id) FROM {$table}), 1), true)");
+        }
+    }
+
+    private function key(int|string $first, int|string $second, int|string $third = ''): string
+    {
+        return implode("\x1F", [(string) $first, (string) $second, (string) $third]);
     }
 }

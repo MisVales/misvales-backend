@@ -51,7 +51,7 @@ class TrackSessionActivity
                 }
 
                 // 2. Verificar Inactividad (Punto 26)
-                if ($session->last_activity_at) {
+                if (! app()->environment('local') && $session->last_activity_at) {
                     $minutesInactive = $session->last_activity_at->diffInMinutes($now);
 
                     if ($minutesInactive > $policy['inactivity']) {

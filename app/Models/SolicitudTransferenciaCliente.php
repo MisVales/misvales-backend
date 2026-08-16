@@ -19,6 +19,7 @@ class SolicitudTransferenciaCliente extends Model
             'preaccepted_at' => 'immutable_datetime',
             'origin_decided_at' => 'immutable_datetime',
             'completed_at' => 'immutable_datetime',
+            'cancelled_at' => 'immutable_datetime',
         ];
     }
 }

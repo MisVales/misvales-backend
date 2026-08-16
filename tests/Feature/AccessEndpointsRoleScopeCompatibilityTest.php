@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\AccountInvitation;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -49,6 +50,30 @@ final class AccessEndpointsRoleScopeCompatibilityTest extends TestCase
         $this->getJson('/api/v1/users?page=1')
             ->assertOk()
             ->assertJsonPath('data.0.id', $this->manager->id);
+    }
+
+    public function test_user_and_invitation_searches_are_case_insensitive_by_name(): void
+    {
+        $coordinator = User::factory()->create([
+            'name' => 'Coordinador B QA',
+            'state' => 'ACTIVE',
+        ]);
+
+        AccountInvitation::query()->create([
+            'user_id' => $coordinator->id,
+            'created_by_user_id' => $this->manager->id,
+            'token_hash' => hash('sha256', Str::uuid()->toString()),
+            'state' => 'ACTIVE',
+            'expires_at' => now()->addHour(),
+        ]);
+
+        $this->getJson('/api/v1/users?search=coordinador%20b')
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $coordinator->id);
+
+        $this->getJson('/api/v1/invitations?search=coordinador%20b')
+            ->assertOk()
+            ->assertJsonPath('data.0.user_id', $coordinator->id);
     }
 
     public function test_roles_index_uses_the_canonical_role_scope_lifecycle(): void

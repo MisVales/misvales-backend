@@ -15,7 +15,7 @@ final class OrganizationAssignmentRules
         'coordinator' => OrganizationScope::BRANCH,
         'verifier' => OrganizationScope::BRANCH,
         'cashier' => OrganizationScope::BRANCH,
-        'distributor' => OrganizationScope::ASSIGNED,
+        'distributor' => OrganizationScope::DISTRIBUTOR,
     ];
 
     public function assertRoleAllowsScope(string $roleCode, OrganizationScope $scope): void

@@ -14,7 +14,7 @@ final class ResolvedorDestinatarios
 {
     public function resolver(array $contexto): Collection
     {
-        $payload = $contexto['payload'] ?? [];
+        $payload = is_array($contexto['payload'] ?? null) ? $contexto['payload'] : [];
         $userIds = collect();
         foreach (['user_id', 'actor_id', 'created_by', 'requested_by', 'authorized_by', 'executed_by'] as $key) {
             if (! empty($payload[$key])) {

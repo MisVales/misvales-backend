@@ -64,4 +64,24 @@ final class BranchMapperTest extends TestCase
             'lock_version' => 2,
         ], (new BranchMapper)->toPersistence($branch));
     }
+
+    public function test_it_maps_a_legacy_address_without_validation_id(): void
+    {
+        $record = new BranchRecord;
+        $record->forceFill([
+            'id' => '019fcbec-4ba4-7721-bf39-c9729fb0bd67',
+            'code' => 'MATRIZ',
+            'name' => 'Sucursal Matriz',
+            'address' => 'Torreón, Coahuila',
+            'address_validation_id' => null,
+            'is_headquarters' => true,
+            'status' => 'ACTIVE',
+            'lock_version' => 1,
+        ]);
+
+        $branch = (new BranchMapper)->toDomain($record);
+
+        self::assertSame('Torreón, Coahuila', $branch->address()?->formatted);
+        self::assertNull($branch->address()?->validationId);
+    }
 }

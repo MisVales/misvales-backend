@@ -47,7 +47,9 @@ class MeController extends Controller
             }
 
             if (($organizationScope === OrganizationScope::BRANCH && $scope->branch_id === null)
-                || ($organizationScope === OrganizationScope::GLOBAL && $scope->branch_id !== null)) {
+                || ($organizationScope === OrganizationScope::GLOBAL && $scope->branch_id !== null)
+                || ($organizationScope === OrganizationScope::DISTRIBUTOR
+                    && ($scope->branch_id === null || $scope->scope_id === null))) {
                 continue;
             }
 

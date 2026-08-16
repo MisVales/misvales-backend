@@ -69,8 +69,7 @@ class CreditIncreaseApiTest extends TestCase
 
         $distributor = $this->usuarioConRol('distributor', $branch->id);
 
-        Distribuidora::factory()->active()->create([
-            'id' => $distributor->id,
+        $distributorRecord = Distribuidora::factory()->active()->create([
             'user_id' => $distributor->id,
             'branch_id' => $branch->id,
             'distributor_number' => sprintf('DIS-%d-%06d', now()->year, rand(1, 999999)),
@@ -78,7 +77,7 @@ class CreditIncreaseApiTest extends TestCase
         ]);
 
         $linea = LineaCredito::factory()->create([
-            'distributor_id' => $distributor->id,
+            'distributor_id' => $distributorRecord->id,
             'total_authorized' => '30000.0000',
             'used_balance' => '12000.0000',
             'lock_version' => 1,
@@ -88,7 +87,7 @@ class CreditIncreaseApiTest extends TestCase
         $coordinator = $this->usuarioConRol('coordinator', $branch->id);
         CoordinatorDistributorAssignment::create([
             'coordinator_id' => $coordinator->id,
-            'distributor_id' => $distributor->id,
+            'distributor_id' => $distributorRecord->id,
             'branch_id' => $branch->id,
             'valid_from' => now(),
             'status' => 'ACTIVE',
@@ -100,7 +99,7 @@ class CreditIncreaseApiTest extends TestCase
         $key = (string) Str::uuid();
 
         $response = $this->withHeader('Idempotency-Key', $key)
-            ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
+            ->postJson("/api/v1/distributors/{$distributorRecord->id}/credit-increase-requests", [
                 'requested_amount' => '10000.0000',
                 'request_reason' => 'Aumento de demanda',
                 'lock_version' => 1,
@@ -109,9 +108,15 @@ class CreditIncreaseApiTest extends TestCase
         $response->assertSuccessful()->assertJsonPath('data.requested_amount', '10000.0000')
             ->assertJsonPath('data.status', 'REQUESTED');
 
+        $this->getJson('/api/v1/credit-increase-requests')
+            ->assertOk()
+            ->assertJsonPath('data.0.distributor.id', $distributorRecord->id)
+            ->assertJsonPath('data.0.distributor.full_name', $distributor->name)
+            ->assertJsonPath('data.0.branch.id', $branch->id);
+
         // Reintento con la misma idempotencia no duplica
         $this->withHeader('Idempotency-Key', $key)
-            ->postJson("/api/v1/distributors/{$distributor->id}/credit-increase-requests", [
+            ->postJson("/api/v1/distributors/{$distributorRecord->id}/credit-increase-requests", [
                 'requested_amount' => '10000.0000',
                 'request_reason' => 'Aumento de demanda',
                 'lock_version' => 1,
@@ -158,6 +163,12 @@ class CreditIncreaseApiTest extends TestCase
 
         Sanctum::actingAs($coordinator);
 
+        $this->getJson("/api/v1/credit-increase-requests/{$requestId}")
+            ->assertOk()
+            ->assertJsonPath('data.capabilities.can_preauthorize', true)
+            ->assertJsonPath('data.capabilities.can_reject_by_coordinator', true)
+            ->assertJsonPath('data.capabilities.can_decide', false);
+
         // Preautorizar
         $pre = $this->postJson("/api/v1/credit-increase-requests/{$requestId}/preauthorize", [
             'recommended_amount' => '4000.0000',
@@ -166,7 +177,9 @@ class CreditIncreaseApiTest extends TestCase
         ]);
 
         $pre->assertSuccessful()->assertJsonPath('data.status', 'PREAUTHORIZED')
-            ->assertJsonPath('data.recommended_amount', '4000.0000');
+            ->assertJsonPath('data.recommended_amount', '4000.0000')
+            ->assertJsonPath('data.distributor.id', $distributor->id)
+            ->assertJsonPath('data.branch.id', $branch->id);
 
         // Rechazar operativamente sobre una nueva solicitud
         Sanctum::actingAs($distributor);

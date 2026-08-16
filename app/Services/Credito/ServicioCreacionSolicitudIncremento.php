@@ -3,7 +3,7 @@
 namespace App\Services\Credito;
 
 use App\Enums\EstadoSolicitudIncremento;
-use App\Helpers\AuditHelper;
+use App\Exceptions\ExcepcionCredito;
 use App\Models\CoordinatorDistributorAssignment;
 use App\Models\Distribuidora;
 use App\Models\LineaCredito;
@@ -11,11 +11,11 @@ use App\Models\OutboxEvent;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use App\Exceptions\ExcepcionCredito;
 
 class ServicioCreacionSolicitudIncremento
 {
     protected CalculadorSaldoCredito $calculador;
+
     protected GeneradorFolioIncremento $generadorFolio;
 
     public function __construct(
@@ -55,7 +55,7 @@ class ServicioCreacionSolicitudIncremento
                 ->where('status', 'ACTIVE')
                 ->first();
 
-            if (!$asignacionCoordinador) {
+            if (! $asignacionCoordinador) {
                 throw new ExcepcionCredito('CREDIT_LINE_INCONSISTENT', 'La distribuidora no tiene un coordinador activo asignado.', 400);
             }
 
@@ -137,8 +137,8 @@ class ServicioCreacionSolicitudIncremento
                 'event_type' => 'CreditIncreaseRequested',
                 'aggregate_type' => 'credit_increase_requests',
                 'aggregate_id' => $solicitud->id,
-                'payload' => json_encode($payload),
-                'status' => 'PENDING'
+                'payload' => $payload,
+                'status' => 'PENDING',
             ]);
 
             return $solicitud;

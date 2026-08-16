@@ -31,7 +31,7 @@ class LineaCreditoResource extends JsonResource
             'distributor' => [
                 'id' => $this->distribuidora->id,
                 'distributor_number' => $this->distribuidora->distributor_number ?? '',
-                'full_name' => trim("{$this->distribuidora->first_name} {$this->distribuidora->last_name}"),
+                'full_name' => $this->distribuidora->usuario?->name ?? '',
             ],
             'total_authorized' => $saldos['total_authorized'],
             'used_balance' => $saldos['used_balance'],
@@ -51,7 +51,7 @@ class LineaCreditoResource extends JsonResource
     {
         // Distribuidora puede solicitar si es dueña de la línea
         $isOwner = $user->hasPermissionTo('credit_increase_requests.create_own')
-            && $user->id === $this->distributor_id;
+            && $user->id === $this->distribuidora?->user_id;
 
         // Coordinador/Gerente pueden revisar (el alcance ya está filtrado por el query)
         $isReviewer = $user->hasPermissionTo('credit_increase_requests.preauthorize_assigned')

@@ -1,16 +1,16 @@
 Project MisVales {
   database_type: 'PostgreSQL'
-  Note: 'Generado desde PostgreSQL aplicado mediante information_schema y pg_catalog.'
+  Note: 'Esquema final consolidado estaticamente desde las 88 migraciones Laravel actuales; validado mediante conversion DBML a SQL PostgreSQL.'
 }
 
 Table "account_invitations" {
   "id" uuid [not null]
   "user_id" uuid [not null]
   "created_by_user_id" uuid
-  "purpose" varchar(255) [not null, default: `'ACCOUNT_ACTIVATION'::character varying`]
+  "purpose" varchar(255) [not null, default: 'ACCOUNT_ACTIVATION']
   "token_hash" varchar(255) [not null]
   "exchange_token_hash" varchar(255)
-  "state" varchar(255) [not null, default: `'ACTIVE'::character varying`]
+  "state" varchar(255) [not null, default: 'ACTIVE']
   "expires_at" timestamptz [not null]
   "inspected_at" timestamptz
   "prepared_at" timestamptz
@@ -19,19 +19,19 @@ Table "account_invitations" {
   "exchange_expires_at" timestamptz
   "mfa_setup_completed_at" timestamptz
   "recovery_codes_confirmed_at" timestamptz
-  "attempt_count" integer [not null, default: `0`]
+  "attempt_count" integer [not null, default: 0]
   "last_attempt_at" timestamptz
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'account_invitations_pkey', pk]
-    ("user_id", "purpose") [name: 'account_invitations_active_unique', unique, note: 'WHERE ((state)::text = ANY ((ARRAY[\'ACTIVE\'::character varying, \'PREPARED\'::character varying])::text[]))']
-    ("exchange_token_hash") [name: 'account_invitations_exchange_token_hash_unique', unique]
+    ("id") [name: 'account_invitations_id_primary', pk]
     ("token_hash") [name: 'account_invitations_token_hash_unique', unique]
+    ("exchange_token_hash") [name: 'account_invitations_exchange_token_hash_unique', unique]
+    ("user_id", "purpose") [name: 'account_invitations_active_unique', unique, note: 'WHERE state IN (\'ACTIVE\', \'PREPARED\')']
   }
 
-  Note: 'chk_invitation_purpose: CHECK (purpose::text = \'ACCOUNT_ACTIVATION\'::text); chk_invitation_state: CHECK (state::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'PREPARED\'::character varying, \'CONSUMED\'::character varying, \'EXPIRED\'::character varying, \'REVOKED\'::character varying]::text[]))'
+  Note: 'chk_invitation_state: CHECK (state IN (\'ACTIVE\', \'PREPARED\', \'CONSUMED\', \'EXPIRED\', \'REVOKED\')); chk_invitation_purpose: CHECK (purpose IN (\'ACCOUNT_ACTIVATION\'))'
 }
 
 Table "application_assets_liabilities" {
@@ -39,27 +39,27 @@ Table "application_assets_liabilities" {
   "application_id" uuid [not null]
   "entry_type" varchar(32) [not null]
   "name" varchar(255) [not null]
-  "amount" numeric(19,4)
-  "outstanding_balance" numeric(19,4)
-  "monthly_payment" numeric(19,4)
-  "is_active" boolean [not null, default: `true`]
+  "amount" decimal(19,4)
+  "outstanding_balance" decimal(19,4)
+  "monthly_payment" decimal(19,4)
+  "is_active" boolean [not null, default: true]
   "details_payload" jsonb
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_assets_liabilities_pkey', pk]
+    ("id") [name: 'application_assets_liabilities_id_primary', pk]
     ("application_id") [name: 'application_assets_liabilities_application_id_index']
   }
 
-  Note: 'application_assets_amounts_check: CHECK ((amount IS NULL OR amount >= 0::numeric) AND (outstanding_balance IS NULL OR outstanding_balance >= 0::numeric) AND (monthly_payment IS NULL OR monthly_payment >= 0::numeric)); application_assets_entry_type_check: CHECK (entry_type::text = ANY (ARRAY[\'ASSET\'::character varying, \'LIABILITY\'::character varying, \'ACTIVE_COMMITMENT\'::character varying]::text[]))'
+  Note: 'application_assets_entry_type_check: CHECK (entry_type IN (\'ASSET\', \'LIABILITY\', \'ACTIVE_COMMITMENT\')); application_assets_amounts_check: CHECK ((amount IS NULL OR amount >= 0) AND (outstanding_balance IS NULL OR outstanding_balance >= 0) AND (monthly_payment IS NULL OR monthly_payment >= 0))'
 }
 
 Table "application_authorizations" {
   "id" uuid [not null]
   "application_id" uuid [not null]
   "decision" varchar(50) [not null]
-  "initial_credit_line_amount" numeric(19,4)
+  "initial_credit_line_amount" decimal(19,4)
   "reason" text [not null]
   "authorized_by" uuid [not null]
   "authorized_at" timestamptz [not null]
@@ -67,30 +67,30 @@ Table "application_authorizations" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_authorizations_pkey', pk]
+    ("id") [name: 'application_authorizations_id_primary', pk]
     ("application_id") [name: 'application_authorizations_application_id_unique', unique]
   }
 
-  Note: 'application_authorizations_amount_check: CHECK (decision::text = \'APPROVED\'::text AND initial_credit_line_amount > 0::numeric OR decision::text = \'REJECTED\'::text AND initial_credit_line_amount IS NULL); application_authorizations_decision_check: CHECK (decision::text = ANY (ARRAY[\'APPROVED\'::character varying, \'REJECTED\'::character varying]::text[]))'
+  Note: 'application_authorizations_decision_check: CHECK (decision IN (\'APPROVED\',\'REJECTED\')); application_authorizations_amount_check: CHECK ((decision = \'APPROVED\' AND initial_credit_line_amount > 0) OR (decision = \'REJECTED\' AND initial_credit_line_amount IS NULL))'
 }
 
 Table "application_commercial_credits" {
   "id" uuid [not null]
   "application_id" uuid [not null]
   "company_name" varchar(255) [not null]
-  "credit_limit" numeric(19,4) [not null]
-  "is_current" boolean [not null, default: `true`]
+  "credit_limit" decimal(19,4) [not null]
+  "is_current" boolean [not null, default: true]
   "proof_reference" uuid
   "details_payload" jsonb
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_commercial_credits_pkey', pk]
+    ("id") [name: 'application_commercial_credits_id_primary', pk]
     ("application_id") [name: 'application_commercial_credits_application_id_index']
   }
 
-  Note: 'application_commercial_credits_limit_check: CHECK (credit_limit >= 0::numeric)'
+  Note: 'application_commercial_credits_limit_check: CHECK (credit_limit >= 0)'
 }
 
 Table "application_corrections" {
@@ -108,7 +108,7 @@ Table "application_corrections" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_corrections_pkey', pk]
+    ("id") [name: 'application_corrections_id_primary', pk]
     ("application_id", "corrected_at") [name: 'application_corrections_application_id_corrected_at_index']
   }
 }
@@ -120,14 +120,14 @@ Table "application_employments" {
   "job_title" varchar(255)
   "started_at" date
   "ended_at" date
-  "is_current" boolean [not null, default: `true`]
+  "is_current" boolean [not null, default: true]
   "reference_payload" jsonb
   "details_payload" jsonb
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_employments_pkey', pk]
+    ("id") [name: 'application_employments_id_primary', pk]
     ("application_id") [name: 'application_employments_application_id_index']
   }
 
@@ -147,11 +147,11 @@ Table "application_evaluations" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_evaluations_pkey', pk]
+    ("id") [name: 'application_evaluations_id_primary', pk]
     ("application_id", "evaluated_at") [name: 'application_evaluations_application_id_evaluated_at_index']
   }
 
-  Note: 'application_evaluations_result_check: CHECK (result::text = ANY (ARRAY[\'COMPLIES\'::character varying, \'DOES_NOT_COMPLY\'::character varying]::text[]))'
+  Note: 'application_evaluations_result_check: CHECK (result IN (\'COMPLIES\',\'DOES_NOT_COMPLY\'))'
 }
 
 Table "application_family_members" {
@@ -164,17 +164,17 @@ Table "application_family_members" {
   "birth_date" date
   "declared_age" smallint
   "school_name" varchar(255)
-  "is_family_reference" boolean [not null, default: `false`]
+  "is_family_reference" boolean [not null, default: false]
   "details_payload" jsonb
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_family_members_pkey', pk]
+    ("id") [name: 'application_family_members_id_primary', pk]
     ("application_id") [name: 'application_family_members_application_id_index']
   }
 
-  Note: 'application_family_age_check: CHECK (declared_age IS NULL OR declared_age <= 130); application_family_relationship_check: CHECK (relationship::text = ANY (ARRAY[\'SPOUSE\'::character varying, \'PARTNER\'::character varying, \'CHILD\'::character varying, \'FATHER\'::character varying, \'MOTHER\'::character varying, \'SIBLING\'::character varying, \'OTHER\'::character varying]::text[]))'
+  Note: 'application_family_relationship_check: CHECK (relationship IN (\'SPOUSE\', \'PARTNER\', \'CHILD\', \'FATHER\', \'MOTHER\', \'SIBLING\', \'OTHER\')); application_family_age_check: CHECK (declared_age IS NULL OR declared_age <= 130)'
 }
 
 Table "application_personal_data" {
@@ -184,9 +184,9 @@ Table "application_personal_data" {
   "first_last_name" varchar(255) [not null]
   "second_last_name" varchar(255)
   "curp_ciphertext" text [not null]
-  "curp_hmac" character(64) [not null]
+  "curp_hmac" char(64) [not null]
   "rfc_ciphertext" text
-  "rfc_hmac" character(64)
+  "rfc_hmac" char(64)
   "birth_date" date [not null]
   "birth_place" varchar(255) [not null]
   "birth_state" varchar(255) [not null]
@@ -195,22 +195,22 @@ Table "application_personal_data" {
   "phone_number" varchar(32) [not null]
   "official_id_type" varchar(32) [not null]
   "official_id_number_ciphertext" text [not null]
-  "official_id_number_hmac" character(64) [not null]
+  "official_id_number_hmac" char(64) [not null]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_personal_data_pkey', pk]
+    ("id") [name: 'application_personal_data_id_primary', pk]
     ("application_id") [name: 'application_personal_data_application_id_unique', unique]
   }
 
-  Note: 'application_personal_data_id_type_check: CHECK (official_id_type::text = ANY (ARRAY[\'INE\'::character varying, \'PASSPORT\'::character varying, \'PROFESSIONAL_LICENSE\'::character varying, \'OTHER\'::character varying]::text[]))'
+  Note: 'application_personal_data_id_type_check: CHECK (official_id_type IN (\'INE\', \'PASSPORT\', \'PROFESSIONAL_LICENSE\', \'OTHER\'))'
 }
 
 Table "application_residences" {
   "id" uuid [not null]
   "application_id" uuid [not null]
-  "is_current" boolean [not null, default: `true`]
+  "is_current" boolean [not null, default: true]
   "street" varchar(255) [not null]
   "exterior_number" varchar(32) [not null]
   "interior_number" varchar(32)
@@ -219,23 +219,23 @@ Table "application_residences" {
   "municipality" varchar(255) [not null]
   "city" varchar(255) [not null]
   "state" varchar(255) [not null]
-  "country" character(2) [not null, default: `'MX'::bpchar`]
+  "country" char(2) [not null, default: 'MX']
   "housing_tenure" varchar(24) [not null]
   "financing_status" varchar(24)
-  "width_meters" numeric(10,2)
-  "length_meters" numeric(10,2)
-  "built_area_square_meters" numeric(12,2)
+  "width_meters" decimal(10,2)
+  "length_meters" decimal(10,2)
+  "built_area_square_meters" decimal(12,2)
   "details_payload" jsonb
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_residences_pkey', pk]
+    ("id") [name: 'application_residences_id_primary', pk]
     ("application_id") [name: 'application_residences_application_id_index']
-    ("application_id") [name: 'application_residences_one_current', unique, note: 'WHERE (is_current = true)']
+    ("application_id") [name: 'application_residences_one_current', unique, note: 'WHERE is_current = true']
   }
 
-  Note: 'application_residences_dimensions_check: CHECK ((width_meters IS NULL OR width_meters > 0::numeric) AND (length_meters IS NULL OR length_meters > 0::numeric) AND (built_area_square_meters IS NULL OR built_area_square_meters > 0::numeric)); application_residences_financing_check: CHECK (financing_status IS NULL OR (financing_status::text = ANY (ARRAY[\'PAID\'::character varying, \'MORTGAGE\'::character varying, \'LOAN\'::character varying, \'INFONAVIT\'::character varying, \'OTHER\'::character varying, \'NOT_APPLICABLE\'::character varying]::text[]))); application_residences_tenure_check: CHECK (housing_tenure::text = ANY (ARRAY[\'OWNED\'::character varying, \'RENTED\'::character varying, \'BORROWED\'::character varying, \'OTHER\'::character varying]::text[]))'
+  Note: 'application_residences_tenure_check: CHECK (housing_tenure IN (\'OWNED\', \'RENTED\', \'BORROWED\', \'OTHER\')); application_residences_financing_check: CHECK (financing_status IS NULL OR financing_status IN (\'PAID\', \'MORTGAGE\', \'LOAN\', \'INFONAVIT\', \'OTHER\', \'NOT_APPLICABLE\')); application_residences_dimensions_check: CHECK ((width_meters IS NULL OR width_meters > 0) AND (length_meters IS NULL OR length_meters > 0) AND (built_area_square_meters IS NULL OR built_area_square_meters > 0))'
 }
 
 Table "application_state_transitions" {
@@ -243,16 +243,16 @@ Table "application_state_transitions" {
   "application_id" uuid [not null]
   "from_status" varchar(50)
   "to_status" varchar(50) [not null]
-  "user_id" uuid
+  "user_id" uuid [note: 'Actor que realiza el cambio']
   "reason" text
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_state_transitions_pkey', pk]
+    ("id") [name: 'application_state_transitions_id_primary', pk]
   }
 
-  Note: 'application_state_transitions_from_status_check: CHECK (from_status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'COORDINATOR_REVIEW\'::character varying, \'VERIFIER_ASSIGNED\'::character varying, \'PHYSICAL_VERIFICATION\'::character varying, \'COORDINATOR_CORRECTION\'::character varying, \'COORDINATOR_EVALUATION\'::character varying, \'MANAGER_AUTHORIZATION\'::character varying, \'TERMINATED_UNFAVORABLE\'::character varying, \'REJECTED\'::character varying, \'AUTHORIZED_PENDING_ACTIVATION\'::character varying, \'ACTIVE\'::character varying]::text[])); application_state_transitions_to_status_check: CHECK (to_status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'COORDINATOR_REVIEW\'::character varying, \'VERIFIER_ASSIGNED\'::character varying, \'PHYSICAL_VERIFICATION\'::character varying, \'COORDINATOR_CORRECTION\'::character varying, \'COORDINATOR_EVALUATION\'::character varying, \'MANAGER_AUTHORIZATION\'::character varying, \'TERMINATED_UNFAVORABLE\'::character varying, \'REJECTED\'::character varying, \'AUTHORIZED_PENDING_ACTIVATION\'::character varying, \'ACTIVE\'::character varying]::text[]))'
+  Note: 'application_state_transitions_from_status_check: CHECK (from_status IN (\'DRAFT\', \'COORDINATOR_REVIEW\', \'VERIFIER_ASSIGNED\', \'PHYSICAL_VERIFICATION\', \'COORDINATOR_CORRECTION\', \'COORDINATOR_EVALUATION\', \'MANAGER_AUTHORIZATION\', \'TERMINATED_UNFAVORABLE\', \'REJECTED\', \'AUTHORIZED_PENDING_ACTIVATION\', \'ACTIVE\')); application_state_transitions_to_status_check: CHECK (to_status IN (\'DRAFT\', \'COORDINATOR_REVIEW\', \'VERIFIER_ASSIGNED\', \'PHYSICAL_VERIFICATION\', \'COORDINATOR_CORRECTION\', \'COORDINATOR_EVALUATION\', \'MANAGER_AUTHORIZATION\', \'TERMINATED_UNFAVORABLE\', \'REJECTED\', \'AUTHORIZED_PENDING_ACTIVATION\', \'ACTIVE\'))'
 }
 
 Table "application_vehicles" {
@@ -268,11 +268,11 @@ Table "application_vehicles" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'application_vehicles_pkey', pk]
+    ("id") [name: 'application_vehicles_id_primary', pk]
     ("application_id") [name: 'application_vehicles_application_id_index']
   }
 
-  Note: 'application_vehicles_model_year_check: CHECK (model_year IS NULL OR model_year >= 1886 AND model_year <= 2200)'
+  Note: 'application_vehicles_model_year_check: CHECK (model_year IS NULL OR model_year BETWEEN 1886 AND 2200)'
 }
 
 Table "audit_logs" {
@@ -288,25 +288,35 @@ Table "audit_logs" {
   "effective_from" timestamptz
   "effective_to" timestamptz
   "reason" text
-  "ip_address" inet
+  "ip_address" ipaddress
   "user_agent" text
   "request_id" varchar(255)
-  "result" varchar(255) [not null, default: `'SUCCESS'::character varying`]
+  "result" varchar(255) [not null, default: 'SUCCESS']
   "created_at" timestamptz
   "updated_at" timestamptz
   "event_name" varchar(255)
   "trace_id" varchar(255)
-  "event_type" varchar(255) [default: `event_name`]
+  "event_type" varchar(255) [note: 'GENERATED ALWAYS AS (event_name) STORED']
+  "authorizer_id" uuid
+  "executor_id" uuid
+  "session_id" uuid
+  "correlation_id" varchar(255)
+  "evidence" jsonb
+  "rule_snapshot" jsonb
 
   indexes {
-    ("id") [name: 'audit_logs_pkey', pk]
+    ("id") [name: 'audit_logs_id_primary', pk]
     ("actor_id") [name: 'audit_logs_actor_id_index']
     ("branch_id") [name: 'audit_logs_branch_id_index']
-    ("entity_id") [name: 'audit_logs_entity_id_index']
     ("entity_type") [name: 'audit_logs_entity_type_index']
-    ("event_type") [name: 'audit_logs_event_type_index']
+    ("entity_id") [name: 'audit_logs_entity_id_index']
     ("request_id") [name: 'audit_logs_request_id_index']
     ("trace_id") [name: 'audit_logs_trace_id_index']
+    ("event_type") [name: 'audit_logs_event_type_index']
+    ("authorizer_id") [name: 'audit_logs_authorizer_id_index']
+    ("executor_id") [name: 'audit_logs_executor_id_index']
+    ("session_id") [name: 'audit_logs_session_id_index']
+    ("correlation_id") [name: 'audit_logs_correlation_id_index']
   }
 }
 
@@ -317,7 +327,7 @@ Table "auth_sessions" {
   "authentication_method" varchar(255)
   "mfa_method" varchar(255)
   "mfa_verified_at" timestamptz
-  "ip_address" inet
+  "ip_address" ipaddress
   "user_agent" text
   "device_name" varchar(255)
   "last_activity_at" timestamptz
@@ -325,24 +335,72 @@ Table "auth_sessions" {
   "revoked_at" timestamptz
   "revoked_by_user_id" uuid
   "revocation_reason" varchar(255)
-  "created_at" timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  "created_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'auth_sessions_pkey', pk]
-    ("expires_at") [name: 'auth_sessions_expires_at_index']
-    ("revoked_at") [name: 'auth_sessions_revoked_at_index']
+    ("id") [name: 'auth_sessions_id_primary', pk]
     ("session_identifier_hash") [name: 'auth_sessions_session_identifier_hash_unique', unique]
     ("user_id") [name: 'auth_sessions_user_id_index']
+    ("expires_at") [name: 'auth_sessions_expires_at_index']
+    ("revoked_at") [name: 'auth_sessions_revoked_at_index']
   }
+}
+
+Table "bank_file_imports" {
+  "id" uuid [not null]
+  "private_path" varchar(255) [not null]
+  "file_hash" char(64) [not null]
+  "uploaded_by" uuid [not null]
+  "branch_id" uuid [not null]
+  "status" varchar(24) [not null]
+  "row_count" integer [not null, default: 0]
+  "summary" jsonb
+  "error" text
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'bank_file_imports_id_primary', pk]
+    ("file_hash") [name: 'bank_file_imports_file_hash_unique', unique]
+  }
+
+  Note: 'bank_file_imports_status_check: CHECK (status IN (\'PROCESSED\',\'REJECTED\'))'
+}
+
+Table "bank_movements" {
+  "id" uuid [not null]
+  "import_id" uuid [not null]
+  "row_number" integer [not null]
+  "original_row" jsonb [not null]
+  "payment_reference" varchar(64) [not null]
+  "amount" decimal(19,4) [not null]
+  "paid_at" timestamptz [not null]
+  "bank_folio" varchar(100) [not null]
+  "concept" text [not null]
+  "classification" varchar(24) [not null]
+  "relation_id" uuid
+  "applied_amount" decimal(19,4) [not null, default: 0]
+  "surplus_amount" decimal(19,4) [not null, default: 0]
+  "errors" jsonb
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'bank_movements_id_primary', pk]
+    ("bank_folio") [name: 'bank_movements_bank_folio_unique', unique]
+    ("import_id", "row_number") [name: 'bank_movements_import_id_row_number_unique', unique]
+  }
+
+  Note: 'bank_movements_classification_check: CHECK (classification IN (\'PARTIAL_PAYMENT\',\'SETTLEMENT\',\'SURPLUS\',\'UNRECONCILED\',\'DUPLICATE\',\'ERROR\'))'
 }
 
 Table "branches" {
   "id" uuid [not null]
   "code" varchar(20) [not null]
   "name" varchar(150) [not null]
-  "is_headquarters" boolean [not null, default: `false`]
+  "is_headquarters" boolean [not null, default: false]
   "status" varchar(20) [not null]
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_by" uuid [not null]
   "updated_by" uuid
   "created_at" timestamptz
@@ -350,28 +408,28 @@ Table "branches" {
   "address" varchar(500)
   "address_validation_id" varchar(255)
   "address_place_id" varchar(255)
-  "address_latitude" numeric(10,7)
-  "address_longitude" numeric(10,7)
+  "address_latitude" decimal(10,7)
+  "address_longitude" decimal(10,7)
   "address_validated_at" timestamptz
 
   indexes {
-    ("id") [name: 'branches_pkey', pk]
+    ("id") [name: 'branches_id_primary', pk]
     ("code") [name: 'branches_code_unique', unique]
-    ("created_at") [name: 'branches_created_at_index']
-    ("is_headquarters") [name: 'branches_is_headquarters_unique', unique, note: 'WHERE (is_headquarters = true)']
     ("status") [name: 'branches_status_index']
+    ("created_at") [name: 'branches_created_at_index']
+    ("is_headquarters") [name: 'branches_is_headquarters_unique', unique, note: 'WHERE is_headquarters = true;']
   }
 
-  Note: 'branches_lock_version_check: CHECK (lock_version >= 0); branches_status_check: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'INACTIVE\'::character varying]::text[]))'
+  Note: 'branches_status_check: CHECK (status IN (\'ACTIVE\', \'INACTIVE\')); branches_lock_version_check: CHECK (lock_version >= 0)'
 }
 
 Table "cache" {
   "key" varchar(255) [not null]
-  "value" text [not null]
-  "expiration" bigint [not null]
+  "value" mediumtext [not null]
+  "expiration" biginteger [not null]
 
   indexes {
-    ("key") [name: 'cache_pkey', pk]
+    ("key") [name: 'cache_key_primary', pk]
     ("expiration") [name: 'cache_expiration_index']
   }
 }
@@ -379,10 +437,10 @@ Table "cache" {
 Table "cache_locks" {
   "key" varchar(255) [not null]
   "owner" varchar(255) [not null]
-  "expiration" bigint [not null]
+  "expiration" biginteger [not null]
 
   indexes {
-    ("key") [name: 'cache_locks_pkey', pk]
+    ("key") [name: 'cache_locks_key_primary', pk]
     ("expiration") [name: 'cache_locks_expiration_index']
   }
 }
@@ -391,25 +449,24 @@ Table "categories" {
   "id" uuid [not null]
   "code" varchar(255) [not null]
   "status" varchar(255) [not null]
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_by" uuid [not null]
   "updated_by" uuid
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'categories_pkey', pk]
+    ("id") [name: 'categories_id_primary', pk]
     ("code") [name: 'categories_code_unique', unique]
   }
 
-  Note: 'chk_cat_lock_version: CHECK (lock_version >= 0); chk_cat_status: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'INACTIVE\'::character varying]::text[]))'
+  Note: 'chk_cat_lock_version: CHECK (lock_version >= 0); chk_cat_status: CHECK (status IN (\'ACTIVE\', \'INACTIVE\'))'
 }
 
 Table "category_versions" {
   "id" uuid [not null]
   "category_id" uuid [not null]
   "version" integer [not null]
-  "profit_percentage" numeric(9,6) [not null]
   "status" varchar(255) [not null]
   "effective_from" timestamptz [not null]
   "effective_to" timestamptz
@@ -421,23 +478,24 @@ Table "category_versions" {
   "updated_at" timestamptz
   "name" varchar(255) [not null]
   "description" text
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
+  "profit_percentage" decimal(9,6) [not null]
 
   indexes {
-    ("id") [name: 'category_versions_pkey', pk]
-    ("category_id", "effective_from", "effective_to") [name: 'category_versions_category_id_effective_from_effective_to_index']
-    ("category_id", "status") [name: 'category_versions_category_id_status_index']
+    ("id") [name: 'category_versions_id_primary', pk]
     ("category_id", "version") [name: 'category_versions_category_id_version_unique', unique]
-    ("category_id") [name: 'category_versions_open_published_unique', unique, note: 'WHERE (((status)::text = \'PUBLISHED\'::text) AND (effective_to IS NULL))']
+    ("category_id", "status") [name: 'category_versions_category_id_status_index']
+    ("category_id", "effective_from", "effective_to") [name: 'category_versions_category_id_effective_from_effective_to_index']
+    ("category_id") [name: 'category_versions_open_published_unique', unique, note: 'WHERE status = \'PUBLISHED\' AND effective_to IS NULL;']
   }
 
-  Note: 'chk_catv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_catv_profit_percentage: CHECK (profit_percentage >= 0::numeric AND profit_percentage <= 1::numeric); chk_catv_status: CHECK (status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'PUBLISHED\'::character varying, \'INACTIVE\'::character varying]::text[])); chk_catv_version: CHECK (version > 0)'
+  Note: 'chk_catv_version: CHECK (version > 0); chk_catv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_catv_status: CHECK (status IN (\'DRAFT\', \'PUBLISHED\', \'INACTIVE\')); chk_catv_profit_percentage: CHECK (profit_percentage >= 0 AND profit_percentage <= 1)'
 }
 
 Table "client_addresses" {
   "id" uuid [not null]
   "client_id" uuid [not null]
-  "is_current" boolean [not null, default: `true`]
+  "is_current" boolean [not null, default: true]
   "street" varchar(255) [not null]
   "exterior_number" varchar(255) [not null]
   "interior_number" varchar(255)
@@ -446,8 +504,8 @@ Table "client_addresses" {
   "municipality" varchar(255) [not null]
   "city" varchar(255) [not null]
   "state" varchar(255) [not null]
-  "country" character(2) [not null, default: `'MX'::bpchar`]
-  "normalized_fingerprint_hmac" character(64) [not null]
+  "country" char(2) [not null, default: 'MX']
+  "normalized_fingerprint_hmac" char(64) [not null]
   "address_proof_media_id" uuid
   "starts_at" timestamptz [not null]
   "ends_at" timestamptz
@@ -457,10 +515,10 @@ Table "client_addresses" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'client_addresses_pkey', pk]
+    ("id") [name: 'client_addresses_id_primary', pk]
     ("client_id", "starts_at") [name: 'client_addresses_client_id_starts_at_index']
-    ("client_id") [name: 'client_addresses_current_client_unique', unique, note: 'WHERE ((ends_at IS NULL) AND (is_current = true))']
-    ("normalized_fingerprint_hmac") [name: 'client_addresses_current_fingerprint_unique', unique, note: 'WHERE ((ends_at IS NULL) AND (is_current = true))']
+    ("client_id") [name: 'client_addresses_current_client_unique', unique, note: 'WHERE ends_at IS NULL AND is_current = true']
+    ("normalized_fingerprint_hmac") [name: 'client_addresses_current_fingerprint_unique', unique, note: 'WHERE ends_at IS NULL AND is_current = true']
   }
 
   Note: 'client_addresses_dates_check: CHECK (ends_at IS NULL OR ends_at > starts_at)'
@@ -472,24 +530,24 @@ Table "client_bank_accounts" {
   "bank_name" varchar(255) [not null]
   "account_holder_name" varchar(255) [not null]
   "account_number_ciphertext" text
-  "account_number_hmac" character(64)
+  "account_number_hmac" char(64)
   "clabe_ciphertext" text [not null]
-  "clabe_hmac" character(64) [not null]
-  "is_current" boolean [not null, default: `true`]
+  "clabe_hmac" char(64) [not null]
+  "is_current" boolean [not null, default: true]
   "starts_at" timestamptz [not null]
   "ends_at" timestamptz
   "created_by" uuid [not null]
   "change_reason" varchar(255)
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'client_bank_accounts_pkey', pk]
+    ("id") [name: 'client_bank_accounts_id_primary', pk]
+    ("client_id", "starts_at") [name: 'client_bank_accounts_client_id_starts_at_index']
     ("account_number_hmac") [name: 'client_bank_accounts_account_number_hmac_index']
     ("clabe_hmac") [name: 'client_bank_accounts_clabe_hmac_index']
-    ("client_id", "starts_at") [name: 'client_bank_accounts_client_id_starts_at_index']
-    ("client_id") [name: 'client_bank_accounts_current_client_unique', unique, note: 'WHERE ((ends_at IS NULL) AND (is_current = true))']
+    ("client_id") [name: 'client_bank_accounts_current_client_unique', unique, note: 'WHERE ends_at IS NULL AND is_current = true']
   }
 
   Note: 'client_bank_accounts_dates_check: CHECK (ends_at IS NULL OR ends_at > starts_at); client_bank_accounts_lock_version_check: CHECK (lock_version >= 1)'
@@ -508,10 +566,10 @@ Table "client_distributor_assignments" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'client_distributor_assignments_pkey', pk]
-    ("branch_id", "starts_at", "ends_at") [name: 'client_distributor_assignments_branch_id_starts_at_ends_at_inde']
-    ("client_id") [name: 'client_distributor_assignments_current_client_unique', unique, note: 'WHERE (ends_at IS NULL)']
-    ("distributor_id", "starts_at", "ends_at") [name: 'client_distributor_assignments_distributor_id_starts_at_ends_at']
+    ("id") [name: 'client_distributor_assignments_id_primary', pk]
+    ("distributor_id", "starts_at", "ends_at") [name: 'client_distributor_assignments_distributor_id_starts_at_ends_at_index']
+    ("branch_id", "starts_at", "ends_at") [name: 'client_distributor_assignments_branch_id_starts_at_ends_at_index']
+    ("client_id") [name: 'client_distributor_assignments_current_client_unique', unique, note: 'WHERE ends_at IS NULL']
   }
 
   Note: 'client_distributor_assignments_dates_check: CHECK (ends_at IS NULL OR ends_at > starts_at)'
@@ -522,7 +580,7 @@ Table "client_portfolio_entries" {
   "client_id" uuid [not null]
   "distributor_id" uuid [not null]
   "entry_type" varchar(32) [not null]
-  "amount" numeric(18,4)
+  "amount" decimal(18,4)
   "informational_status" varchar(24)
   "occurred_at" timestamptz [not null]
   "due_date" date
@@ -530,17 +588,51 @@ Table "client_portfolio_entries" {
   "note" text
   "related_voucher_id" uuid
   "recorded_by" uuid [not null]
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'client_portfolio_entries_pkey', pk]
+    ("id") [name: 'client_portfolio_entries_id_primary', pk]
     ("client_id", "occurred_at") [name: 'client_portfolio_entries_client_id_occurred_at_index']
     ("distributor_id", "occurred_at") [name: 'client_portfolio_entries_distributor_id_occurred_at_index']
   }
 
-  Note: 'client_portfolio_entries_amount_check: CHECK (amount IS NULL OR amount > 0::numeric); client_portfolio_entries_lock_version_check: CHECK (lock_version >= 1); client_portfolio_entries_status_check: CHECK (informational_status IS NULL OR (informational_status::text = ANY (ARRAY[\'PENDING\'::character varying, \'PARTIALLY_PAID\'::character varying, \'PAID\'::character varying]::text[]))); client_portfolio_entries_type_check: CHECK (entry_type::text = ANY (ARRAY[\'DEBT\'::character varying, \'PAYMENT\'::character varying, \'PARTIAL_PAYMENT\'::character varying, \'STATUS_UPDATE\'::character varying, \'NOTE\'::character varying, \'ADJUSTMENT_INCREASE\'::character varying, \'ADJUSTMENT_DECREASE\'::character varying]::text[]))'
+  Note: 'client_portfolio_entries_type_check: CHECK (entry_type IN (\'DEBT\', \'PAYMENT\', \'PARTIAL_PAYMENT\', \'STATUS_UPDATE\', \'NOTE\', \'ADJUSTMENT_INCREASE\', \'ADJUSTMENT_DECREASE\')); client_portfolio_entries_status_check: CHECK (informational_status IS NULL OR informational_status IN (\'PENDING\', \'PARTIALLY_PAID\', \'PAID\')); client_portfolio_entries_amount_check: CHECK (amount IS NULL OR amount > 0); client_portfolio_entries_lock_version_check: CHECK (lock_version >= 1)'
+}
+
+Table "client_transfer_requests" {
+  "id" uuid [not null]
+  "client_id" uuid [not null]
+  "origin_assignment_id" uuid [not null]
+  "origin_distributor_id" uuid [not null]
+  "destination_distributor_id" uuid [not null]
+  "origin_branch_id" uuid [not null]
+  "destination_branch_id" uuid [not null]
+  "status" varchar(32) [not null]
+  "initiated_by" uuid [not null]
+  "preaccepted_by" uuid
+  "preaccepted_at" timestamptz
+  "origin_decided_by" uuid
+  "origin_decision_reason" text
+  "origin_decided_at" timestamptz
+  "completed_by" uuid
+  "completed_at" timestamptz
+  "new_assignment_id" uuid
+  "created_at" timestamptz
+  "updated_at" timestamptz
+  "cancelled_by" uuid
+  "cancelled_at" timestamptz
+  "cancellation_reason" text
+
+  indexes {
+    ("id") [name: 'client_transfer_requests_id_primary', pk]
+    ("origin_distributor_id", "status") [name: 'client_transfer_requests_origin_distributor_id_status_index']
+    ("destination_distributor_id", "status") [name: 'client_transfer_requests_destination_distributor_id_status_index']
+    ("client_id") [name: 'client_transfer_active_client_unique', unique, note: 'WHERE status IN (\'REQUESTED\',\'PREACCEPTED\',\'ORIGIN_AUTHORIZED\')']
+  }
+
+  Note: 'client_transfer_distinct_distributors_check: CHECK (origin_distributor_id <> destination_distributor_id); client_transfer_status_check: CHECK (status IN (\'REQUESTED\',\'PREACCEPTED\',\'ORIGIN_AUTHORIZED\',\'COMPLETED\',\'REJECTED_BY_RECEIVER\',\'ORIGIN_REJECTED\',\'CANCELLED\')); client_transfer_cancellation_check: CHECK ((status = \'CANCELLED\' AND cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR (status <> \'CANCELLED\' AND cancelled_by IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL))'
 }
 
 Table "clients" {
@@ -550,56 +642,56 @@ Table "clients" {
   "first_last_name" varchar(255) [not null]
   "second_last_name" varchar(255)
   "curp_ciphertext" text [not null]
-  "curp_hmac" character(64) [not null]
+  "curp_hmac" char(64) [not null]
   "rfc_ciphertext" text
-  "rfc_hmac" character(64)
+  "rfc_hmac" char(64)
   "birth_date" date [not null]
   "birth_place" varchar(255) [not null]
   "birth_state" varchar(255) [not null]
   "birth_city" varchar(255) [not null]
   "official_id_type" varchar(32) [not null]
   "official_id_number_ciphertext" text
-  "official_id_number_hmac" character(64)
+  "official_id_number_hmac" char(64)
   "official_id_media_id" uuid
   "created_by" uuid [not null]
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'clients_pkey', pk]
+    ("id") [name: 'clients_id_primary', pk]
     ("client_number") [name: 'clients_client_number_unique', unique]
     ("curp_hmac") [name: 'clients_curp_hmac_unique', unique]
     ("first_last_name", "first_name") [name: 'clients_first_last_name_first_name_index']
     ("rfc_hmac") [name: 'clients_rfc_hmac_index']
   }
 
-  Note: 'clients_lock_version_check: CHECK (lock_version >= 1); clients_number_check: CHECK (client_number::text ~ \'^CLI-[0-9]{4}-[0-9]{6,}$\'::text); clients_official_id_type_check: CHECK (official_id_type::text = ANY (ARRAY[\'INE\'::character varying, \'PASSPORT\'::character varying, \'PROFESSIONAL_LICENSE\'::character varying, \'OTHER\'::character varying]::text[]))'
+  Note: 'clients_official_id_type_check: CHECK (official_id_type IN (\'INE\', \'PASSPORT\', \'PROFESSIONAL_LICENSE\', \'OTHER\')); clients_lock_version_check: CHECK (lock_version >= 1); clients_number_check: CHECK (client_number ~ \'^CLI-[0-9]{4}-[0-9]{6,}$\')'
 }
 
 Table "codigos_postales" {
-  "id" bigint [not null, default: `nextval('codigos_postales_id_seq'::regclass)`]
-  "municipio_id" bigint [not null]
+  "id" biginteger [increment, not null]
+  "municipio_id" biginteger [not null]
   "code" varchar(255) [not null]
-  "created_at" timestamp
-  "updated_at" timestamp
+  "created_at" timestamptz
+  "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'codigos_postales_pkey', pk]
+    ("id") [name: 'codigos_postales_id_primary', pk]
     ("code") [name: 'codigos_postales_code_index']
   }
 }
 
 Table "colonias" {
-  "id" bigint [not null, default: `nextval('colonias_id_seq'::regclass)`]
-  "codigo_postal_id" bigint [not null]
+  "id" biginteger [increment, not null]
+  "codigo_postal_id" biginteger [not null]
   "name" varchar(255) [not null]
   "settlement_type" varchar(255)
-  "created_at" timestamp
-  "updated_at" timestamp
+  "created_at" timestamptz
+  "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'colonias_pkey', pk]
+    ("id") [name: 'colonias_id_primary', pk]
     ("codigo_postal_id", "name") [name: 'colonias_codigo_postal_id_name_index']
   }
 }
@@ -611,22 +703,22 @@ Table "configuration_definitions" {
   "description" text
   "value_type" varchar(255) [not null]
   "unit" varchar(255)
-  "is_required" boolean [not null, default: `true`]
-  "is_sensitive" boolean [not null, default: `false`]
+  "is_required" boolean [not null, default: true]
+  "is_sensitive" boolean [not null, default: false]
   "status" varchar(255) [not null]
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_by" uuid [not null]
   "updated_by" uuid
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'configuration_definitions_pkey', pk]
+    ("id") [name: 'configuration_definitions_id_primary', pk]
     ("key") [name: 'configuration_definitions_key_unique', unique]
     ("status", "key") [name: 'configuration_definitions_status_key_index']
   }
 
-  Note: 'chk_cd_lock_version: CHECK (lock_version >= 0); chk_cd_status: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'INACTIVE\'::character varying]::text[])); chk_cd_value_type: CHECK (value_type::text = ANY (ARRAY[\'INTEGER\'::character varying, \'DECIMAL\'::character varying, \'PERCENTAGE\'::character varying, \'BOOLEAN\'::character varying, \'STRING\'::character varying, \'TIME\'::character varying, \'TIMEZONE\'::character varying, \'DURATION\'::character varying, \'JSON\'::character varying]::text[]))'
+  Note: 'chk_cd_lock_version: CHECK (lock_version >= 0); chk_cd_value_type: CHECK (value_type IN (\'INTEGER\', \'DECIMAL\', \'PERCENTAGE\', \'BOOLEAN\', \'STRING\', \'TIME\', \'TIMEZONE\', \'DURATION\', \'JSON\')); chk_cd_status: CHECK (status IN (\'ACTIVE\', \'INACTIVE\'))'
 }
 
 Table "configuration_versions" {
@@ -643,18 +735,18 @@ Table "configuration_versions" {
   "published_at" timestamptz
   "created_at" timestamptz
   "updated_at" timestamptz
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
 
   indexes {
-    ("id") [name: 'configuration_versions_pkey', pk]
-    ("configuration_definition_id", "effective_from", "effective_to") [name: 'configuration_versions_configuration_definition_id_effective_fr']
+    ("id") [name: 'configuration_versions_id_primary', pk]
+    ("configuration_definition_id", "version") [name: 'configuration_versions_configuration_definition_id_version_unique', unique]
     ("configuration_definition_id", "status") [name: 'configuration_versions_configuration_definition_id_status_index']
-    ("configuration_definition_id", "version") [name: 'configuration_versions_configuration_definition_id_version_uniq', unique]
-    ("configuration_definition_id") [name: 'configuration_versions_open_published_unique', unique, note: 'WHERE (((status)::text = \'PUBLISHED\'::text) AND (effective_to IS NULL))']
+    ("configuration_definition_id", "effective_from", "effective_to") [name: 'configuration_versions_configuration_definition_id_effective_from_effective_to_index']
     ("status", "effective_from") [name: 'configuration_versions_status_effective_from_index']
+    ("configuration_definition_id") [name: 'configuration_versions_open_published_unique', unique, note: 'WHERE status = \'PUBLISHED\' AND effective_to IS NULL;']
   }
 
-  Note: 'chk_cv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_cv_lock_version: CHECK (lock_version >= 0); chk_cv_published_consistency: CHECK (status::text = \'PUBLISHED\'::text AND published_by IS NOT NULL AND published_at IS NOT NULL OR status::text <> \'PUBLISHED\'::text); chk_cv_status: CHECK (status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'PUBLISHED\'::character varying, \'INACTIVE\'::character varying]::text[])); chk_cv_version: CHECK (version > 0)'
+  Note: 'chk_cv_version: CHECK (version > 0); chk_cv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_cv_status: CHECK (status IN (\'DRAFT\', \'PUBLISHED\', \'INACTIVE\')); chk_cv_published_consistency: CHECK ( (status = \'PUBLISHED\' AND published_by IS NOT NULL AND published_at IS NOT NULL) OR (status <> \'PUBLISHED\') ); chk_cv_lock_version: CHECK (lock_version >= 0)'
 }
 
 Table "coordinator_distributor_assignments" {
@@ -669,22 +761,22 @@ Table "coordinator_distributor_assignments" {
   "ended_by" uuid
   "assignment_reason" text
   "end_reason" text
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'coordinator_distributor_assignments_pkey', pk]
-    ("distributor_id") [name: 'coordinator_distributor_active_distributor_unique', unique, note: 'WHERE (((status)::text = \'ACTIVE\'::text) AND (valid_to IS NULL))']
-    ("coordinator_id", "distributor_id", "branch_id") [name: 'coordinator_distributor_active_pair_unique', unique, note: 'WHERE (((status)::text = \'ACTIVE\'::text) AND (valid_to IS NULL))']
-    ("branch_id", "status") [name: 'coordinator_distributor_assignments_branch_id_status_index']
-    ("coordinator_id", "status") [name: 'coordinator_distributor_assignments_coordinator_id_status_index']
+    ("id") [name: 'coordinator_distributor_assignments_id_primary', pk]
     ("distributor_id") [name: 'coordinator_distributor_assignments_distributor_id_index']
+    ("coordinator_id", "status") [name: 'coordinator_distributor_assignments_coordinator_id_status_index']
+    ("branch_id", "status") [name: 'coordinator_distributor_assignments_branch_id_status_index']
     ("distributor_id", "status") [name: 'coordinator_distributor_assignments_distributor_id_status_index']
     ("valid_from", "valid_to") [name: 'coordinator_distributor_assignments_valid_from_valid_to_index']
+    ("distributor_id") [name: 'coordinator_distributor_active_distributor_unique', unique, note: 'WHERE status = \'ACTIVE\' AND valid_to IS NULL;']
+    ("coordinator_id", "distributor_id", "branch_id") [name: 'coordinator_distributor_active_pair_unique', unique, note: 'WHERE status = \'ACTIVE\' AND valid_to IS NULL;']
   }
 
-  Note: 'chk_cda_lock_version: CHECK (lock_version >= 0); chk_cda_status: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'ENDED\'::character varying, \'REASSIGNED\'::character varying]::text[])); chk_cda_status_consistency: CHECK (status::text = \'ACTIVE\'::text AND valid_to IS NULL AND ended_by IS NULL OR (status::text = ANY (ARRAY[\'ENDED\'::character varying, \'REASSIGNED\'::character varying]::text[])) AND valid_to IS NOT NULL); chk_cda_valid_dates: CHECK (valid_to IS NULL OR valid_to > valid_from)'
+  Note: 'chk_cda_status: CHECK (status IN (\'ACTIVE\', \'ENDED\', \'REASSIGNED\')); chk_cda_valid_dates: CHECK (valid_to IS NULL OR valid_to > valid_from); chk_cda_lock_version: CHECK (lock_version >= 0); chk_cda_status_consistency: CHECK ( (status = \'ACTIVE\' AND valid_to IS NULL AND ended_by IS NULL) OR (status IN (\'ENDED\', \'REASSIGNED\') AND valid_to IS NOT NULL) )'
 }
 
 Table "credit_increase_requests" {
@@ -695,12 +787,12 @@ Table "credit_increase_requests" {
   "branch_id" uuid [not null]
   "coordinator_id" uuid [not null]
   "status" varchar(255) [not null]
-  "requested_amount" numeric(19,4) [not null]
-  "recommended_amount" numeric(19,4)
-  "authorized_amount" numeric(19,4)
-  "line_total_at_request" numeric(19,4) [not null]
-  "used_balance_at_request" numeric(19,4) [not null]
-  "available_balance_at_request" numeric(19,4) [not null]
+  "requested_amount" decimal(19,4) [not null]
+  "recommended_amount" decimal(19,4)
+  "authorized_amount" decimal(19,4)
+  "line_total_at_request" decimal(19,4) [not null]
+  "used_balance_at_request" decimal(19,4) [not null]
+  "available_balance_at_request" decimal(19,4) [not null]
   "request_reason" varchar(255) [not null]
   "requested_by" uuid [not null]
   "requested_at" timestamptz [not null]
@@ -713,18 +805,18 @@ Table "credit_increase_requests" {
   "manager_reason" varchar(255)
   "restriction_id" uuid
   "completed_at" timestamptz
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'credit_increase_requests_pkey', pk]
-    ("credit_line_id", "requested_at") [name: 'credit_increase_requests_credit_line_id_requested_at_index']
-    ("distributor_id", "requested_at") [name: 'credit_increase_requests_distributor_id_requested_at_index']
+    ("id") [name: 'credit_increase_requests_id_primary', pk]
     ("request_number") [name: 'credit_increase_requests_request_number_unique', unique]
+    ("distributor_id", "requested_at") [name: 'credit_increase_requests_distributor_id_requested_at_index']
+    ("credit_line_id", "requested_at") [name: 'credit_increase_requests_credit_line_id_requested_at_index']
   }
 
-  Note: 'credit_increase_requests_amounts_check: CHECK (requested_amount > 0::numeric AND (recommended_amount IS NULL OR recommended_amount > 0::numeric) AND (authorized_amount IS NULL OR authorized_amount > 0::numeric AND authorized_amount <= requested_amount)); credit_increase_requests_lock_version_check: CHECK (lock_version >= 1); credit_increase_requests_manager_decision_check: CHECK (manager_decision IS NULL OR (manager_decision::text = ANY (ARRAY[\'APPROVE_REQUESTED\'::character varying, \'APPROVE_LOWER\'::character varying, \'REJECT\'::character varying]::text[]))); credit_increase_requests_snapshot_check: CHECK (line_total_at_request > 0::numeric AND used_balance_at_request >= 0::numeric AND used_balance_at_request <= line_total_at_request AND available_balance_at_request >= 0::numeric AND available_balance_at_request = (line_total_at_request - used_balance_at_request)); credit_increase_requests_status_check: CHECK (status::text = ANY (ARRAY[\'REQUESTED\'::character varying, \'REJECTED_BY_COORDINATOR\'::character varying, \'PREAUTHORIZED\'::character varying, \'REJECTED_BY_MANAGER\'::character varying, \'AUTHORIZED_PARTIAL\'::character varying, \'AUTHORIZED_TOTAL\'::character varying, \'COMPLETED\'::character varying]::text[]))'
+  Note: 'credit_increase_requests_lock_version_check: CHECK (lock_version >= 1); credit_increase_requests_amounts_check: CHECK (requested_amount > 0 AND (recommended_amount IS NULL OR recommended_amount > 0) AND (authorized_amount IS NULL OR (authorized_amount > 0 AND authorized_amount <= requested_amount))); credit_increase_requests_snapshot_check: CHECK (line_total_at_request > 0 AND used_balance_at_request >= 0 AND used_balance_at_request <= line_total_at_request AND available_balance_at_request >= 0 AND available_balance_at_request = line_total_at_request - used_balance_at_request); credit_increase_requests_status_check: CHECK (status IN (\'REQUESTED\',\'REJECTED_BY_COORDINATOR\',\'PREAUTHORIZED\',\'REJECTED_BY_MANAGER\',\'AUTHORIZED_PARTIAL\',\'AUTHORIZED_TOTAL\',\'COMPLETED\')); credit_increase_requests_manager_decision_check: CHECK (manager_decision IS NULL OR manager_decision IN (\'APPROVE_REQUESTED\',\'APPROVE_LOWER\',\'REJECT\'))'
 }
 
 Table "credit_increase_state_transitions" {
@@ -737,24 +829,24 @@ Table "credit_increase_state_transitions" {
   "created_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'credit_increase_state_transitions_pkey', pk]
+    ("id") [name: 'credit_increase_state_transitions_id_primary', pk]
     ("request_id", "created_at") [name: 'credit_increase_state_transitions_request_id_created_at_index']
   }
 
-  Note: 'credit_increase_state_transitions_from_status_check: CHECK (from_status::text = ANY (ARRAY[\'REQUESTED\'::character varying, \'REJECTED_BY_COORDINATOR\'::character varying, \'PREAUTHORIZED\'::character varying, \'REJECTED_BY_MANAGER\'::character varying, \'AUTHORIZED_PARTIAL\'::character varying, \'AUTHORIZED_TOTAL\'::character varying, \'COMPLETED\'::character varying]::text[])); credit_increase_state_transitions_to_status_check: CHECK (to_status::text = ANY (ARRAY[\'REQUESTED\'::character varying, \'REJECTED_BY_COORDINATOR\'::character varying, \'PREAUTHORIZED\'::character varying, \'REJECTED_BY_MANAGER\'::character varying, \'AUTHORIZED_PARTIAL\'::character varying, \'AUTHORIZED_TOTAL\'::character varying, \'COMPLETED\'::character varying]::text[]))'
+  Note: 'credit_increase_state_transitions_from_status_check: CHECK (from_status IN (\'REQUESTED\', \'REJECTED_BY_COORDINATOR\', \'PREAUTHORIZED\', \'REJECTED_BY_MANAGER\', \'AUTHORIZED_PARTIAL\', \'AUTHORIZED_TOTAL\', \'COMPLETED\')); credit_increase_state_transitions_to_status_check: CHECK (to_status IN (\'REQUESTED\', \'REJECTED_BY_COORDINATOR\', \'PREAUTHORIZED\', \'REJECTED_BY_MANAGER\', \'AUTHORIZED_PARTIAL\', \'AUTHORIZED_TOTAL\', \'COMPLETED\'))'
 }
 
 Table "credit_line_movements" {
   "id" uuid [not null]
   "credit_line_id" uuid [not null]
   "distributor_id" uuid [not null]
-  "sequence" bigint [not null]
+  "sequence" biginteger [not null]
   "type" varchar(48) [not null]
-  "amount" numeric(19,4) [not null]
-  "total_authorized_before" numeric(19,4) [not null]
-  "total_authorized_after" numeric(19,4) [not null]
-  "used_balance_before" numeric(19,4) [not null]
-  "used_balance_after" numeric(19,4) [not null]
+  "amount" decimal(19,4) [not null]
+  "total_authorized_before" decimal(19,4) [not null]
+  "total_authorized_after" decimal(19,4) [not null]
+  "used_balance_before" decimal(19,4) [not null]
+  "used_balance_after" decimal(19,4) [not null]
   "source_type" varchar(64) [not null]
   "source_id" uuid [not null]
   "reason" varchar(255)
@@ -762,36 +854,36 @@ Table "credit_line_movements" {
   "authorized_by" uuid
   "idempotency_key" varchar(255)
   "occurred_at" timestamptz [not null]
-  "created_at" timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  "created_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'credit_line_movements_pkey', pk]
-    ("credit_line_id", "occurred_at") [name: 'credit_line_movements_credit_line_id_occurred_at_index']
-    ("credit_line_id", "sequence") [name: 'credit_line_movements_credit_line_id_sequence_unique', unique]
-    ("distributor_id", "occurred_at") [name: 'credit_line_movements_distributor_id_occurred_at_index']
-    ("idempotency_key") [name: 'credit_line_movements_idempotency_unique', unique, note: 'WHERE (idempotency_key IS NOT NULL)']
+    ("id") [name: 'credit_line_movements_id_primary', pk]
     ("type", "source_type", "source_id") [name: 'credit_line_movements_type_source_type_source_id_unique', unique]
-    ("source_type", "source_id") [name: 'idx_unique_source_credit_line_movements', unique, note: 'WHERE ((source_type IS NOT NULL) AND (source_id IS NOT NULL))']
+    ("credit_line_id", "sequence") [name: 'credit_line_movements_credit_line_id_sequence_unique', unique]
+    ("credit_line_id", "occurred_at") [name: 'credit_line_movements_credit_line_id_occurred_at_index']
+    ("distributor_id", "occurred_at") [name: 'credit_line_movements_distributor_id_occurred_at_index']
+    ("idempotency_key") [name: 'credit_line_movements_idempotency_unique', unique, note: 'WHERE idempotency_key IS NOT NULL']
+    ("source_type", "source_id") [name: 'idx_unique_source_credit_line_movements', unique, note: 'WHERE source_type IS NOT NULL AND source_id IS NOT NULL']
   }
 
-  Note: 'credit_line_movements_amount_check: CHECK (amount > 0::numeric); credit_line_movements_balances_check: CHECK (total_authorized_before > 0::numeric AND total_authorized_after > 0::numeric AND used_balance_before >= 0::numeric AND used_balance_before <= total_authorized_before AND used_balance_after >= 0::numeric AND used_balance_after <= total_authorized_after)'
+  Note: 'credit_line_movements_amount_check: CHECK (amount > 0); credit_line_movements_balances_check: CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)'
 }
 
 Table "credit_lines" {
   "id" uuid [not null]
   "distributor_id" uuid [not null]
-  "total_authorized" numeric(19,4) [not null]
-  "used_balance" numeric(19,4) [not null, default: `'0'::numeric`]
-  "lock_version" integer [not null, default: `1`]
+  "total_authorized" decimal(19,4) [not null]
+  "used_balance" decimal(19,4) [not null, default: 0]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'credit_lines_pkey', pk]
+    ("id") [name: 'credit_lines_id_primary', pk]
     ("distributor_id") [name: 'credit_lines_distributor_id_unique', unique]
   }
 
-  Note: 'credit_lines_lock_version_check: CHECK (lock_version >= 1); credit_lines_total_positive_check: CHECK (total_authorized > 0::numeric); credit_lines_used_balance_check: CHECK (used_balance >= 0::numeric AND used_balance <= total_authorized)'
+  Note: 'credit_lines_total_positive_check: CHECK (total_authorized > 0); credit_lines_used_balance_check: CHECK (used_balance >= 0 AND used_balance <= total_authorized); credit_lines_lock_version_check: CHECK (lock_version >= 1)'
 }
 
 Table "credit_usage_restrictions" {
@@ -799,9 +891,9 @@ Table "credit_usage_restrictions" {
   "credit_line_id" uuid [not null]
   "distributor_id" uuid [not null]
   "type" varchar(48) [not null]
-  "status" varchar(20) [not null, default: `'ACTIVE'::character varying`]
-  "base_total" numeric(19,4) [not null]
-  "tolerance_amount" numeric(19,4) [not null]
+  "status" varchar(20) [not null, default: 'ACTIVE']
+  "base_total" decimal(19,4) [not null]
+  "tolerance_amount" decimal(19,4) [not null]
   "configuration_version_id" uuid [not null]
   "source_type" varchar(64) [not null]
   "source_id" uuid [not null]
@@ -811,20 +903,41 @@ Table "credit_usage_restrictions" {
   "consumed_at" timestamptz
   "cancelled_at" timestamptz
   "created_by" uuid
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'credit_usage_restrictions_pkey', pk]
-    ("configuration_version_id") [name: 'credit_usage_restrictions_configuration_version_id_index']
-    ("distributor_id") [name: 'credit_usage_restrictions_distributor_id_index']
-    ("credit_line_id") [name: 'credit_usage_restrictions_one_current', unique, note: 'WHERE ((status)::text = ANY ((ARRAY[\'ACTIVE\'::character varying, \'RESERVED\'::character varying])::text[]))']
+    ("id") [name: 'credit_usage_restrictions_id_primary', pk]
     ("status", "type") [name: 'credit_usage_restrictions_status_type_index']
-    ("source_type", "source_id") [name: 'idx_unique_source_credit_usage_restrictions', unique, note: 'WHERE ((source_type IS NOT NULL) AND (source_id IS NOT NULL))']
+    ("distributor_id") [name: 'credit_usage_restrictions_distributor_id_index']
+    ("configuration_version_id") [name: 'credit_usage_restrictions_configuration_version_id_index']
+    ("credit_line_id") [name: 'credit_usage_restrictions_one_current', unique, note: 'WHERE status IN (\'ACTIVE\', \'RESERVED\')']
+    ("source_type", "source_id") [name: 'idx_unique_source_credit_usage_restrictions', unique, note: 'WHERE source_type IS NOT NULL AND source_id IS NOT NULL']
   }
 
-  Note: 'credit_usage_restrictions_base_check: CHECK (base_total > 0::numeric); credit_usage_restrictions_lifecycle_check: CHECK (status::text = \'ACTIVE\'::text AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL OR status::text = \'RESERVED\'::text AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL OR status::text = \'CONSUMED\'::text AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL OR status::text = \'CANCELLED\'::text AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND (reserved_voucher_id IS NULL AND reserved_at IS NULL OR reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)); credit_usage_restrictions_lock_version_check: CHECK (lock_version >= 1); credit_usage_restrictions_status_check: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'RESERVED\'::character varying, \'CONSUMED\'::character varying, \'CANCELLED\'::character varying]::text[])); credit_usage_restrictions_tolerance_check: CHECK (tolerance_amount >= 0::numeric)'
+  Note: 'credit_usage_restrictions_base_check: CHECK (base_total > 0); credit_usage_restrictions_tolerance_check: CHECK (tolerance_amount >= 0); credit_usage_restrictions_lock_version_check: CHECK (lock_version >= 1); credit_usage_restrictions_status_check: CHECK (status IN (\'ACTIVE\', \'RESERVED\', \'CONSUMED\', \'CANCELLED\')); credit_usage_restrictions_lifecycle_check: CHECK ( (status = \'ACTIVE\' AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL) OR (status = \'RESERVED\' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL) OR (status = \'CONSUMED\' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL) OR (status = \'CANCELLED\' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL))) )'
+}
+
+Table "delinquency_removal_requests" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "block_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "status" varchar(24) [not null, default: 'REQUESTED']
+  "reason" text [not null]
+  "requested_by" uuid [not null]
+  "decided_by" uuid
+  "decision_reason" text
+  "decided_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'delinquency_removal_requests_id_primary', pk]
+  }
+
+  Note: 'removal_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\'))'
 }
 
 Table "distributor_applications" {
@@ -832,18 +945,18 @@ Table "distributor_applications" {
   "application_number" varchar(32) [not null]
   "branch_id" uuid [not null]
   "coordinator_id" uuid [not null]
-  "status" varchar(40) [not null, default: `'DRAFT'::character varying`]
-  "section_declarations" jsonb [not null, default: `'{}'::jsonb`]
+  "status" varchar(40) [not null, default: 'DRAFT']
+  "section_declarations" jsonb [not null, default: '\'{}\'::jsonb']
   "pending_sections" jsonb
   "created_by" uuid [not null]
   "submitted_by" uuid
   "submitted_at" timestamptz
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'distributor_applications_pkey', pk]
+    ("id") [name: 'distributor_applications_id_primary', pk]
     ("application_number") [name: 'distributor_applications_application_number_unique', unique]
     ("branch_id", "status") [name: 'distributor_applications_branch_id_status_index']
     ("coordinator_id", "status") [name: 'distributor_applications_coordinator_id_status_index']
@@ -851,7 +964,7 @@ Table "distributor_applications" {
     ("submitted_at") [name: 'distributor_applications_submitted_at_index']
   }
 
-  Note: 'distributor_applications_lock_version_check: CHECK (lock_version >= 1); distributor_applications_number_check: CHECK (application_number::text ~ \'^SOL-[0-9]{4}-[0-9]{6,}$\'::text); distributor_applications_status_check: CHECK (status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'COORDINATOR_REVIEW\'::character varying, \'VERIFIER_ASSIGNED\'::character varying, \'PHYSICAL_VERIFICATION\'::character varying, \'COORDINATOR_CORRECTION\'::character varying, \'COORDINATOR_EVALUATION\'::character varying, \'MANAGER_AUTHORIZATION\'::character varying, \'TERMINATED_UNFAVORABLE\'::character varying, \'REJECTED\'::character varying, \'AUTHORIZED_PENDING_ACTIVATION\'::character varying, \'ACTIVE\'::character varying]::text[]))'
+  Note: 'distributor_applications_lock_version_check: CHECK (lock_version >= 1); distributor_applications_number_check: CHECK (application_number ~ \'^SOL-[0-9]{4}-[0-9]{6,}$\'); distributor_applications_status_check: CHECK (status IN (\'DRAFT\', \'COORDINATOR_REVIEW\', \'VERIFIER_ASSIGNED\', \'PHYSICAL_VERIFICATION\', \'COORDINATOR_CORRECTION\', \'COORDINATOR_EVALUATION\', \'MANAGER_AUTHORIZATION\', \'TERMINATED_UNFAVORABLE\', \'REJECTED\', \'AUTHORIZED_PENDING_ACTIVATION\', \'ACTIVE\'))'
 }
 
 Table "distributor_category_assignments" {
@@ -866,13 +979,139 @@ Table "distributor_category_assignments" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'distributor_category_assignments_pkey', pk]
-    ("category_version_id", "starts_at") [name: 'distributor_category_assignments_category_version_id_starts_at_']
-    ("distributor_id", "starts_at", "ends_at") [name: 'distributor_category_assignments_distributor_id_starts_at_ends_']
-    ("distributor_id") [name: 'distributor_category_current_unique', unique, note: 'WHERE (ends_at IS NULL)']
+    ("id") [name: 'distributor_category_assignments_id_primary', pk]
+    ("distributor_id", "starts_at", "ends_at") [name: 'distributor_category_assignments_distributor_id_starts_at_ends_at_index']
+    ("category_version_id", "starts_at") [name: 'distributor_category_assignments_category_version_id_starts_at_index']
+    ("distributor_id") [name: 'distributor_category_current_unique', unique, note: 'WHERE ends_at IS NULL']
   }
 
   Note: 'distributor_category_dates_check: CHECK (ends_at IS NULL OR ends_at > starts_at)'
+}
+
+Table "distributor_delinquency_decisions" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "risk_alert_id" uuid
+  "decision" varchar(24) [not null]
+  "reason" text [not null]
+  "decided_by" uuid [not null]
+  "decided_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'distributor_delinquency_decisions_id_primary', pk]
+  }
+}
+
+Table "distributor_operational_blocks" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "type" varchar(48) [not null]
+  "status" varchar(16) [not null, default: 'ACTIVE']
+  "source_type" varchar(64) [not null]
+  "source_id" uuid [not null]
+  "reason" text [not null]
+  "starts_at" timestamptz [not null]
+  "ends_at" timestamptz
+  "created_by" uuid
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'distributor_operational_blocks_id_primary', pk]
+    ("distributor_id", "type", "status") [name: 'distributor_operational_blocks_distributor_id_type_status_index']
+    ("type", "source_type", "source_id") [name: 'distributor_operational_blocks_type_source_type_source_id_unique', unique]
+  }
+
+  Note: 'distributor_operational_blocks_type_check: CHECK (type IN (\'DELINQUENCY\')); distributor_operational_blocks_status_check: CHECK (status IN (\'ACTIVE\', \'RELEASED\')); distributor_operational_blocks_dates_check: CHECK (ends_at IS NULL OR ends_at > starts_at)'
+}
+
+Table "distributor_relation_items" {
+  "id" uuid [not null]
+  "relation_id" uuid [not null]
+  "voucher_installment_id" uuid [not null]
+  "snapshot" jsonb [not null]
+  "portfolio_amount" decimal(19,4) [not null]
+  "misvales_amount" decimal(19,4) [not null]
+  "created_at" timestamptz [not null]
+
+  indexes {
+    ("id") [name: 'distributor_relation_items_id_primary', pk]
+    ("voucher_installment_id") [name: 'distributor_relation_items_voucher_installment_id_unique', unique]
+  }
+}
+
+Table "distributor_relations" {
+  "id" uuid [not null]
+  "process_run_id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "cutoff_at" timestamptz [not null]
+  "advance_period_start" timestamptz [not null]
+  "advance_period_end" timestamptz [not null]
+  "payment_deadline_at" timestamptz [not null]
+  "payment_reference" varchar(40) [not null]
+  "financial_status" varchar(16) [not null, default: 'PENDING']
+  "review_status" varchar(24) [not null, default: 'NO_REVIEW']
+  "portfolio_total" decimal(19,4) [not null]
+  "misvales_total" decimal(19,4) [not null]
+  "reconciled_total" decimal(19,4) [not null, default: 0]
+  "surcharge_total" decimal(19,4) [not null, default: 0]
+  "balance" decimal(19,4) [not null]
+  "header_snapshot" jsonb [not null]
+  "bank_snapshot" jsonb [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+  "settled_at" timestamptz
+  "temporal_classification" varchar(24)
+
+  indexes {
+    ("id") [name: 'distributor_relations_id_primary', pk]
+    ("payment_reference") [name: 'distributor_relations_payment_reference_unique', unique]
+    ("distributor_id", "cutoff_at") [name: 'distributor_relations_distributor_id_cutoff_at_unique', unique]
+  }
+
+  Note: 'distributor_relations_financial_status_check: CHECK (financial_status IN (\'PENDING\',\'PARTIALLY_PAID\',\'SETTLED\',\'OVERDUE\')); distributor_relations_review_status_check: CHECK (review_status IN (\'NO_REVIEW\',\'CLARIFICATION_OPEN\',\'MANUAL_REVIEW\',\'RESOLVED\')); distributor_relations_temporal_classification_check: CHECK (temporal_classification IS NULL OR temporal_classification IN (\'EARLY\',\'ON_TIME\',\'LATE\'))'
+}
+
+Table "distributor_risk_alerts" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "type" varchar(32) [not null]
+  "status" varchar(24) [not null, default: 'OPEN']
+  "consecutive_defaults" smallint [not null]
+  "relation_ids" jsonb [not null]
+  "overdue_balance" decimal(19,4) [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'distributor_risk_alerts_id_primary', pk]
+    ("distributor_id", "type", "status") [name: 'distributor_risk_alerts_distributor_id_type_status_unique', unique]
+  }
+
+  Note: 'risk_alert_status_check: CHECK (status IN (\'OPEN\',\'REVIEWED\',\'RESOLVED\'))'
+}
+
+Table "distributor_surpluses" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "bank_movement_id" uuid [not null]
+  "original_amount" decimal(19,4) [not null]
+  "available_amount" decimal(19,4) [not null]
+  "reserved_amount" decimal(19,4) [not null, default: 0]
+  "status" varchar(32) [not null, default: 'PENDING_DECISION']
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'distributor_surpluses_id_primary', pk]
+    ("bank_movement_id") [name: 'distributor_surpluses_bank_movement_id_unique', unique]
+  }
+
+  Note: 'distributor_surpluses_status_check: CHECK (status IN (\'PENDING_DECISION\',\'CREDIT_BALANCE\',\'REFUND_PENDING\',\'REFUNDED\',\'CONSUMED\')); distributor_surpluses_amounts_check: CHECK (original_amount > 0 AND available_amount >= 0 AND reserved_amount >= 0 AND available_amount + reserved_amount <= original_amount)'
 }
 
 Table "distributors" {
@@ -881,49 +1120,49 @@ Table "distributors" {
   "user_id" uuid [not null]
   "distributor_number" varchar(32) [not null]
   "branch_id" uuid [not null]
-  "status" varchar(24) [not null, default: `'PENDING_ACTIVATION'::character varying`]
+  "status" varchar(24) [not null, default: 'PENDING_ACTIVATION']
   "activated_at" timestamptz
   "activated_by" uuid
-  "lock_version" integer [not null, default: `1`]
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'distributors_pkey', pk]
+    ("id") [name: 'distributors_id_primary', pk]
     ("application_id") [name: 'distributors_application_id_unique', unique]
-    ("branch_id", "status") [name: 'distributors_branch_id_status_index']
-    ("distributor_number") [name: 'distributors_distributor_number_unique', unique]
     ("user_id") [name: 'distributors_user_id_unique', unique]
+    ("distributor_number") [name: 'distributors_distributor_number_unique', unique]
+    ("branch_id", "status") [name: 'distributors_branch_id_status_index']
   }
 
-  Note: 'distributors_activation_check: CHECK (status::text <> \'ACTIVE\'::text OR activated_at IS NOT NULL AND activated_by IS NOT NULL); distributors_lock_version_check: CHECK (lock_version >= 1); distributors_number_check: CHECK (distributor_number::text ~ \'^DIS-[0-9]{4}-[0-9]{6,}$\'::text); distributors_status_check: CHECK (status::text = ANY (ARRAY[\'PENDING_ACTIVATION\'::character varying, \'ACTIVE\'::character varying, \'DISABLED\'::character varying]::text[]))'
+  Note: 'distributors_status_check: CHECK (status IN (\'PENDING_ACTIVATION\', \'ACTIVE\', \'DISABLED\')); distributors_lock_version_check: CHECK (lock_version >= 1); distributors_number_check: CHECK (distributor_number ~ \'^DIS-[0-9]{4}-[0-9]{6,}$\'); distributors_activation_check: CHECK (status <> \'ACTIVE\' OR (activated_at IS NOT NULL AND activated_by IS NOT NULL))'
 }
 
 Table "estados" {
-  "id" bigint [not null, default: `nextval('estados_id_seq'::regclass)`]
+  "id" biginteger [increment, not null]
   "name" varchar(255) [not null]
-  "created_at" timestamp
-  "updated_at" timestamp
+  "created_at" timestamptz
+  "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'estados_pkey', pk]
+    ("id") [name: 'estados_id_primary', pk]
     ("name") [name: 'estados_name_index']
   }
 }
 
 Table "failed_jobs" {
-  "id" bigint [not null, default: `nextval('failed_jobs_id_seq'::regclass)`]
+  "id" biginteger [increment, not null]
   "uuid" varchar(255) [not null]
   "connection" varchar(255) [not null]
   "queue" varchar(255) [not null]
-  "payload" text [not null]
-  "exception" text [not null]
-  "failed_at" timestamp [not null, default: `CURRENT_TIMESTAMP`]
+  "payload" longtext [not null]
+  "exception" longtext [not null]
+  "failed_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'failed_jobs_pkey', pk]
-    ("connection", "queue", "failed_at") [name: 'failed_jobs_connection_queue_failed_at_index']
+    ("id") [name: 'failed_jobs_id_primary', pk]
     ("uuid") [name: 'failed_jobs_uuid_unique', unique]
+    ("connection", "queue", "failed_at") [name: 'failed_jobs_connection_queue_failed_at_index']
   }
 }
 
@@ -933,30 +1172,55 @@ Table "job_batches" {
   "total_jobs" integer [not null]
   "pending_jobs" integer [not null]
   "failed_jobs" integer [not null]
-  "failed_job_ids" text [not null]
-  "options" text
+  "failed_job_ids" longtext [not null]
+  "options" mediumtext
   "cancelled_at" integer
   "created_at" integer [not null]
   "finished_at" integer
 
   indexes {
-    ("id") [name: 'job_batches_pkey', pk]
+    ("id") [name: 'job_batches_id_primary', pk]
   }
 }
 
 Table "jobs" {
-  "id" bigint [not null, default: `nextval('jobs_id_seq'::regclass)`]
+  "id" biginteger [increment, not null]
   "queue" varchar(255) [not null]
-  "payload" text [not null]
+  "payload" longtext [not null]
   "attempts" smallint [not null]
   "reserved_at" integer
   "available_at" integer [not null]
   "created_at" integer [not null]
 
   indexes {
-    ("id") [name: 'jobs_pkey', pk]
+    ("id") [name: 'jobs_id_primary', pk]
     ("queue") [name: 'jobs_queue_index']
   }
+}
+
+Table "manual_reconciliation_requests" {
+  "id" uuid [not null]
+  "bank_movement_id" uuid [not null]
+  "relation_id" uuid [not null]
+  "clarification_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "reason" text [not null]
+  "status" varchar(24) [not null, default: 'REQUESTED']
+  "requested_by" uuid [not null]
+  "authorized_by" uuid
+  "executed_by" uuid
+  "before_snapshot" jsonb
+  "after_snapshot" jsonb
+  "authorized_at" timestamptz
+  "executed_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'manual_reconciliation_requests_id_primary', pk]
+  }
+
+  Note: 'manual_reconciliation_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'EXECUTED\'))'
 }
 
 Table "media_file_bindings" {
@@ -970,7 +1234,7 @@ Table "media_file_bindings" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'media_file_bindings_pkey', pk]
+    ("id") [name: 'media_file_bindings_id_primary', pk]
     ("owner_type", "owner_id") [name: 'media_file_bindings_owner_type_owner_id_index']
     ("media_file_id", "owner_type", "owner_id", "purpose") [name: 'media_file_bindings_owner_unique', unique]
   }
@@ -983,17 +1247,21 @@ Table "media_files" {
   "path" text [not null]
   "original_name" varchar(255) [not null]
   "mime_type" varchar(255) [not null]
-  "size_bytes" bigint [not null]
-  "sha256" character(64) [not null]
+  "size_bytes" biginteger [not null]
+  "sha256" char(64) [not null]
   "uploaded_by" uuid [not null]
   "created_at" timestamptz
   "updated_at" timestamptz
   "deleted_at" timestamptz
+  "validation_status" varchar(16) [not null, default: 'VALIDATED']
+  "validated_at" timestamptz
 
   indexes {
-    ("id") [name: 'media_files_pkey', pk]
+    ("id") [name: 'media_files_id_primary', pk]
     ("sha256") [name: 'media_files_sha256_index']
   }
+
+  Note: 'media_validation_status_check: CHECK (validation_status IN (\'TEMPORARY\',\'VALIDATED\',\'REJECTED\'))'
 }
 
 Table "mfa_credentials" {
@@ -1010,7 +1278,7 @@ Table "mfa_credentials" {
   "period" integer
   "credential_identifier" varchar(255)
   "public_key" text
-  "sign_count" bigint
+  "sign_count" biginteger
   "transports" jsonb
   "aaguid" varchar(255)
   "attestation_format" varchar(255)
@@ -1021,12 +1289,12 @@ Table "mfa_credentials" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'mfa_credentials_pkey', pk]
-    ("credential_identifier") [name: 'mfa_credentials_identifier_unique', unique, note: 'WHERE (credential_identifier IS NOT NULL)']
-    ("user_id", "type") [name: 'mfa_credentials_totp_active_unique', unique, note: 'WHERE (((type)::text = \'TOTP\'::text) AND (revoked_at IS NULL))']
+    ("id") [name: 'mfa_credentials_id_primary', pk]
+    ("credential_identifier") [name: 'mfa_credentials_identifier_unique', unique, note: 'WHERE credential_identifier IS NOT NULL']
+    ("user_id", "type") [name: 'mfa_credentials_totp_active_unique', unique, note: 'WHERE type = \'TOTP\' AND revoked_at IS NULL']
   }
 
-  Note: 'chk_mfa_passkey_fields: CHECK (type::text = \'PASSKEY\'::text AND credential_identifier IS NOT NULL AND public_key IS NOT NULL OR type::text <> \'PASSKEY\'::text); chk_mfa_totp_fields: CHECK (type::text = \'TOTP\'::text AND secret_ciphertext IS NOT NULL OR type::text <> \'TOTP\'::text); chk_mfa_type: CHECK (type::text = ANY (ARRAY[\'TOTP\'::character varying, \'PASSKEY\'::character varying]::text[]))'
+  Note: 'chk_mfa_type: CHECK (type IN (\'TOTP\', \'PASSKEY\')); chk_mfa_totp_fields: CHECK ( (type = \'TOTP\' AND secret_ciphertext IS NOT NULL) OR (type <> \'TOTP\') ); chk_mfa_passkey_fields: CHECK ( (type = \'PASSKEY\' AND credential_identifier IS NOT NULL AND public_key IS NOT NULL) OR (type <> \'PASSKEY\') )'
 }
 
 Table "mfa_recovery_codes" {
@@ -1040,33 +1308,51 @@ Table "mfa_recovery_codes" {
   "revoked_at" timestamptz
 
   indexes {
-    ("id") [name: 'mfa_recovery_codes_pkey', pk]
+    ("id") [name: 'mfa_recovery_codes_id_primary', pk]
     ("code_hash") [name: 'mfa_recovery_codes_code_hash_unique', unique]
     ("user_id", "batch_id", "position") [name: 'mfa_recovery_codes_user_id_batch_id_position_unique', unique]
   }
 }
 
-Table "migrations" {
-  "id" integer [not null, default: `nextval('migrations_id_seq'::regclass)`]
-  "migration" varchar(255) [not null]
-  "batch" integer [not null]
+Table "municipios" {
+  "id" biginteger [increment, not null]
+  "estado_id" biginteger [not null]
+  "name" varchar(255) [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'migrations_pkey', pk]
+    ("id") [name: 'municipios_id_primary', pk]
+    ("estado_id", "name") [name: 'municipios_estado_id_name_index']
   }
 }
 
-Table "municipios" {
-  "id" bigint [not null, default: `nextval('municipios_id_seq'::regclass)`]
-  "estado_id" bigint [not null]
-  "name" varchar(255) [not null]
-  "created_at" timestamp
-  "updated_at" timestamp
+Table "notification_deliveries" {
+  "id" uuid [not null]
+  "source_type" varchar(24) [not null]
+  "source_id" uuid [not null]
+  "event_type" varchar(255) [not null]
+  "recipient_id" uuid [not null]
+  "notification_id" uuid [not null]
+  "channels" varchar(64) [not null]
+  "delivered_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
+  "recipient_address" varchar(255)
+  "status" varchar(16) [not null]
+  "result" text
+  "error" text
+  "failed_at" timestamptz
+  "last_attempt_at" timestamptz
+  "attempts" integer [not null, default: 1]
 
   indexes {
-    ("id") [name: 'municipios_pkey', pk]
-    ("estado_id", "name") [name: 'municipios_estado_id_name_index']
+    ("id") [name: 'notification_deliveries_id_primary', pk]
+    ("source_type", "source_id", "event_type", "recipient_id") [name: 'notification_delivery_idempotency', unique]
+    ("recipient_id", "delivered_at") [name: 'notification_deliveries_recipient_id_delivered_at_index']
   }
+
+  Note: 'notification_deliveries_status_check: CHECK (status IN (\'PENDING\',\'SENT\',\'FAILED\')); notification_deliveries_result_check: CHECK ((status = \'PENDING\' AND delivered_at IS NULL AND failed_at IS NULL AND error IS NULL) OR (status = \'SENT\' AND delivered_at IS NOT NULL AND failed_at IS NULL AND error IS NULL) OR (status = \'FAILED\' AND delivered_at IS NULL AND failed_at IS NOT NULL AND error IS NOT NULL))'
 }
 
 Table "notifications" {
@@ -1080,9 +1366,49 @@ Table "notifications" {
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'notifications_pkey', pk]
+    ("id") [name: 'notifications_id_primary', pk]
     ("notifiable_type", "notifiable_id") [name: 'notifications_notifiable_type_notifiable_id_index']
   }
+}
+
+Table "operational_heartbeats" {
+  "component" varchar(255) [not null]
+  "last_seen_at" timestamptz [not null]
+  "metadata" jsonb
+
+  indexes {
+    ("component") [name: 'operational_heartbeats_component_primary', pk]
+  }
+}
+
+Table "operational_logs" {
+  "id" uuid [not null]
+  "channel" varchar(24) [not null]
+  "level" varchar(16) [not null]
+  "event" varchar(255) [not null]
+  "actor_id" uuid
+  "branch_id" uuid
+  "request_id" varchar(255)
+  "correlation_id" varchar(255)
+  "trace_id" varchar(255)
+  "method" varchar(12)
+  "path" varchar(512)
+  "status_code" smallint
+  "duration_ms" integer
+  "context" jsonb
+  "occurred_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'operational_logs_id_primary', pk]
+    ("channel", "occurred_at") [name: 'operational_logs_channel_occurred_at_index']
+    ("request_id") [name: 'operational_logs_request_id_index']
+    ("correlation_id") [name: 'operational_logs_correlation_id_index']
+    ("trace_id") [name: 'operational_logs_trace_id_index']
+  }
+
+  Note: 'operational_log_channel_check: CHECK (channel IN (\'APPLICATION\',\'SECURITY\',\'OPERATION\',\'ERROR\',\'AUDIT\'))'
 }
 
 Table "organization_outbox_messages" {
@@ -1095,31 +1421,54 @@ Table "organization_outbox_messages" {
   "occurred_at" timestamptz [not null]
   "available_at" timestamptz [not null]
   "published_at" timestamptz
-  "attempts" integer [not null, default: `0`]
+  "attempts" integer [not null, default: 0]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'organization_outbox_messages_pkey', pk]
-    ("aggregate_type", "aggregate_id") [name: 'organization_outbox_messages_aggregate_type_aggregate_id_index']
+    ("id") [name: 'organization_outbox_messages_id_primary', pk]
     ("event_id") [name: 'organization_outbox_messages_event_id_unique', unique]
-    ("event_type", "occurred_at") [name: 'organization_outbox_messages_event_type_occurred_at_index']
     ("published_at", "available_at") [name: 'organization_outbox_messages_published_at_available_at_index']
+    ("aggregate_type", "aggregate_id") [name: 'organization_outbox_messages_aggregate_type_aggregate_id_index']
+    ("event_type", "occurred_at") [name: 'organization_outbox_messages_event_type_occurred_at_index']
   }
+}
+
+Table "organizational_change_events" {
+  "id" uuid [not null]
+  "type" varchar(48) [not null]
+  "subject_id" uuid [not null]
+  "origin_branch_id" uuid
+  "destination_branch_id" uuid
+  "actor_id" uuid [not null]
+  "reason" text [not null]
+  "before_snapshot" jsonb [not null]
+  "after_snapshot" jsonb [not null]
+  "occurred_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'organizational_change_events_id_primary', pk]
+    ("subject_id", "occurred_at") [name: 'organizational_change_events_subject_id_occurred_at_index']
+    ("type", "occurred_at") [name: 'organizational_change_events_type_occurred_at_index']
+  }
+
+  Note: 'organizational_change_type_check: CHECK (type IN (\'CLIENT_ADMIN_REASSIGNMENT\',\'DISTRIBUTOR_BRANCH_CHANGE\',\'COORDINATOR_CHANGE\'))'
 }
 
 Table "outbox_events" {
   "id" uuid [not null]
   "event_type" varchar(255) [not null]
   "payload" jsonb [not null]
-  "status" varchar(255) [not null, default: `'PENDING'::character varying`]
+  "status" varchar(255) [not null, default: 'PENDING']
   "error_message" text
   "processed_at" timestamptz
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'outbox_events_pkey', pk]
+    ("id") [name: 'outbox_events_id_primary', pk]
     ("event_type") [name: 'outbox_events_event_type_index']
     ("status") [name: 'outbox_events_status_index']
   }
@@ -1129,17 +1478,51 @@ Table "password_reset_tokens" {
   "id" uuid [not null]
   "user_id" uuid [not null]
   "token_hash" varchar(255) [not null]
-  "requested_ip" inet
+  "requested_ip" ipaddress
   "expires_at" timestamptz [not null]
   "consumed_at" timestamptz
   "revoked_at" timestamptz
-  "created_at" timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  "created_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'password_reset_tokens_pkey', pk]
-    ("user_id") [name: 'password_reset_tokens_active_unique', unique, note: 'WHERE ((consumed_at IS NULL) AND (revoked_at IS NULL))']
+    ("id") [name: 'password_reset_tokens_id_primary', pk]
     ("token_hash") [name: 'password_reset_tokens_token_hash_unique', unique]
+    ("user_id") [name: 'password_reset_tokens_active_unique', unique, note: 'WHERE consumed_at IS NULL AND revoked_at IS NULL']
   }
+}
+
+Table "payment_allocations" {
+  "id" uuid [not null]
+  "payment_id" uuid [not null]
+  "relation_item_id" uuid [not null]
+  "component" varchar(24) [not null]
+  "amount" decimal(19,4) [not null]
+  "created_at" timestamptz [not null]
+
+  indexes {
+    ("id") [name: 'payment_allocations_id_primary', pk]
+  }
+
+  Note: 'payment_allocations_component_check: CHECK (component IN (\'SURCHARGE\',\'INTEREST\',\'INSURANCE\',\'LOAN_COMMISSION\',\'CAPITAL\'))'
+}
+
+Table "payment_clarifications" {
+  "id" uuid [not null]
+  "folio" varchar(32) [not null]
+  "distributor_id" uuid [not null]
+  "relation_id" uuid [not null]
+  "evidence_media_id" uuid [not null]
+  "reason" text [not null]
+  "status" varchar(24) [not null, default: 'OPEN']
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'payment_clarifications_id_primary', pk]
+    ("folio") [name: 'payment_clarifications_folio_unique', unique]
+  }
+
+  Note: 'payment_clarifications_status_check: CHECK (status IN (\'OPEN\',\'IN_REVIEW\',\'RESOLVED\',\'REJECTED\'))'
 }
 
 Table "permissions" {
@@ -1148,49 +1531,113 @@ Table "permissions" {
   "module" varchar(255) [not null]
   "action" varchar(255) [not null]
   "description" varchar(255)
-  "is_sensitive" boolean [not null, default: `false`]
-  "is_active" boolean [not null, default: `true`]
+  "is_sensitive" boolean [not null, default: false]
+  "is_active" boolean [not null, default: true]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'permissions_pkey', pk]
-    ("action") [name: 'permissions_action_index']
+    ("id") [name: 'permissions_id_primary', pk]
     ("code") [name: 'permissions_code_unique', unique]
-    ("is_active") [name: 'permissions_is_active_index']
     ("module") [name: 'permissions_module_index']
+    ("action") [name: 'permissions_action_index']
+    ("is_active") [name: 'permissions_is_active_index']
   }
 }
 
 Table "personal_access_tokens" {
-  "id" bigint [not null, default: `nextval('personal_access_tokens_id_seq'::regclass)`]
+  "id" biginteger [increment, not null]
   "tokenable_type" varchar(255) [not null]
   "tokenable_id" uuid [not null]
   "name" text [not null]
   "token" varchar(64) [not null]
   "abilities" text
-  "last_used_at" timestamp
-  "expires_at" timestamp
-  "created_at" timestamp
-  "updated_at" timestamp
+  "last_used_at" timestamptz
+  "expires_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'personal_access_tokens_pkey', pk]
-    ("expires_at") [name: 'personal_access_tokens_expires_at_index']
+    ("id") [name: 'personal_access_tokens_id_primary', pk]
     ("token") [name: 'personal_access_tokens_token_unique', unique]
+    ("expires_at") [name: 'personal_access_tokens_expires_at_index']
     ("tokenable_type", "tokenable_id") [name: 'personal_access_tokens_tokenable_type_tokenable_id_index']
   }
+}
+
+Table "point_accounts" {
+  "id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "balance" biginteger [not null, default: 0]
+  "reserved" biginteger [not null, default: 0]
+  "lock_version" integer [not null, default: 1]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'point_accounts_id_primary', pk]
+    ("distributor_id") [name: 'point_accounts_distributor_id_unique', unique]
+  }
+
+  Note: 'point_accounts_balance_check: CHECK (balance >= 0 AND reserved >= 0 AND reserved <= balance)'
+}
+
+Table "point_movements" {
+  "id" uuid [not null]
+  "point_account_id" uuid [not null]
+  "relation_id" uuid
+  "type" varchar(24) [not null]
+  "balance_before" biginteger [not null]
+  "generated" biginteger [not null, default: 0]
+  "discounted" biginteger [not null, default: 0]
+  "redeemed" biginteger [not null, default: 0]
+  "balance_after" biginteger [not null]
+  "reason" text [not null]
+  "rule_snapshot" jsonb [not null]
+  "rule_version" varchar(255) [not null]
+  "performed_by" uuid
+  "occurred_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'point_movements_id_primary', pk]
+    ("relation_id", "type") [name: 'point_movements_relation_id_type_unique', unique]
+  }
+
+  Note: 'point_movements_type_check: CHECK (type IN (\'EARLY_GENERATION\',\'LATE_DISCOUNT\',\'REDEMPTION\'))'
+}
+
+Table "point_redemption_requests" {
+  "id" uuid [not null]
+  "point_account_id" uuid [not null]
+  "redemption_period_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "points" biginteger [not null]
+  "point_value_snapshot" decimal(19,4) [not null]
+  "monetary_value" decimal(19,4) [not null]
+  "status" varchar(24) [not null, default: 'REQUESTED']
+  "requested_by" uuid [not null]
+  "decided_by" uuid
+  "decision_reason" text
+  "delivered_by" uuid
+  "delivery_reference" text
+  "delivered_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'point_redemption_requests_id_primary', pk]
+  }
+
+  Note: 'point_redemptions_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'DELIVERED\'))'
 }
 
 Table "product_versions" {
   "id" uuid [not null]
   "product_id" uuid [not null]
   "version" integer [not null]
-  "nominal_amount" numeric(19,4) [not null]
-  "loan_commission_percentage" numeric(9,6) [not null]
-  "simple_interest_percentage" numeric(9,6) [not null]
-  "insurance_amount" numeric(19,4) [not null]
-  "fortnights_count" smallint [not null]
+  "insurance_amount" decimal(19,4) [not null]
   "status" varchar(255) [not null]
   "effective_from" timestamptz [not null]
   "effective_to" timestamptz
@@ -1202,36 +1649,40 @@ Table "product_versions" {
   "updated_at" timestamptz
   "name" varchar(255) [not null]
   "description" text
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
+  "nominal_amount" decimal(19,4) [not null]
+  "loan_commission_percentage" decimal(9,6) [not null]
+  "simple_interest_percentage" decimal(9,6) [not null]
+  "fortnights_count" smallint [not null]
 
   indexes {
-    ("id") [name: 'product_versions_pkey', pk]
-    ("product_id") [name: 'product_versions_open_published_unique', unique, note: 'WHERE (((status)::text = \'PUBLISHED\'::text) AND (effective_to IS NULL))']
-    ("product_id", "effective_from", "effective_to") [name: 'product_versions_product_id_effective_from_effective_to_index']
-    ("product_id", "status") [name: 'product_versions_product_id_status_index']
+    ("id") [name: 'product_versions_id_primary', pk]
     ("product_id", "version") [name: 'product_versions_product_id_version_unique', unique]
+    ("product_id", "status") [name: 'product_versions_product_id_status_index']
+    ("product_id", "effective_from", "effective_to") [name: 'product_versions_product_id_effective_from_effective_to_index']
     ("status", "effective_from") [name: 'product_versions_status_effective_from_index']
+    ("product_id") [name: 'product_versions_open_published_unique', unique, note: 'WHERE status = \'PUBLISHED\' AND effective_to IS NULL;']
   }
 
-  Note: 'chk_pv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_pv_fortnights_count: CHECK (fortnights_count > 0); chk_pv_insurance: CHECK (insurance_amount >= 0::numeric); chk_pv_loan_commission: CHECK (loan_commission_percentage >= 0::numeric AND loan_commission_percentage <= 1::numeric); chk_pv_nominal_amount: CHECK (nominal_amount > 0::numeric); chk_pv_nominal_amount_mod: CHECK (mod(nominal_amount, 100.0000) = 0::numeric); chk_pv_simple_interest: CHECK (simple_interest_percentage >= 0::numeric AND simple_interest_percentage <= 1::numeric); chk_pv_status: CHECK (status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'PUBLISHED\'::character varying, \'INACTIVE\'::character varying]::text[])); chk_pv_version: CHECK (version > 0)'
+  Note: 'chk_pv_version: CHECK (version > 0); chk_pv_insurance: CHECK (insurance_amount >= 0); chk_pv_effective_dates: CHECK (effective_to IS NULL OR effective_to > effective_from); chk_pv_status: CHECK (status IN (\'DRAFT\', \'PUBLISHED\', \'INACTIVE\')); chk_pv_nominal_amount: CHECK (nominal_amount > 0); chk_pv_nominal_amount_mod: CHECK (mod(nominal_amount, 100.0000) = 0); chk_pv_loan_commission: CHECK (loan_commission_percentage >= 0 AND loan_commission_percentage <= 1); chk_pv_simple_interest: CHECK (simple_interest_percentage >= 0 AND simple_interest_percentage <= 1); chk_pv_fortnights_count: CHECK (fortnights_count > 0)'
 }
 
 Table "products" {
   "id" uuid [not null]
   "code" varchar(255) [not null]
   "status" varchar(255) [not null]
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_by" uuid [not null]
   "updated_by" uuid
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'products_pkey', pk]
+    ("id") [name: 'products_id_primary', pk]
     ("code") [name: 'products_code_unique', unique]
   }
 
-  Note: 'chk_prod_lock_version: CHECK (lock_version >= 0); chk_prod_status: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'INACTIVE\'::character varying]::text[]))'
+  Note: 'chk_prod_lock_version: CHECK (lock_version >= 0); chk_prod_status: CHECK (status IN (\'ACTIVE\', \'INACTIVE\'))'
 }
 
 Table "redemption_periods" {
@@ -1247,20 +1698,76 @@ Table "redemption_periods" {
   "published_at" timestamptz
   "closed_by" uuid
   "closed_at" timestamptz
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_at" timestamptz
   "updated_at" timestamptz
   "description" text
-  "point_value" numeric(19,4)
+  "point_value" decimal(19,4)
   "point_value_configuration_version_id" uuid
 
   indexes {
-    ("id") [name: 'redemption_periods_pkey', pk]
+    ("id") [name: 'redemption_periods_id_primary', pk]
     ("code") [name: 'redemption_periods_code_unique', unique]
     ("status", "starts_at", "ends_at") [name: 'redemption_periods_status_starts_at_ends_at_index']
   }
 
-  Note: 'chk_rp_dates: CHECK (starts_at < ends_at); chk_rp_lock_version: CHECK (lock_version >= 0); chk_rp_operational_point_value: CHECK ((status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'CANCELLED\'::character varying]::text[])) OR point_value IS NOT NULL AND point_value_configuration_version_id IS NOT NULL); chk_rp_point_value: CHECK (point_value IS NULL OR point_value > 0::numeric); chk_rp_status: CHECK (status::text = ANY (ARRAY[\'DRAFT\'::character varying, \'SCHEDULED\'::character varying, \'OPEN\'::character varying, \'CLOSED\'::character varying, \'CANCELLED\'::character varying]::text[]))'
+  Note: 'chk_rp_dates: CHECK (starts_at < ends_at); chk_rp_lock_version: CHECK (lock_version >= 0); chk_rp_status: CHECK (status IN (\'DRAFT\', \'SCHEDULED\', \'OPEN\', \'CLOSED\', \'CANCELLED\')); chk_rp_point_value: CHECK (point_value IS NULL OR point_value > 0); chk_rp_operational_point_value: CHECK (status IN (\'DRAFT\', \'CANCELLED\') OR (point_value IS NOT NULL AND point_value_configuration_version_id IS NOT NULL))'
+}
+
+Table "relation_late_fees" {
+  "id" uuid [not null]
+  "relation_id" uuid [not null]
+  "type" varchar(24) [not null, default: 'LATE_FEE']
+  "amount" decimal(19,4) [not null]
+  "applied_at" timestamptz [not null]
+  "configuration_snapshot" jsonb [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'relation_late_fees_id_primary', pk]
+    ("relation_id", "type") [name: 'relation_late_fees_relation_id_type_unique', unique]
+  }
+}
+
+Table "relation_payments" {
+  "id" uuid [not null]
+  "relation_id" uuid [not null]
+  "bank_movement_id" uuid [not null]
+  "amount" decimal(19,4) [not null]
+  "surcharge_applied" decimal(19,4) [not null, default: 0]
+  "interest_applied" decimal(19,4) [not null, default: 0]
+  "insurance_applied" decimal(19,4) [not null, default: 0]
+  "commission_applied" decimal(19,4) [not null, default: 0]
+  "capital_applied" decimal(19,4) [not null, default: 0]
+  "line_recovered" decimal(19,4) [not null, default: 0]
+  "applied_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+  "source_type" varchar(32) [not null, default: 'BANK_MOVEMENT']
+  "source_id" uuid
+
+  indexes {
+    ("id") [name: 'relation_payments_id_primary', pk]
+    ("bank_movement_id") [name: 'relation_payments_bank_movement_id_unique', unique]
+    ("source_type", "source_id") [name: 'relation_payments_source_type_source_id_unique', unique]
+  }
+}
+
+Table "relation_process_runs" {
+  "id" uuid [not null]
+  "cutoff_at" timestamptz [not null]
+  "status" varchar(16) [not null]
+  "attempt" integer [not null, default: 1]
+  "configuration_snapshot" jsonb [not null]
+  "error" text
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'relation_process_runs_id_primary', pk]
+    ("cutoff_at", "attempt") [name: 'relation_process_runs_cutoff_at_attempt_unique', unique]
+  }
 }
 
 Table "role_permissions" {
@@ -1274,8 +1781,8 @@ Table "role_permissions" {
   "revocation_reason" varchar(255)
 
   indexes {
-    ("id") [name: 'role_permissions_pkey', pk]
-    ("role_id", "permission_id") [name: 'role_permissions_active_unique', unique, note: 'WHERE (revoked_at IS NULL)']
+    ("id") [name: 'role_permissions_id_primary', pk]
+    ("role_id", "permission_id") [name: 'role_permissions_active_unique', unique, note: 'WHERE revoked_at IS NULL']
   }
 }
 
@@ -1285,17 +1792,17 @@ Table "roles" {
   "name" varchar(255) [not null]
   "description" varchar(255)
   "default_scope" varchar(255) [not null]
-  "is_system" boolean [not null, default: `false`]
-  "is_active" boolean [not null, default: `true`]
+  "is_system" boolean [not null, default: false]
+  "is_active" boolean [not null, default: true]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'roles_pkey', pk]
+    ("id") [name: 'roles_id_primary', pk]
     ("code") [name: 'roles_code_unique', unique]
   }
 
-  Note: 'chk_role_default_scope: CHECK (default_scope::text = ANY (ARRAY[\'GLOBAL\'::character varying, \'BRANCH\'::character varying, \'ASSIGNED\'::character varying, \'SELF\'::character varying]::text[]))'
+  Note: 'chk_role_default_scope: CHECK (default_scope IN (\'GLOBAL\', \'BRANCH\', \'ASSIGNED\', \'SELF\'))'
 }
 
 Table "security_events" {
@@ -1311,24 +1818,61 @@ Table "security_events" {
   "entity_id" varchar(255)
   "request_id" varchar(255)
   "trace_id" varchar(255)
-  "ip_address" inet
+  "ip_address" ipaddress
   "user_agent" text
   "metadata" jsonb
   "occurred_at" timestamptz [not null]
-  "created_at" timestamptz [not null, default: `CURRENT_TIMESTAMP`]
+  "created_at" timestamptz [not null]
 
   indexes {
-    ("id") [name: 'security_events_pkey', pk]
+    ("id") [name: 'security_events_id_primary', pk]
+    ("user_id", "occurred_at") [name: 'security_events_user_id_occurred_at_index']
     ("actor_user_id", "occurred_at") [name: 'security_events_actor_user_id_occurred_at_index']
     ("branch_id", "occurred_at") [name: 'security_events_branch_id_occurred_at_index']
     ("event_type", "occurred_at") [name: 'security_events_event_type_occurred_at_index']
-    ("request_id") [name: 'security_events_request_id_index']
     ("severity", "occurred_at") [name: 'security_events_severity_occurred_at_index']
+    ("request_id") [name: 'security_events_request_id_index']
     ("trace_id") [name: 'security_events_trace_id_index']
-    ("user_id", "occurred_at") [name: 'security_events_user_id_occurred_at_index']
   }
 
-  Note: 'chk_security_event_outcome: CHECK (outcome::text = ANY (ARRAY[\'SUCCESS\'::character varying, \'FAILURE\'::character varying, \'DENIED\'::character varying]::text[])); chk_security_event_severity: CHECK (severity::text = ANY (ARRAY[\'INFO\'::character varying, \'WARNING\'::character varying, \'CRITICAL\'::character varying]::text[]))'
+  Note: 'chk_security_event_severity: CHECK (severity IN (\'INFO\', \'WARNING\', \'CRITICAL\')); chk_security_event_outcome: CHECK (outcome IN (\'SUCCESS\', \'FAILURE\', \'DENIED\'))'
+}
+
+Table "surplus_applications" {
+  "id" uuid [not null]
+  "surplus_id" uuid [not null]
+  "relation_id" uuid [not null]
+  "amount" decimal(19,4) [not null]
+  "applied_at" timestamptz [not null]
+
+  indexes {
+    ("id") [name: 'surplus_applications_id_primary', pk]
+    ("surplus_id", "relation_id") [name: 'surplus_applications_surplus_id_relation_id_unique', unique]
+  }
+}
+
+Table "surplus_refund_requests" {
+  "id" uuid [not null]
+  "surplus_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "amount" decimal(19,4) [not null]
+  "status" varchar(24) [not null, default: 'REQUESTED']
+  "requested_by" uuid [not null]
+  "decided_by" uuid
+  "decision_reason" text
+  "executed_by" uuid
+  "execution_method" varchar(255)
+  "execution_reference" varchar(255)
+  "evidence_media_id" uuid
+  "executed_at" timestamptz
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'surplus_refund_requests_id_primary', pk]
+  }
+
+  Note: 'surplus_refunds_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'EXECUTED\'))'
 }
 
 Table "user_role_scopes" {
@@ -1349,18 +1893,18 @@ Table "user_role_scopes" {
   "scope_id" uuid
 
   indexes {
-    ("id") [name: 'user_role_scopes_pkey', pk]
-    ("user_id", "role_id", "branch_id", "scope_type") [name: 'user_role_scopes_active_branch_unique', unique, note: 'WHERE (((status)::text = \'ACTIVE\'::text) AND (revoked_at IS NULL) AND (branch_id IS NOT NULL))']
-    ("user_id", "role_id", "scope_id") [name: 'user_role_scopes_active_distributor_unique', unique, note: 'WHERE (((status)::text = \'ACTIVE\'::text) AND (revoked_at IS NULL) AND ((scope_type)::text = \'DISTRIBUTOR\'::text))']
-    ("user_id", "role_id", "scope_type") [name: 'user_role_scopes_active_global_unique', unique, note: 'WHERE (((status)::text = \'ACTIVE\'::text) AND (revoked_at IS NULL) AND ((scope_type)::text = \'GLOBAL\'::text))']
-    ("branch_id", "status") [name: 'user_role_scopes_branch_id_status_index']
-    ("role_id", "status") [name: 'user_role_scopes_role_id_status_index']
-    ("scope_type", "scope_id", "status") [name: 'user_role_scopes_scope_type_scope_id_status_index']
-    ("scope_type", "status") [name: 'user_role_scopes_scope_type_status_index']
+    ("id") [name: 'user_role_scopes_id_primary', pk]
     ("user_id", "status") [name: 'user_role_scopes_user_id_status_index']
+    ("role_id", "status") [name: 'user_role_scopes_role_id_status_index']
+    ("branch_id", "status") [name: 'user_role_scopes_branch_id_status_index']
+    ("scope_type", "status") [name: 'user_role_scopes_scope_type_status_index']
+    ("user_id", "role_id", "scope_type") [name: 'user_role_scopes_active_global_unique', unique, note: 'WHERE status = \'ACTIVE\' AND revoked_at IS NULL AND scope_type = \'GLOBAL\';']
+    ("user_id", "role_id", "branch_id", "scope_type") [name: 'user_role_scopes_active_branch_unique', unique, note: 'WHERE status = \'ACTIVE\' AND revoked_at IS NULL AND branch_id IS NOT NULL']
+    ("scope_type", "scope_id", "status") [name: 'user_role_scopes_scope_type_scope_id_status_index']
+    ("user_id", "role_id", "scope_id") [name: 'user_role_scopes_active_distributor_unique', unique, note: 'WHERE status = \'ACTIVE\' AND revoked_at IS NULL AND scope_type = \'DISTRIBUTOR\'']
   }
 
-  Note: 'chk_scope_branch_match: CHECK (scope_type::text = \'GLOBAL\'::text AND branch_id IS NULL AND scope_id IS NULL OR scope_type::text = \'BRANCH\'::text AND branch_id IS NOT NULL AND scope_id IS NULL OR scope_type::text = \'DISTRIBUTOR\'::text AND branch_id IS NOT NULL AND scope_id IS NOT NULL); chk_scope_type: CHECK (scope_type::text = ANY (ARRAY[\'GLOBAL\'::character varying, \'BRANCH\'::character varying, \'DISTRIBUTOR\'::character varying]::text[])); chk_status_consistency: CHECK (status::text = \'ACTIVE\'::text AND revoked_at IS NULL AND revoked_by_user_id IS NULL OR (status::text = ANY (ARRAY[\'ENDED\'::character varying, \'REVOKED\'::character varying]::text[])) AND revoked_at IS NOT NULL); chk_urs_status: CHECK (status::text = ANY (ARRAY[\'ACTIVE\'::character varying, \'ENDED\'::character varying, \'REVOKED\'::character varying]::text[])); chk_valid_dates: CHECK (revoked_at IS NULL OR revoked_at > assigned_at)'
+  Note: 'chk_urs_status: CHECK (status IN (\'ACTIVE\', \'ENDED\', \'REVOKED\')); chk_valid_dates: CHECK (revoked_at IS NULL OR revoked_at > assigned_at); chk_status_consistency: CHECK ( (status = \'ACTIVE\' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) OR (status IN (\'ENDED\', \'REVOKED\') AND revoked_at IS NOT NULL) ); chk_scope_type: CHECK (scope_type IN (\'GLOBAL\', \'BRANCH\', \'DISTRIBUTOR\')); chk_scope_branch_match: CHECK ( (scope_type = \'GLOBAL\' AND branch_id IS NULL AND scope_id IS NULL) OR (scope_type = \'BRANCH\' AND branch_id IS NOT NULL AND scope_id IS NULL) OR (scope_type = \'DISTRIBUTOR\' AND branch_id IS NOT NULL AND scope_id IS NOT NULL) )'
 }
 
 Table "users" {
@@ -1370,28 +1914,28 @@ Table "users" {
   "normalized_email" varchar(255) [not null]
   "password" varchar(255)
   "webauthn_user_handle" varchar(255)
-  "state" varchar(255) [not null, default: `'PENDING_ACTIVATION'::character varying`]
+  "state" varchar(255) [not null, default: 'PENDING_ACTIVATION']
   "email_verified_at" timestamptz
   "password_changed_at" timestamptz
   "mfa_enrolled_at" timestamptz
-  "failed_login_attempts" integer [not null, default: `0`]
+  "failed_login_attempts" integer [not null, default: 0]
   "locked_until" timestamptz
   "last_login_at" timestamptz
-  "last_login_ip" inet
+  "last_login_ip" ipaddress
   "disabled_at" timestamptz
   "disabled_reason" varchar(255)
-  "lock_version" integer [not null, default: `0`]
+  "lock_version" integer [not null, default: 0]
   "created_at" timestamptz
   "updated_at" timestamptz
-  "require_password_change" boolean [not null, default: `false`]
+  "require_password_change" boolean [not null, default: false]
 
   indexes {
-    ("id") [name: 'users_pkey', pk]
+    ("id") [name: 'users_id_primary', pk]
     ("normalized_email") [name: 'users_normalized_email_unique', unique]
     ("webauthn_user_handle") [name: 'users_webauthn_user_handle_unique', unique]
   }
 
-  Note: 'chk_user_state: CHECK (state::text = ANY (ARRAY[\'INVITED\'::character varying, \'PENDING_ACTIVATION\'::character varying, \'ACTIVE\'::character varying, \'BLOCKED\'::character varying, \'DISABLED\'::character varying]::text[]))'
+  Note: 'chk_user_state: CHECK (state IN (\'INVITED\', \'PENDING_ACTIVATION\', \'ACTIVE\', \'BLOCKED\', \'DISABLED\'))'
 }
 
 Table "verification_visits" {
@@ -1407,134 +1951,347 @@ Table "verification_visits" {
   "result" varchar(50)
   "observations" text
   "differences_payload" jsonb
-  "latitude" numeric(10,7)
-  "longitude" numeric(10,7)
-  "location_accuracy_meters" numeric(10,2)
-  "lock_version" integer [not null, default: `1`]
+  "latitude" decimal(10,7)
+  "longitude" decimal(10,7)
+  "location_accuracy_meters" decimal(10,2)
+  "lock_version" integer [not null, default: 1]
   "created_at" timestamptz
   "updated_at" timestamptz
 
   indexes {
-    ("id") [name: 'verification_visits_pkey', pk]
+    ("id") [name: 'verification_visits_id_primary', pk]
     ("application_id", "assigned_at") [name: 'verification_visits_application_id_assigned_at_index']
   }
 
-  Note: 'verification_visits_result_check: CHECK (result IS NULL OR (result::text = ANY (ARRAY[\'FAVORABLE\'::character varying, \'UNFAVORABLE\'::character varying]::text[]))); verification_visits_state_check: CHECK (status::text = \'COMPLETED\'::text AND result IS NOT NULL AND completed_at IS NOT NULL OR status::text <> \'COMPLETED\'::text AND result IS NULL AND completed_at IS NULL); verification_visits_status_check: CHECK (status::text = ANY (ARRAY[\'ASSIGNED\'::character varying, \'IN_PROGRESS\'::character varying, \'COMPLETED\'::character varying]::text[]))'
+  Note: 'verification_visits_status_check: CHECK (status IN (\'ASSIGNED\',\'IN_PROGRESS\',\'COMPLETED\')); verification_visits_result_check: CHECK (result IS NULL OR result IN (\'FAVORABLE\',\'UNFAVORABLE\')); verification_visits_state_check: CHECK ((status = \'COMPLETED\' AND result IS NOT NULL AND completed_at IS NOT NULL) OR (status <> \'COMPLETED\' AND result IS NULL AND completed_at IS NULL))'
 }
 
-Ref "account_invitations_created_by_user_id_foreign": "account_invitations"."created_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "account_invitations_user_id_foreign": "account_invitations"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "application_assets_liabilities_application_id_foreign": "application_assets_liabilities"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_authorizations_application_id_foreign": "application_authorizations"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "application_authorizations_authorized_by_foreign": "application_authorizations"."authorized_by" > "users"."id" [delete: restrict, update: no action]
-Ref "application_commercial_credits_application_id_foreign": "application_commercial_credits"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_corrections_application_id_foreign": "application_corrections"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "application_corrections_corrected_by_foreign": "application_corrections"."corrected_by" > "users"."id" [delete: restrict, update: no action]
-Ref "application_corrections_verification_visit_id_foreign": "application_corrections"."verification_visit_id" > "verification_visits"."id" [delete: restrict, update: no action]
-Ref "application_employments_application_id_foreign": "application_employments"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_evaluations_application_id_foreign": "application_evaluations"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "application_evaluations_evaluated_by_foreign": "application_evaluations"."evaluated_by" > "users"."id" [delete: restrict, update: no action]
-Ref "application_evaluations_verification_visit_id_foreign": "application_evaluations"."verification_visit_id" > "verification_visits"."id" [delete: restrict, update: no action]
-Ref "application_family_members_application_id_foreign": "application_family_members"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_personal_data_application_id_foreign": "application_personal_data"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_residences_application_id_foreign": "application_residences"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "application_state_transitions_application_id_foreign": "application_state_transitions"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "application_state_transitions_user_id_foreign": "application_state_transitions"."user_id" > "users"."id" [delete: restrict, update: no action]
-Ref "application_vehicles_application_id_foreign": "application_vehicles"."application_id" > "distributor_applications"."id" [delete: no action, update: no action]
-Ref "auth_sessions_revoked_by_user_id_foreign": "auth_sessions"."revoked_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "auth_sessions_user_id_foreign": "auth_sessions"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "branches_created_by_foreign": "branches"."created_by" > "users"."id" [delete: no action, update: no action]
-Ref "branches_updated_by_foreign": "branches"."updated_by" > "users"."id" [delete: no action, update: no action]
-Ref "categories_created_by_foreign": "categories"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "categories_updated_by_foreign": "categories"."updated_by" > "users"."id" [delete: restrict, update: no action]
-Ref "category_versions_category_id_foreign": "category_versions"."category_id" > "categories"."id" [delete: restrict, update: no action]
-Ref "category_versions_created_by_foreign": "category_versions"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "category_versions_published_by_foreign": "category_versions"."published_by" > "users"."id" [delete: restrict, update: no action]
-Ref "client_addresses_address_proof_media_id_foreign": "client_addresses"."address_proof_media_id" > "media_files"."id" [delete: restrict, update: no action]
-Ref "client_addresses_client_id_foreign": "client_addresses"."client_id" > "clients"."id" [delete: restrict, update: no action]
-Ref "client_addresses_created_by_foreign": "client_addresses"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "client_bank_accounts_client_id_foreign": "client_bank_accounts"."client_id" > "clients"."id" [delete: restrict, update: no action]
-Ref "client_bank_accounts_created_by_foreign": "client_bank_accounts"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "client_distributor_assignments_assigned_by_foreign": "client_distributor_assignments"."assigned_by" > "users"."id" [delete: restrict, update: no action]
-Ref "client_distributor_assignments_branch_id_foreign": "client_distributor_assignments"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "client_distributor_assignments_client_id_foreign": "client_distributor_assignments"."client_id" > "clients"."id" [delete: restrict, update: no action]
-Ref "client_distributor_assignments_distributor_id_foreign": "client_distributor_assignments"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "client_portfolio_entries_client_id_foreign": "client_portfolio_entries"."client_id" > "clients"."id" [delete: restrict, update: no action]
-Ref "client_portfolio_entries_distributor_id_foreign": "client_portfolio_entries"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "client_portfolio_entries_recorded_by_foreign": "client_portfolio_entries"."recorded_by" > "users"."id" [delete: restrict, update: no action]
-Ref "clients_created_by_foreign": "clients"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "clients_official_id_media_id_foreign": "clients"."official_id_media_id" > "media_files"."id" [delete: restrict, update: no action]
-Ref "codigos_postales_municipio_id_foreign": "codigos_postales"."municipio_id" > "municipios"."id" [delete: cascade, update: no action]
-Ref "colonias_codigo_postal_id_foreign": "colonias"."codigo_postal_id" > "codigos_postales"."id" [delete: cascade, update: no action]
-Ref "configuration_definitions_created_by_foreign": "configuration_definitions"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "configuration_definitions_updated_by_foreign": "configuration_definitions"."updated_by" > "users"."id" [delete: restrict, update: no action]
-Ref "configuration_versions_configuration_definition_id_foreign": "configuration_versions"."configuration_definition_id" > "configuration_definitions"."id" [delete: restrict, update: no action]
-Ref "configuration_versions_created_by_foreign": "configuration_versions"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "configuration_versions_published_by_foreign": "configuration_versions"."published_by" > "users"."id" [delete: restrict, update: no action]
-Ref "coordinator_distributor_assignments_assigned_by_foreign": "coordinator_distributor_assignments"."assigned_by" > "users"."id" [delete: restrict, update: no action]
-Ref "coordinator_distributor_assignments_branch_id_foreign": "coordinator_distributor_assignments"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "coordinator_distributor_assignments_coordinator_id_foreign": "coordinator_distributor_assignments"."coordinator_id" > "users"."id" [delete: restrict, update: no action]
-Ref "coordinator_distributor_assignments_distributor_id_foreign": "coordinator_distributor_assignments"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "coordinator_distributor_assignments_ended_by_foreign": "coordinator_distributor_assignments"."ended_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_branch_id_foreign": "credit_increase_requests"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_coordinator_decided_by_foreign": "credit_increase_requests"."coordinator_decided_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_coordinator_id_foreign": "credit_increase_requests"."coordinator_id" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_credit_line_id_foreign": "credit_increase_requests"."credit_line_id" > "credit_lines"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_distributor_id_foreign": "credit_increase_requests"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_manager_decided_by_foreign": "credit_increase_requests"."manager_decided_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_requested_by_foreign": "credit_increase_requests"."requested_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_requests_restriction_id_foreign": "credit_increase_requests"."restriction_id" > "credit_usage_restrictions"."id" [delete: set null, update: no action]
-Ref "credit_increase_state_transitions_actor_id_foreign": "credit_increase_state_transitions"."actor_id" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_increase_state_transitions_request_id_foreign": "credit_increase_state_transitions"."request_id" > "credit_increase_requests"."id" [delete: restrict, update: no action]
-Ref "credit_line_movements_authorized_by_foreign": "credit_line_movements"."authorized_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_line_movements_credit_line_id_foreign": "credit_line_movements"."credit_line_id" > "credit_lines"."id" [delete: restrict, update: no action]
-Ref "credit_line_movements_distributor_id_foreign": "credit_line_movements"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "credit_line_movements_performed_by_foreign": "credit_line_movements"."performed_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_lines_distributor_id_foreign": "credit_lines"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "credit_usage_restrictions_configuration_version_id_foreign": "credit_usage_restrictions"."configuration_version_id" > "configuration_versions"."id" [delete: restrict, update: no action]
-Ref "credit_usage_restrictions_created_by_foreign": "credit_usage_restrictions"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "credit_usage_restrictions_credit_line_id_foreign": "credit_usage_restrictions"."credit_line_id" > "credit_lines"."id" [delete: restrict, update: no action]
-Ref "credit_usage_restrictions_distributor_id_foreign": "credit_usage_restrictions"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "distributor_applications_branch_id_foreign": "distributor_applications"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "distributor_applications_coordinator_id_foreign": "distributor_applications"."coordinator_id" > "users"."id" [delete: restrict, update: no action]
-Ref "distributor_applications_created_by_foreign": "distributor_applications"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "distributor_applications_submitted_by_foreign": "distributor_applications"."submitted_by" > "users"."id" [delete: restrict, update: no action]
-Ref "distributor_category_assignments_assigned_by_foreign": "distributor_category_assignments"."assigned_by" > "users"."id" [delete: restrict, update: no action]
-Ref "distributor_category_assignments_category_version_id_foreign": "distributor_category_assignments"."category_version_id" > "category_versions"."id" [delete: restrict, update: no action]
-Ref "distributor_category_assignments_distributor_id_foreign": "distributor_category_assignments"."distributor_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "distributors_activated_by_foreign": "distributors"."activated_by" > "users"."id" [delete: restrict, update: no action]
-Ref "distributors_application_id_foreign": "distributors"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "distributors_branch_id_foreign": "distributors"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "distributors_user_id_foreign": "distributors"."user_id" > "users"."id" [delete: restrict, update: no action]
-Ref "media_file_bindings_created_by_foreign": "media_file_bindings"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "media_file_bindings_media_file_id_foreign": "media_file_bindings"."media_file_id" > "media_files"."id" [delete: restrict, update: no action]
-Ref "media_files_uploaded_by_foreign": "media_files"."uploaded_by" > "users"."id" [delete: restrict, update: no action]
-Ref "mfa_credentials_user_id_foreign": "mfa_credentials"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "mfa_recovery_codes_user_id_foreign": "mfa_recovery_codes"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "municipios_estado_id_foreign": "municipios"."estado_id" > "estados"."id" [delete: cascade, update: no action]
-Ref "password_reset_tokens_user_id_foreign": "password_reset_tokens"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "product_versions_created_by_foreign": "product_versions"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "product_versions_product_id_foreign": "product_versions"."product_id" > "products"."id" [delete: restrict, update: no action]
-Ref "product_versions_published_by_foreign": "product_versions"."published_by" > "users"."id" [delete: restrict, update: no action]
-Ref "products_created_by_foreign": "products"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "products_updated_by_foreign": "products"."updated_by" > "users"."id" [delete: restrict, update: no action]
-Ref "redemption_periods_closed_by_foreign": "redemption_periods"."closed_by" > "users"."id" [delete: restrict, update: no action]
-Ref "redemption_periods_created_by_foreign": "redemption_periods"."created_by" > "users"."id" [delete: restrict, update: no action]
-Ref "redemption_periods_point_value_configuration_version_id_foreign": "redemption_periods"."point_value_configuration_version_id" > "configuration_versions"."id" [delete: restrict, update: no action]
-Ref "redemption_periods_published_by_foreign": "redemption_periods"."published_by" > "users"."id" [delete: restrict, update: no action]
-Ref "role_permissions_granted_by_user_id_foreign": "role_permissions"."granted_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "role_permissions_permission_id_foreign": "role_permissions"."permission_id" > "permissions"."id" [delete: cascade, update: no action]
-Ref "role_permissions_revoked_by_user_id_foreign": "role_permissions"."revoked_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "role_permissions_role_id_foreign": "role_permissions"."role_id" > "roles"."id" [delete: cascade, update: no action]
-Ref "security_events_actor_user_id_foreign": "security_events"."actor_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "security_events_auth_session_id_foreign": "security_events"."auth_session_id" > "auth_sessions"."id" [delete: set null, update: no action]
-Ref "security_events_user_id_foreign": "security_events"."user_id" > "users"."id" [delete: set null, update: no action]
-Ref "user_role_scopes_assigned_by_user_id_foreign": "user_role_scopes"."assigned_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "user_role_scopes_branch_id_foreign": "user_role_scopes"."branch_id" > "branches"."id" [delete: restrict, update: no action]
-Ref "user_role_scopes_revoked_by_user_id_foreign": "user_role_scopes"."revoked_by_user_id" > "users"."id" [delete: set null, update: no action]
-Ref "user_role_scopes_role_id_foreign": "user_role_scopes"."role_id" > "roles"."id" [delete: cascade, update: no action]
-Ref "user_role_scopes_scope_id_foreign": "user_role_scopes"."scope_id" > "distributors"."id" [delete: restrict, update: no action]
-Ref "user_role_scopes_user_id_foreign": "user_role_scopes"."user_id" > "users"."id" [delete: cascade, update: no action]
-Ref "verification_visits_application_id_foreign": "verification_visits"."application_id" > "distributor_applications"."id" [delete: restrict, update: no action]
-Ref "verification_visits_assigned_by_foreign": "verification_visits"."assigned_by" > "users"."id" [delete: restrict, update: no action]
-Ref "verification_visits_verifier_id_foreign": "verification_visits"."verifier_id" > "users"."id" [delete: restrict, update: no action]
+Table "voucher_cash_transactions" {
+  "id" uuid [not null]
+  "voucher_id" uuid [not null]
+  "bank_transaction_number" varchar(128) [not null]
+  "cashier_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "cashed_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'voucher_cash_transactions_id_primary', pk]
+    ("voucher_id") [name: 'voucher_cash_transactions_voucher_id_unique', unique]
+    ("bank_transaction_number") [name: 'voucher_cash_transactions_bank_transaction_number_unique', unique]
+  }
+}
+
+Table "voucher_installments" {
+  "id" uuid [not null]
+  "voucher_id" uuid [not null]
+  "number" smallint [not null]
+  "capital" decimal(19,4) [not null]
+  "loan_commission" decimal(19,4) [not null]
+  "interest" decimal(19,4) [not null]
+  "insurance" decimal(19,4) [not null]
+  "distributor_profit" decimal(19,4) [not null]
+  "misvales_payment" decimal(19,4) [not null]
+  "client_payment" decimal(19,4) [not null]
+  "due_at" timestamptz
+  "created_at" timestamptz [not null]
+
+  indexes {
+    ("id") [name: 'voucher_installments_id_primary', pk]
+    ("voucher_id", "number") [name: 'voucher_installments_voucher_id_number_unique', unique]
+  }
+
+  Note: 'voucher_installments_number_check: CHECK (number > 0); voucher_installments_money_check: CHECK (capital >= 0 AND loan_commission >= 0 AND interest >= 0 AND insurance >= 0 AND distributor_profit >= 0 AND misvales_payment >= 0 AND client_payment >= 0)'
+}
+
+Table "voucher_modification_requests" {
+  "id" uuid [not null]
+  "voucher_id" uuid [not null]
+  "client_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "requested_by" uuid [not null]
+  "requested_fields" jsonb [not null]
+  "reason" text [not null]
+  "status" varchar(24) [not null, default: 'REQUESTED']
+  "decided_by" uuid
+  "decision_reason" text
+  "decided_at" timestamptz
+  "token_hash" varchar(64)
+  "token_expires_at" timestamptz
+  "token_used_at" timestamptz
+  "changes_before" jsonb
+  "changes_after" jsonb
+  "lock_version" integer [not null, default: 1]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+
+  indexes {
+    ("id") [name: 'voucher_modification_requests_id_primary', pk]
+    ("branch_id", "status", "created_at") [name: 'voucher_modification_requests_branch_id_status_created_at_index']
+    ("voucher_id", "status") [name: 'voucher_modification_requests_voucher_id_status_index']
+  }
+
+  Note: 'voucher_modification_status_check: CHECK (status IN (\'REQUESTED\', \'AUTHORIZED\', \'REJECTED\', \'APPLIED\', \'EXPIRED\')); voucher_modification_lock_check: CHECK (lock_version >= 1); voucher_modification_token_check: CHECK ((status = \'AUTHORIZED\' AND token_hash IS NOT NULL AND token_expires_at IS NOT NULL AND token_used_at IS NULL) OR status <> \'AUTHORIZED\')'
+}
+
+Table "vouchers" {
+  "id" uuid [not null]
+  "folio" varchar(32) [not null]
+  "type" varchar(24) [not null]
+  "status" varchar(32) [not null, default: 'GENERATED']
+  "client_id" uuid [not null]
+  "distributor_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "credit_line_id" uuid [not null]
+  "product_id" uuid [not null]
+  "product_version_id" uuid [not null]
+  "category_version_id" uuid [not null]
+  "credit_restriction_id" uuid
+  "capital" decimal(19,4) [not null]
+  "loan_commission_percentage" decimal(9,6) [not null]
+  "loan_commission_amount" decimal(19,4) [not null]
+  "simple_interest_percentage" decimal(9,6) [not null]
+  "fortnights_count" smallint [not null]
+  "insurance_amount" decimal(19,4) [not null]
+  "interest_total" decimal(19,4) [not null]
+  "misvales_total" decimal(19,4) [not null]
+  "misvales_payment_per_fortnight" decimal(19,4) [not null]
+  "distributor_profit_percentage" decimal(9,6) [not null]
+  "distributor_profit_total" decimal(19,4) [not null]
+  "distributor_profit_per_fortnight" decimal(19,4) [not null]
+  "client_payment_per_fortnight" decimal(19,4) [not null]
+  "client_total" decimal(19,4) [not null]
+  "financial_snapshot" jsonb [not null]
+  "lock_version" integer [not null, default: 1]
+  "created_by" uuid [not null]
+  "generated_at" timestamptz [not null]
+  "created_at" timestamptz
+  "updated_at" timestamptz
+  "released_by" uuid
+  "released_at" timestamptz
+  "cashed_by" uuid
+  "cashed_at" timestamptz
+
+  indexes {
+    ("id") [name: 'vouchers_id_primary', pk]
+    ("folio") [name: 'vouchers_folio_unique', unique]
+    ("distributor_id", "generated_at") [name: 'vouchers_distributor_id_generated_at_index']
+    ("client_id", "generated_at") [name: 'vouchers_client_id_generated_at_index']
+    ("branch_id", "status") [name: 'vouchers_branch_id_status_index']
+  }
+
+  Note: 'vouchers_type_check: CHECK (type IN (\'PREVALE\', \'VALE_DIGITAL\')); vouchers_status_check: CHECK (status IN (\'GENERATED\', \'CASH_VALIDATION\', \'CORRECTION_PENDING\', \'RELEASED\', \'CASHED\', \'REJECTED\', \'CANCELLED\')); vouchers_money_check: CHECK (capital > 0 AND loan_commission_amount >= 0 AND insurance_amount >= 0 AND interest_total >= 0 AND misvales_total > 0 AND distributor_profit_total >= 0 AND client_total > 0); vouchers_rates_check: CHECK (loan_commission_percentage BETWEEN 0 AND 1 AND simple_interest_percentage BETWEEN 0 AND 1 AND distributor_profit_percentage BETWEEN 0 AND 1); vouchers_fortnights_check: CHECK (fortnights_count > 0); vouchers_lock_version_check: CHECK (lock_version >= 1)'
+}
+
+Ref "account_invitations_user_id_foreign": "account_invitations"."user_id" > "users"."id" [delete: cascade]
+Ref "account_invitations_created_by_user_id_foreign": "account_invitations"."created_by_user_id" > "users"."id" [delete: set null]
+Ref "application_assets_liabilities_application_id_foreign": "application_assets_liabilities"."application_id" > "distributor_applications"."id"
+Ref "application_authorizations_authorized_by_foreign": "application_authorizations"."authorized_by" > "users"."id" [delete: restrict]
+Ref "application_authorizations_application_id_foreign": "application_authorizations"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "application_commercial_credits_application_id_foreign": "application_commercial_credits"."application_id" > "distributor_applications"."id"
+Ref "application_corrections_verification_visit_id_foreign": "application_corrections"."verification_visit_id" > "verification_visits"."id" [delete: restrict]
+Ref "application_corrections_corrected_by_foreign": "application_corrections"."corrected_by" > "users"."id" [delete: restrict]
+Ref "application_corrections_application_id_foreign": "application_corrections"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "application_employments_application_id_foreign": "application_employments"."application_id" > "distributor_applications"."id"
+Ref "application_evaluations_verification_visit_id_foreign": "application_evaluations"."verification_visit_id" > "verification_visits"."id" [delete: restrict]
+Ref "application_evaluations_evaluated_by_foreign": "application_evaluations"."evaluated_by" > "users"."id" [delete: restrict]
+Ref "application_evaluations_application_id_foreign": "application_evaluations"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "application_family_members_application_id_foreign": "application_family_members"."application_id" > "distributor_applications"."id"
+Ref "application_personal_data_application_id_foreign": "application_personal_data"."application_id" > "distributor_applications"."id"
+Ref "application_residences_application_id_foreign": "application_residences"."application_id" > "distributor_applications"."id"
+Ref "application_state_transitions_user_id_foreign": "application_state_transitions"."user_id" > "users"."id" [delete: restrict]
+Ref "application_state_transitions_application_id_foreign": "application_state_transitions"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "application_vehicles_application_id_foreign": "application_vehicles"."application_id" > "distributor_applications"."id"
+Ref "auth_sessions_user_id_foreign": "auth_sessions"."user_id" > "users"."id" [delete: cascade]
+Ref "auth_sessions_revoked_by_user_id_foreign": "auth_sessions"."revoked_by_user_id" > "users"."id" [delete: set null]
+Ref "bank_file_imports_uploaded_by_foreign": "bank_file_imports"."uploaded_by" > "users"."id" [delete: restrict]
+Ref "bank_file_imports_branch_id_foreign": "bank_file_imports"."branch_id" > "branches"."id" [delete: restrict]
+Ref "bank_movements_import_id_foreign": "bank_movements"."import_id" > "bank_file_imports"."id" [delete: restrict]
+Ref "bank_movements_relation_id_foreign": "bank_movements"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "branches_created_by_foreign": "branches"."created_by" > "users"."id"
+Ref "branches_updated_by_foreign": "branches"."updated_by" > "users"."id"
+Ref "categories_created_by_foreign": "categories"."created_by" > "users"."id" [delete: restrict]
+Ref "categories_updated_by_foreign": "categories"."updated_by" > "users"."id" [delete: restrict]
+Ref "category_versions_category_id_foreign": "category_versions"."category_id" > "categories"."id" [delete: restrict]
+Ref "category_versions_created_by_foreign": "category_versions"."created_by" > "users"."id" [delete: restrict]
+Ref "category_versions_published_by_foreign": "category_versions"."published_by" > "users"."id" [delete: restrict]
+Ref "client_addresses_client_id_foreign": "client_addresses"."client_id" > "clients"."id" [delete: restrict]
+Ref "client_addresses_address_proof_media_id_foreign": "client_addresses"."address_proof_media_id" > "media_files"."id" [delete: restrict]
+Ref "client_addresses_created_by_foreign": "client_addresses"."created_by" > "users"."id" [delete: restrict]
+Ref "client_bank_accounts_client_id_foreign": "client_bank_accounts"."client_id" > "clients"."id" [delete: restrict]
+Ref "client_bank_accounts_created_by_foreign": "client_bank_accounts"."created_by" > "users"."id" [delete: restrict]
+Ref "client_distributor_assignments_client_id_foreign": "client_distributor_assignments"."client_id" > "clients"."id" [delete: restrict]
+Ref "client_distributor_assignments_distributor_id_foreign": "client_distributor_assignments"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "client_distributor_assignments_branch_id_foreign": "client_distributor_assignments"."branch_id" > "branches"."id" [delete: restrict]
+Ref "client_distributor_assignments_assigned_by_foreign": "client_distributor_assignments"."assigned_by" > "users"."id" [delete: restrict]
+Ref "client_portfolio_entries_client_id_foreign": "client_portfolio_entries"."client_id" > "clients"."id" [delete: restrict]
+Ref "client_portfolio_entries_distributor_id_foreign": "client_portfolio_entries"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "client_portfolio_entries_recorded_by_foreign": "client_portfolio_entries"."recorded_by" > "users"."id" [delete: restrict]
+Ref "client_portfolio_entries_related_voucher_id_foreign": "client_portfolio_entries"."related_voucher_id" > "vouchers"."id" [delete: restrict]
+Ref "client_transfer_requests_client_id_foreign": "client_transfer_requests"."client_id" > "clients"."id" [delete: restrict]
+Ref "client_transfer_requests_origin_assignment_id_foreign": "client_transfer_requests"."origin_assignment_id" > "client_distributor_assignments"."id" [delete: restrict]
+Ref "client_transfer_requests_origin_distributor_id_foreign": "client_transfer_requests"."origin_distributor_id" > "distributors"."id" [delete: restrict]
+Ref "client_transfer_requests_destination_distributor_id_foreign": "client_transfer_requests"."destination_distributor_id" > "distributors"."id" [delete: restrict]
+Ref "client_transfer_requests_origin_branch_id_foreign": "client_transfer_requests"."origin_branch_id" > "branches"."id" [delete: restrict]
+Ref "client_transfer_requests_destination_branch_id_foreign": "client_transfer_requests"."destination_branch_id" > "branches"."id" [delete: restrict]
+Ref "client_transfer_requests_initiated_by_foreign": "client_transfer_requests"."initiated_by" > "users"."id" [delete: restrict]
+Ref "client_transfer_requests_preaccepted_by_foreign": "client_transfer_requests"."preaccepted_by" > "users"."id" [delete: restrict]
+Ref "client_transfer_requests_origin_decided_by_foreign": "client_transfer_requests"."origin_decided_by" > "users"."id" [delete: restrict]
+Ref "client_transfer_requests_completed_by_foreign": "client_transfer_requests"."completed_by" > "users"."id" [delete: restrict]
+Ref "client_transfer_requests_new_assignment_id_foreign": "client_transfer_requests"."new_assignment_id" > "client_distributor_assignments"."id" [delete: restrict]
+Ref "client_transfer_requests_cancelled_by_foreign": "client_transfer_requests"."cancelled_by" > "users"."id" [delete: restrict]
+Ref "clients_official_id_media_id_foreign": "clients"."official_id_media_id" > "media_files"."id" [delete: restrict]
+Ref "clients_created_by_foreign": "clients"."created_by" > "users"."id" [delete: restrict]
+Ref "codigos_postales_municipio_id_foreign": "codigos_postales"."municipio_id" > "municipios"."id" [delete: cascade]
+Ref "colonias_codigo_postal_id_foreign": "colonias"."codigo_postal_id" > "codigos_postales"."id" [delete: cascade]
+Ref "configuration_definitions_created_by_foreign": "configuration_definitions"."created_by" > "users"."id" [delete: restrict]
+Ref "configuration_definitions_updated_by_foreign": "configuration_definitions"."updated_by" > "users"."id" [delete: restrict]
+Ref "configuration_versions_configuration_definition_id_foreign": "configuration_versions"."configuration_definition_id" > "configuration_definitions"."id" [delete: restrict]
+Ref "configuration_versions_created_by_foreign": "configuration_versions"."created_by" > "users"."id" [delete: restrict]
+Ref "configuration_versions_published_by_foreign": "configuration_versions"."published_by" > "users"."id" [delete: restrict]
+Ref "coordinator_distributor_assignments_coordinator_id_foreign": "coordinator_distributor_assignments"."coordinator_id" > "users"."id" [delete: restrict]
+Ref "coordinator_distributor_assignments_branch_id_foreign": "coordinator_distributor_assignments"."branch_id" > "branches"."id" [delete: restrict]
+Ref "coordinator_distributor_assignments_assigned_by_foreign": "coordinator_distributor_assignments"."assigned_by" > "users"."id" [delete: restrict]
+Ref "coordinator_distributor_assignments_ended_by_foreign": "coordinator_distributor_assignments"."ended_by" > "users"."id" [delete: restrict]
+Ref "credit_increase_requests_distributor_id_foreign": "credit_increase_requests"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "credit_increase_requests_credit_line_id_foreign": "credit_increase_requests"."credit_line_id" > "credit_lines"."id" [delete: restrict]
+Ref "credit_increase_requests_branch_id_foreign": "credit_increase_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "credit_increase_requests_coordinator_id_foreign": "credit_increase_requests"."coordinator_id" > "users"."id" [delete: restrict]
+Ref "credit_increase_requests_requested_by_foreign": "credit_increase_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "credit_increase_requests_coordinator_decided_by_foreign": "credit_increase_requests"."coordinator_decided_by" > "users"."id" [delete: restrict]
+Ref "credit_increase_requests_manager_decided_by_foreign": "credit_increase_requests"."manager_decided_by" > "users"."id" [delete: restrict]
+Ref "credit_increase_requests_restriction_id_foreign": "credit_increase_requests"."restriction_id" > "credit_usage_restrictions"."id" [delete: set null]
+Ref "credit_increase_state_transitions_request_id_foreign": "credit_increase_state_transitions"."request_id" > "credit_increase_requests"."id" [delete: restrict]
+Ref "credit_increase_state_transitions_actor_id_foreign": "credit_increase_state_transitions"."actor_id" > "users"."id" [delete: restrict]
+Ref "credit_line_movements_credit_line_id_foreign": "credit_line_movements"."credit_line_id" > "credit_lines"."id" [delete: restrict]
+Ref "credit_line_movements_distributor_id_foreign": "credit_line_movements"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "credit_line_movements_performed_by_foreign": "credit_line_movements"."performed_by" > "users"."id" [delete: restrict]
+Ref "credit_line_movements_authorized_by_foreign": "credit_line_movements"."authorized_by" > "users"."id" [delete: restrict]
+Ref "credit_lines_distributor_id_foreign": "credit_lines"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "credit_usage_restrictions_credit_line_id_foreign": "credit_usage_restrictions"."credit_line_id" > "credit_lines"."id" [delete: restrict]
+Ref "credit_usage_restrictions_distributor_id_foreign": "credit_usage_restrictions"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "credit_usage_restrictions_configuration_version_id_foreign": "credit_usage_restrictions"."configuration_version_id" > "configuration_versions"."id" [delete: restrict]
+Ref "credit_usage_restrictions_created_by_foreign": "credit_usage_restrictions"."created_by" > "users"."id" [delete: restrict]
+Ref "credit_usage_restrictions_reserved_voucher_id_foreign": "credit_usage_restrictions"."reserved_voucher_id" > "vouchers"."id" [delete: restrict]
+Ref "delinquency_removal_requests_distributor_id_foreign": "delinquency_removal_requests"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "delinquency_removal_requests_block_id_foreign": "delinquency_removal_requests"."block_id" > "distributor_operational_blocks"."id" [delete: restrict]
+Ref "delinquency_removal_requests_branch_id_foreign": "delinquency_removal_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "delinquency_removal_requests_requested_by_foreign": "delinquency_removal_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "delinquency_removal_requests_decided_by_foreign": "delinquency_removal_requests"."decided_by" > "users"."id" [delete: restrict]
+Ref "distributor_applications_branch_id_foreign": "distributor_applications"."branch_id" > "branches"."id" [delete: restrict]
+Ref "distributor_applications_coordinator_id_foreign": "distributor_applications"."coordinator_id" > "users"."id" [delete: restrict]
+Ref "distributor_applications_created_by_foreign": "distributor_applications"."created_by" > "users"."id" [delete: restrict]
+Ref "distributor_applications_submitted_by_foreign": "distributor_applications"."submitted_by" > "users"."id" [delete: restrict]
+Ref "distributor_category_assignments_distributor_id_foreign": "distributor_category_assignments"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_category_assignments_category_version_id_foreign": "distributor_category_assignments"."category_version_id" > "category_versions"."id" [delete: restrict]
+Ref "distributor_category_assignments_assigned_by_foreign": "distributor_category_assignments"."assigned_by" > "users"."id" [delete: restrict]
+Ref "distributor_delinquency_decisions_distributor_id_foreign": "distributor_delinquency_decisions"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_delinquency_decisions_risk_alert_id_foreign": "distributor_delinquency_decisions"."risk_alert_id" > "distributor_risk_alerts"."id" [delete: restrict]
+Ref "distributor_delinquency_decisions_decided_by_foreign": "distributor_delinquency_decisions"."decided_by" > "users"."id" [delete: restrict]
+Ref "distributor_operational_blocks_distributor_id_foreign": "distributor_operational_blocks"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_operational_blocks_created_by_foreign": "distributor_operational_blocks"."created_by" > "users"."id" [delete: restrict]
+Ref "distributor_relation_items_relation_id_foreign": "distributor_relation_items"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "distributor_relation_items_voucher_installment_id_foreign": "distributor_relation_items"."voucher_installment_id" > "voucher_installments"."id" [delete: restrict]
+Ref "distributor_relations_process_run_id_foreign": "distributor_relations"."process_run_id" > "relation_process_runs"."id" [delete: restrict]
+Ref "distributor_relations_distributor_id_foreign": "distributor_relations"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_relations_branch_id_foreign": "distributor_relations"."branch_id" > "branches"."id" [delete: restrict]
+Ref "distributor_risk_alerts_distributor_id_foreign": "distributor_risk_alerts"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_risk_alerts_branch_id_foreign": "distributor_risk_alerts"."branch_id" > "branches"."id" [delete: restrict]
+Ref "distributor_surpluses_distributor_id_foreign": "distributor_surpluses"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_surpluses_bank_movement_id_foreign": "distributor_surpluses"."bank_movement_id" > "bank_movements"."id" [delete: restrict]
+Ref "distributors_user_id_foreign": "distributors"."user_id" > "users"."id" [delete: restrict]
+Ref "distributors_branch_id_foreign": "distributors"."branch_id" > "branches"."id" [delete: restrict]
+Ref "distributors_activated_by_foreign": "distributors"."activated_by" > "users"."id" [delete: restrict]
+Ref "distributors_application_id_foreign": "distributors"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_bank_movement_id_foreign": "manual_reconciliation_requests"."bank_movement_id" > "bank_movements"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_relation_id_foreign": "manual_reconciliation_requests"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_clarification_id_foreign": "manual_reconciliation_requests"."clarification_id" > "payment_clarifications"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_branch_id_foreign": "manual_reconciliation_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_requested_by_foreign": "manual_reconciliation_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_authorized_by_foreign": "manual_reconciliation_requests"."authorized_by" > "users"."id" [delete: restrict]
+Ref "manual_reconciliation_requests_executed_by_foreign": "manual_reconciliation_requests"."executed_by" > "users"."id" [delete: restrict]
+Ref "media_file_bindings_media_file_id_foreign": "media_file_bindings"."media_file_id" > "media_files"."id" [delete: restrict]
+Ref "media_file_bindings_created_by_foreign": "media_file_bindings"."created_by" > "users"."id" [delete: restrict]
+Ref "media_files_uploaded_by_foreign": "media_files"."uploaded_by" > "users"."id" [delete: restrict]
+Ref "mfa_credentials_user_id_foreign": "mfa_credentials"."user_id" > "users"."id" [delete: cascade]
+Ref "mfa_recovery_codes_user_id_foreign": "mfa_recovery_codes"."user_id" > "users"."id" [delete: cascade]
+Ref "municipios_estado_id_foreign": "municipios"."estado_id" > "estados"."id" [delete: cascade]
+Ref "notification_deliveries_recipient_id_foreign": "notification_deliveries"."recipient_id" > "users"."id" [delete: restrict]
+Ref "notification_deliveries_notification_id_foreign": "notification_deliveries"."notification_id" > "notifications"."id" [delete: restrict]
+Ref "operational_logs_actor_id_foreign": "operational_logs"."actor_id" > "users"."id" [delete: set null]
+Ref "operational_logs_branch_id_foreign": "operational_logs"."branch_id" > "branches"."id" [delete: set null]
+Ref "organizational_change_events_origin_branch_id_foreign": "organizational_change_events"."origin_branch_id" > "branches"."id" [delete: restrict]
+Ref "organizational_change_events_destination_branch_id_foreign": "organizational_change_events"."destination_branch_id" > "branches"."id" [delete: restrict]
+Ref "organizational_change_events_actor_id_foreign": "organizational_change_events"."actor_id" > "users"."id" [delete: restrict]
+Ref "password_reset_tokens_user_id_foreign": "password_reset_tokens"."user_id" > "users"."id" [delete: cascade]
+Ref "payment_allocations_payment_id_foreign": "payment_allocations"."payment_id" > "relation_payments"."id" [delete: restrict]
+Ref "payment_allocations_relation_item_id_foreign": "payment_allocations"."relation_item_id" > "distributor_relation_items"."id" [delete: restrict]
+Ref "payment_clarifications_distributor_id_foreign": "payment_clarifications"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "payment_clarifications_relation_id_foreign": "payment_clarifications"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "payment_clarifications_evidence_media_id_foreign": "payment_clarifications"."evidence_media_id" > "media_files"."id" [delete: restrict]
+Ref "point_accounts_distributor_id_foreign": "point_accounts"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "point_movements_point_account_id_foreign": "point_movements"."point_account_id" > "point_accounts"."id" [delete: restrict]
+Ref "point_movements_relation_id_foreign": "point_movements"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "point_movements_performed_by_foreign": "point_movements"."performed_by" > "users"."id" [delete: restrict]
+Ref "point_redemption_requests_point_account_id_foreign": "point_redemption_requests"."point_account_id" > "point_accounts"."id" [delete: restrict]
+Ref "point_redemption_requests_redemption_period_id_foreign": "point_redemption_requests"."redemption_period_id" > "redemption_periods"."id" [delete: restrict]
+Ref "point_redemption_requests_branch_id_foreign": "point_redemption_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "point_redemption_requests_requested_by_foreign": "point_redemption_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "point_redemption_requests_decided_by_foreign": "point_redemption_requests"."decided_by" > "users"."id" [delete: restrict]
+Ref "point_redemption_requests_delivered_by_foreign": "point_redemption_requests"."delivered_by" > "users"."id" [delete: restrict]
+Ref "product_versions_product_id_foreign": "product_versions"."product_id" > "products"."id" [delete: restrict]
+Ref "product_versions_created_by_foreign": "product_versions"."created_by" > "users"."id" [delete: restrict]
+Ref "product_versions_published_by_foreign": "product_versions"."published_by" > "users"."id" [delete: restrict]
+Ref "products_created_by_foreign": "products"."created_by" > "users"."id" [delete: restrict]
+Ref "products_updated_by_foreign": "products"."updated_by" > "users"."id" [delete: restrict]
+Ref "redemption_periods_created_by_foreign": "redemption_periods"."created_by" > "users"."id" [delete: restrict]
+Ref "redemption_periods_published_by_foreign": "redemption_periods"."published_by" > "users"."id" [delete: restrict]
+Ref "redemption_periods_closed_by_foreign": "redemption_periods"."closed_by" > "users"."id" [delete: restrict]
+Ref "relation_late_fees_relation_id_foreign": "relation_late_fees"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "relation_payments_relation_id_foreign": "relation_payments"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "relation_payments_bank_movement_id_foreign": "relation_payments"."bank_movement_id" > "bank_movements"."id" [delete: restrict]
+Ref "role_permissions_role_id_foreign": "role_permissions"."role_id" > "roles"."id" [delete: cascade]
+Ref "role_permissions_permission_id_foreign": "role_permissions"."permission_id" > "permissions"."id" [delete: cascade]
+Ref "role_permissions_granted_by_user_id_foreign": "role_permissions"."granted_by_user_id" > "users"."id" [delete: set null]
+Ref "role_permissions_revoked_by_user_id_foreign": "role_permissions"."revoked_by_user_id" > "users"."id" [delete: set null]
+Ref "security_events_user_id_foreign": "security_events"."user_id" > "users"."id" [delete: set null]
+Ref "security_events_actor_user_id_foreign": "security_events"."actor_user_id" > "users"."id" [delete: set null]
+Ref "security_events_auth_session_id_foreign": "security_events"."auth_session_id" > "auth_sessions"."id" [delete: set null]
+Ref "surplus_applications_surplus_id_foreign": "surplus_applications"."surplus_id" > "distributor_surpluses"."id" [delete: restrict]
+Ref "surplus_applications_relation_id_foreign": "surplus_applications"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "surplus_refund_requests_surplus_id_foreign": "surplus_refund_requests"."surplus_id" > "distributor_surpluses"."id" [delete: restrict]
+Ref "surplus_refund_requests_branch_id_foreign": "surplus_refund_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "surplus_refund_requests_requested_by_foreign": "surplus_refund_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "surplus_refund_requests_decided_by_foreign": "surplus_refund_requests"."decided_by" > "users"."id" [delete: restrict]
+Ref "surplus_refund_requests_executed_by_foreign": "surplus_refund_requests"."executed_by" > "users"."id" [delete: restrict]
+Ref "surplus_refund_requests_evidence_media_id_foreign": "surplus_refund_requests"."evidence_media_id" > "media_files"."id" [delete: restrict]
+Ref "user_role_scopes_user_id_foreign": "user_role_scopes"."user_id" > "users"."id" [delete: cascade]
+Ref "user_role_scopes_role_id_foreign": "user_role_scopes"."role_id" > "roles"."id" [delete: cascade]
+Ref "user_role_scopes_assigned_by_user_id_foreign": "user_role_scopes"."assigned_by_user_id" > "users"."id" [delete: set null]
+Ref "user_role_scopes_revoked_by_user_id_foreign": "user_role_scopes"."revoked_by_user_id" > "users"."id" [delete: set null]
+Ref "user_role_scopes_branch_id_foreign": "user_role_scopes"."branch_id" > "branches"."id" [delete: restrict]
+Ref "user_role_scopes_scope_id_foreign": "user_role_scopes"."scope_id" > "distributors"."id" [delete: restrict]
+Ref "verification_visits_verifier_id_foreign": "verification_visits"."verifier_id" > "users"."id" [delete: restrict]
+Ref "verification_visits_assigned_by_foreign": "verification_visits"."assigned_by" > "users"."id" [delete: restrict]
+Ref "verification_visits_application_id_foreign": "verification_visits"."application_id" > "distributor_applications"."id" [delete: restrict]
+Ref "voucher_cash_transactions_voucher_id_foreign": "voucher_cash_transactions"."voucher_id" > "vouchers"."id" [delete: restrict]
+Ref "voucher_cash_transactions_cashier_id_foreign": "voucher_cash_transactions"."cashier_id" > "users"."id" [delete: restrict]
+Ref "voucher_cash_transactions_branch_id_foreign": "voucher_cash_transactions"."branch_id" > "branches"."id" [delete: restrict]
+Ref "voucher_installments_voucher_id_foreign": "voucher_installments"."voucher_id" > "vouchers"."id" [delete: restrict]
+Ref "voucher_modification_requests_voucher_id_foreign": "voucher_modification_requests"."voucher_id" > "vouchers"."id" [delete: restrict]
+Ref "voucher_modification_requests_client_id_foreign": "voucher_modification_requests"."client_id" > "clients"."id" [delete: restrict]
+Ref "voucher_modification_requests_branch_id_foreign": "voucher_modification_requests"."branch_id" > "branches"."id" [delete: restrict]
+Ref "voucher_modification_requests_requested_by_foreign": "voucher_modification_requests"."requested_by" > "users"."id" [delete: restrict]
+Ref "voucher_modification_requests_decided_by_foreign": "voucher_modification_requests"."decided_by" > "users"."id" [delete: restrict]
+Ref "vouchers_client_id_foreign": "vouchers"."client_id" > "clients"."id" [delete: restrict]
+Ref "vouchers_distributor_id_foreign": "vouchers"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "vouchers_branch_id_foreign": "vouchers"."branch_id" > "branches"."id" [delete: restrict]
+Ref "vouchers_credit_line_id_foreign": "vouchers"."credit_line_id" > "credit_lines"."id" [delete: restrict]
+Ref "vouchers_product_id_foreign": "vouchers"."product_id" > "products"."id" [delete: restrict]
+Ref "vouchers_product_version_id_foreign": "vouchers"."product_version_id" > "product_versions"."id" [delete: restrict]
+Ref "vouchers_category_version_id_foreign": "vouchers"."category_version_id" > "category_versions"."id" [delete: restrict]
+Ref "vouchers_credit_restriction_id_foreign": "vouchers"."credit_restriction_id" > "credit_usage_restrictions"."id" [delete: restrict]
+Ref "vouchers_created_by_foreign": "vouchers"."created_by" > "users"."id" [delete: restrict]
+Ref "vouchers_released_by_foreign": "vouchers"."released_by" > "users"."id" [delete: restrict]
+Ref "vouchers_cashed_by_foreign": "vouchers"."cashed_by" > "users"."id" [delete: restrict]

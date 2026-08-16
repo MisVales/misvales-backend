@@ -8,8 +8,8 @@ use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 class DistributorApplication extends Model
 {
@@ -71,6 +71,16 @@ class DistributorApplication extends Model
     public function datosPersonales(): HasOne
     {
         return $this->hasOne(DatosPersonalesSolicitud::class, 'application_id');
+    }
+
+    public function domicilios(): HasMany
+    {
+        return $this->hasMany(DomicilioSolicitud::class, 'application_id');
+    }
+
+    public function domicilioActual(): HasOne
+    {
+        return $this->hasOne(DomicilioSolicitud::class, 'application_id')->where('is_current', true);
     }
 
     public function transitionTo(ApplicationStatus $newStatus, string $userId, ?string $reason = null): void

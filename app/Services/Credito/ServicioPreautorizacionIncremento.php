@@ -3,13 +3,11 @@
 namespace App\Services\Credito;
 
 use App\Enums\EstadoSolicitudIncremento;
-use App\Exceptions\ConcurrencyConflictException;
-use App\Helpers\AuditHelper;
+use App\Exceptions\ExcepcionCredito;
 use App\Models\OutboxEvent;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use App\Exceptions\ExcepcionCredito;
 
 class ServicioPreautorizacionIncremento
 {
@@ -47,7 +45,7 @@ class ServicioPreautorizacionIncremento
             }
 
             $solicitud->recommended_amount = $montoRecomendado;
-            
+
             // La máquina de estados validará, cambiará status y grabará fechas y autor/motivo
             $this->servicioEstado->transicionar(
                 $solicitud,
@@ -91,8 +89,8 @@ class ServicioPreautorizacionIncremento
                 'event_type' => 'CreditIncreasePreauthorized',
                 'aggregate_type' => 'credit_increase_requests',
                 'aggregate_id' => $solicitud->id,
-                'payload' => json_encode($payload),
-                'status' => 'PENDING'
+                'payload' => $payload,
+                'status' => 'PENDING',
             ]);
 
             // Incrementar lock_version de la solicitud
@@ -163,8 +161,8 @@ class ServicioPreautorizacionIncremento
                 'event_type' => 'CreditIncreaseRejectedByCoordinator',
                 'aggregate_type' => 'credit_increase_requests',
                 'aggregate_id' => $solicitud->id,
-                'payload' => json_encode($payload),
-                'status' => 'PENDING'
+                'payload' => $payload,
+                'status' => 'PENDING',
             ]);
 
             $solicitud->increment('lock_version');

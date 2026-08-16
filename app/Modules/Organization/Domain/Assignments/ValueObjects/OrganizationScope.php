@@ -8,6 +8,7 @@ enum OrganizationScope: string
 {
     case GLOBAL = 'GLOBAL';
     case BRANCH = 'BRANCH';
+    case DISTRIBUTOR = 'DISTRIBUTOR';
     case ASSIGNED = 'ASSIGNED';
     case SELF = 'SELF';
 
@@ -19,6 +20,6 @@ enum OrganizationScope: string
 
     public function requiresBranch(): bool
     {
-        return $this === self::BRANCH;
+        return $this === self::BRANCH || $this === self::DISTRIBUTOR;
     }
 }

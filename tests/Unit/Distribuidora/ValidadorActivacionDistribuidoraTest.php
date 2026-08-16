@@ -37,6 +37,16 @@ class ValidadorActivacionDistribuidoraTest extends TestCase
         self::assertTrue(true);
     }
 
+    public function test_rechaza_autorizacion_aprobada_sin_linea_inicial(): void
+    {
+        $solicitud = new DistributorApplication(['status' => 'AUTHORIZED_PENDING_ACTIVATION']);
+        $autorizacion = new ApplicationAuthorization(['initial_credit_line_amount' => null]);
+        $autorizacion->forceFill(['decision' => 'APPROVED']);
+
+        $this->expectException(ExcepcionDistribuidora::class);
+        $this->validador->validarSolicitud($solicitud, $autorizacion);
+    }
+
     public function test_rechaza_solicitud_sin_aprobacion_favorable(): void
     {
         $solicitud = new DistributorApplication(['status' => 'REJECTED']);

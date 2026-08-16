@@ -32,7 +32,7 @@ final class OrganizationAssignmentRulesTest extends TestCase
             'coordinator' => ['coordinator', OrganizationScope::BRANCH],
             'verifier' => ['verifier', OrganizationScope::BRANCH],
             'cashier' => ['cashier', OrganizationScope::BRANCH],
-            'distributor' => ['distributor', OrganizationScope::ASSIGNED],
+            'distributor' => ['distributor', OrganizationScope::DISTRIBUTOR],
         ];
     }
 

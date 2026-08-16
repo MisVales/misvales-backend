@@ -21,14 +21,16 @@ final class OrganizationScopeTest extends TestCase
         return [
             'global' => ['global', OrganizationScope::GLOBAL],
             'branch' => ['BRANCH', OrganizationScope::BRANCH],
+            'distributor' => [' distributor ', OrganizationScope::DISTRIBUTOR],
             'assigned' => [' assigned ', OrganizationScope::ASSIGNED],
             'self' => ['SELF', OrganizationScope::SELF],
         ];
     }
 
-    public function test_only_branch_scope_requires_a_branch(): void
+    public function test_branch_and_distributor_scopes_require_a_branch(): void
     {
         self::assertTrue(OrganizationScope::BRANCH->requiresBranch());
+        self::assertTrue(OrganizationScope::DISTRIBUTOR->requiresBranch());
         self::assertFalse(OrganizationScope::GLOBAL->requiresBranch());
         self::assertFalse(OrganizationScope::ASSIGNED->requiresBranch());
         self::assertFalse(OrganizationScope::SELF->requiresBranch());

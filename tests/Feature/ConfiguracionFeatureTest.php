@@ -3,9 +3,12 @@
 namespace Tests\Feature;
 
 use App\Models\ConfigurationDefinition;
+use App\Models\ConfigurationVersion;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use App\Services\Relacion\ServicioConfiguracionRelacion;
+use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Foundation\Testing\WithoutMiddleware;
@@ -96,6 +99,165 @@ class ConfiguracionFeatureTest extends TestCase
 
         // Verificar que v1 ahora tiene un effective_to que es exactamente el effective_from de v2
         $this->assertEquals($v2->fresh()->effective_from->toDateTimeString(), $v1->fresh()->effective_to->toDateTimeString());
+    }
+
+    public function test_valida_el_periodo_anticipado_y_los_datos_bancarios_publicables(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
+        $this->actingAs($user);
+
+        $period = ConfigurationDefinition::query()->create([
+            'key' => 'EARLY_PAYMENT_PERIOD',
+            'name' => 'Periodo anticipado',
+            'value_type' => 'JSON',
+            'status' => 'ACTIVE',
+            'created_by' => $user->id,
+        ]);
+        $bank = ConfigurationDefinition::query()->create([
+            'key' => 'RELATION_PAYMENT_BANK',
+            'name' => 'Banco de relaciones',
+            'value_type' => 'JSON',
+            'status' => 'ACTIVE',
+            'created_by' => $user->id,
+        ]);
+        $base = [
+            'reason' => 'Configuración operativa para pruebas',
+            'effective_from' => now()->addDay()->format('Y-m-d H:i:s'),
+        ];
+
+        $this->postJson("/api/v1/configurations/{$period->key}/versions", [
+            ...$base,
+            'value' => ['start' => 10, 'end' => 5],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['value.end']);
+
+        $this->postJson("/api/v1/configurations/{$bank->key}/versions", [
+            ...$base,
+            'value' => ['name' => 'Banco', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-1', 'clabe' => '1234'],
+        ])->assertUnprocessable()->assertJsonValidationErrors(['value.clabe']);
+
+        $this->postJson("/api/v1/configurations/{$period->key}/versions", [
+            ...$base,
+            'value' => ['start' => 0, 'end' => 10],
+        ])->assertCreated();
+
+        $this->postJson("/api/v1/configurations/{$bank->key}/versions", [
+            ...$base,
+            'value' => ['name' => 'Banco', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-1', 'clabe' => '012345678901234567'],
+        ])->assertCreated();
+    }
+
+    public function test_el_corte_programado_se_resuelve_desde_versiones_publicadas_y_no_desde_env(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $at = CarbonImmutable::parse('2026-08-25 00:05:00', 'America/Monterrey');
+        foreach ([
+            'BUSINESS_TIMEZONE' => ['TIMEZONE', 'America/Monterrey'],
+            'CUT_DAY_OF_MONTH' => ['INTEGER', 25],
+            'CUT_TIME' => ['TIME', '00:05'],
+        ] as $key => [$type, $value]) {
+            $definition = ConfigurationDefinition::query()->create([
+                'key' => $key,
+                'name' => $key,
+                'value_type' => $type,
+                'status' => 'ACTIVE',
+                'created_by' => $user->id,
+            ]);
+            ConfigurationVersion::query()->create([
+                'configuration_definition_id' => $definition->id,
+                'version' => 1,
+                'value' => $value,
+                'status' => 'PUBLISHED',
+                'effective_from' => $at->subDay(),
+                'reason' => 'Programación publicada',
+                'created_by' => $user->id,
+                'published_by' => $user->id,
+                'published_at' => $at->subDay(),
+            ]);
+        }
+
+        $service = app(ServicioConfiguracionRelacion::class);
+        $this->assertSame('2026-08-25 00:05', $service->corteProgramado($at)?->format('Y-m-d H:i'));
+        $this->assertNull($service->corteProgramado($at->addMinute()));
+    }
+
+    public function test_el_listado_expone_solo_la_version_realmente_vigente(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
+        $definition = ConfigurationDefinition::query()->create([
+            'key' => 'LIST_CURRENT_ONLY',
+            'name' => 'Vigencia actual',
+            'value_type' => 'INTEGER',
+            'status' => 'ACTIVE',
+            'created_by' => $user->id,
+        ]);
+        ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definition->id,
+            'version' => 1,
+            'value' => 1,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'effective_to' => now()->addDay(),
+            'reason' => 'Vigente',
+            'created_by' => $user->id,
+            'published_by' => $user->id,
+            'published_at' => now()->subDay(),
+        ]);
+        ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definition->id,
+            'version' => 2,
+            'value' => 2,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->addDay(),
+            'reason' => 'Futura',
+            'created_by' => $user->id,
+            'published_by' => $user->id,
+            'published_at' => now(),
+        ]);
+
+        $this->actingAs($user)
+            ->getJson('/api/v1/configurations')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.versions.0.value', 1)
+            ->assertJsonCount(1, 'data.0.versions');
+    }
+
+    public function test_desactivar_exige_version_vigente_y_actualiza_el_bloqueo(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
+        $definition = ConfigurationDefinition::query()->create([
+            'key' => 'DEACTIVATE_TEST',
+            'name' => 'Desactivación',
+            'value_type' => 'INTEGER',
+            'status' => 'ACTIVE',
+            'created_by' => $user->id,
+        ]);
+        $version = ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definition->id,
+            'version' => 1,
+            'value' => 1,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Vigente',
+            'created_by' => $user->id,
+            'published_by' => $user->id,
+            'published_at' => now()->subDay(),
+            'lock_version' => 2,
+        ]);
+        $this->actingAs($user);
+        $currentVersion = $version->fresh()->lock_version;
+
+        $this->postJson("/api/v1/configuration-versions/{$version->id}/deactivate", [
+            'reason' => 'Intento obsoleto',
+            'lock_version' => $currentVersion + 1,
+        ])->assertStatus(409)->assertJsonPath('error', 'RESOURCE_VERSION_CONFLICT');
+
+        $this->postJson("/api/v1/configuration-versions/{$version->id}/deactivate", [
+            'reason' => 'Retiro autorizado',
+            'lock_version' => $currentVersion,
+        ])->assertSuccessful()->assertJsonPath('data.status', 'INACTIVE')->assertJsonPath('data.lock_version', $currentVersion + 1);
     }
 
     private function assignGeneralManager(User $user): void

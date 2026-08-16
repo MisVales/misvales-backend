@@ -13,6 +13,7 @@ use App\Models\OutboxEvent;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\WebAuthnService;
+use App\Services\Distribuidora\ValidadorActivacionDistribuidora;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
@@ -391,6 +392,15 @@ class InvitationController extends Controller
         $distribuidoraActivada = DB::transaction(function () use ($invitation): ?Distribuidora {
             $user = $invitation->user;
 
+            $distribuidora = Distribuidora::query()
+                ->where('user_id', $user->id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($distribuidora !== null && $distribuidora->status === EstadoDistribuidora::PENDIENTE_ACTIVACION) {
+                app(ValidadorActivacionDistribuidora::class)->validarComponentesObligatorios($distribuidora);
+            }
+
             // 1. Activar cuenta finalmente
             $user->update([
                 'state' => 'ACTIVE',
@@ -403,11 +413,6 @@ class InvitationController extends Controller
                 'recovery_codes_confirmed_at' => now(),
                 'exchange_token_hash' => null, // Invalidar explícitamente
             ]);
-
-            $distribuidora = Distribuidora::query()
-                ->where('user_id', $user->id)
-                ->lockForUpdate()
-                ->first();
 
             if ($distribuidora !== null && $distribuidora->status === EstadoDistribuidora::PENDIENTE_ACTIVACION) {
                 $distribuidora->forceFill([

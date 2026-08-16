@@ -3,7 +3,8 @@
 namespace App\Services\Credito;
 
 use App\Enums\EstadoSolicitudIncremento;
-use App\Helpers\AuditHelper;
+use App\Enums\TipoMovimientoLineaCredito;
+use App\Exceptions\ExcepcionCredito;
 use App\Models\LineaCredito;
 use App\Models\MovimientoLineaCredito;
 use App\Models\OutboxEvent;
@@ -11,14 +12,14 @@ use App\Models\RestriccionUsoCredito;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
 use App\Services\ConfiguracionServicio;
-use App\Enums\TipoMovimientoLineaCredito;
 use Illuminate\Support\Facades\DB;
-use App\Exceptions\ExcepcionCredito;
 
 class ServicioDecisionIncremento
 {
     protected ServicioEstadoIncremento $servicioEstado;
+
     protected CalculadorSaldoCredito $calculador;
+
     protected ConfiguracionServicio $configuracionServicio;
 
     public function __construct(
@@ -112,7 +113,7 @@ class ServicioDecisionIncremento
 
                 // Crear el movimiento
                 $secuencia = MovimientoLineaCredito::where('credit_line_id', $linea->id)->max('sequence') + 1;
-                
+
                 MovimientoLineaCredito::create([
                     'credit_line_id' => $linea->id,
                     'distributor_id' => $linea->distributor_id,
@@ -135,7 +136,7 @@ class ServicioDecisionIncremento
                 // Resolver tolerancia y crear restricción
                 $configuracionTolerancia = $this->configuracionServicio->resolver('CREDIT_TOLERANCE_AMOUNT');
                 $versionConfiguracion = (string) $configuracionTolerancia['version_id'];
-                
+
                 $restriccion = RestriccionUsoCredito::create([
                     'credit_line_id' => $linea->id,
                     'distributor_id' => $linea->distributor_id,
@@ -190,8 +191,8 @@ class ServicioDecisionIncremento
                     'event_type' => 'CreditUsageRestrictionActivated',
                     'aggregate_type' => 'credit_usage_restrictions',
                     'aggregate_id' => $restriccion->id,
-                    'payload' => json_encode($payloadRestriccion),
-                    'status' => 'PENDING'
+                    'payload' => $payloadRestriccion,
+                    'status' => 'PENDING',
                 ]);
             }
 
@@ -209,13 +210,13 @@ class ServicioDecisionIncremento
             $solicitud->save();
 
             // Auditoría
-            $eventCode = match($decision) {
+            $eventCode = match ($decision) {
                 'APPROVE_REQUESTED' => 'EV-015',
                 'APPROVE_LOWER' => 'EV-016',
                 'REJECT' => 'EV-017'
             };
-            
-            $outboxEventName = match($decision) {
+
+            $outboxEventName = match ($decision) {
                 'APPROVE_REQUESTED' => 'CreditIncreaseAuthorizedFull',
                 'APPROVE_LOWER' => 'CreditIncreaseAuthorizedPartial',
                 'REJECT' => 'CreditIncreaseRejectedByManager'
@@ -235,7 +236,7 @@ class ServicioDecisionIncremento
                 'amounts_after' => isset($newTotalAuthorized) ? [
                     'total_authorized' => (string) $newTotalAuthorized,
                     'used_balance' => (string) $usedBalanceAfter,
-                    'available_balance' => bcsub((string) $newTotalAuthorized, (string) $usedBalanceAfter, 4)
+                    'available_balance' => bcsub((string) $newTotalAuthorized, (string) $usedBalanceAfter, 4),
                 ] : null,
                 'reason' => $motivo,
                 'configuration_version' => $versionConfiguracion,
@@ -261,8 +262,8 @@ class ServicioDecisionIncremento
                 'event_type' => $outboxEventName,
                 'aggregate_type' => 'credit_increase_requests',
                 'aggregate_id' => $solicitud->id,
-                'payload' => json_encode($payload),
-                'status' => 'PENDING'
+                'payload' => $payload,
+                'status' => 'PENDING',
             ]);
 
             $solicitud->increment('lock_version');

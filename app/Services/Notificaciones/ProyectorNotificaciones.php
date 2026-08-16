@@ -6,7 +6,9 @@ use App\Models\AuditLog;
 use App\Models\EntregaNotificacion;
 use App\Models\OutboxEvent;
 use App\Notifications\NotificacionEventoDominio;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Throwable;
 
 final readonly class ProyectorNotificaciones
 {
@@ -18,7 +20,7 @@ final readonly class ProyectorNotificaciones
     {
         $count = 0;
         OutboxEvent::query()->oldest()->limit($limit)->get()->each(function (OutboxEvent $event) use (&$count): void {
-            $count += $this->entregar('OUTBOX', $event->id, $event->event_type, ['payload' => $event->payload]);
+            $count += $this->entregar('OUTBOX', $event->id, $event->event_type, ['payload' => $this->normalizarPayload($event->payload)]);
         });
         AuditLog::query()->oldest()->limit($limit)->get()->each(function (AuditLog $audit) use (&$count): void {
             $count += $this->entregar('AUDIT', $audit->id, $audit->event_name, ['payload' => $audit->new_value ?? [], 'actor_id' => $audit->actor_id, 'branch_id' => $audit->branch_id, 'entity_type' => $audit->entity_type, 'entity_id' => $audit->entity_id]);
@@ -27,20 +29,83 @@ final readonly class ProyectorNotificaciones
         return $count;
     }
 
+    private function normalizarPayload(mixed $payload): array
+    {
+        for ($attempt = 0; $attempt < 2 && is_string($payload); $attempt++) {
+            $decoded = json_decode($payload, true);
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [];
+            }
+            $payload = $decoded;
+        }
+
+        return is_array($payload) ? $payload : [];
+    }
+
     private function entregar(string $sourceType, string $sourceId, string $eventType, array $context): int
     {
         $delivered = 0;
         foreach ($this->resolver->resolver($context) as $recipient) {
-            $notificationId = (string) Str::uuid();
-            $now = now();
-            $inserted = EntregaNotificacion::query()->insertOrIgnore(['id' => (string) Str::uuid(), 'source_type' => $sourceType, 'source_id' => $sourceId, 'event_type' => $eventType, 'recipient_id' => $recipient->id, 'notification_id' => $notificationId, 'channels' => in_array($eventType, self::CRITICAL, true) ? 'database,mail' : 'database', 'delivered_at' => $now, 'created_at' => $now, 'updated_at' => $now]);
-            if ($inserted === 0) {
-                continue;
-            }
-            $notification = new NotificacionEventoDominio($this->content($eventType, $context), in_array($eventType, self::CRITICAL, true));
-            $notification->id = $notificationId;
-            $recipient->notify($notification);
-            $delivered++;
+            $delivered += DB::transaction(function () use ($sourceType, $sourceId, $eventType, $context, $recipient): int {
+                $critical = in_array($eventType, self::CRITICAL, true);
+                $delivery = EntregaNotificacion::query()->lockForUpdate()->firstOrCreate(
+                    ['source_type' => $sourceType, 'source_id' => $sourceId, 'event_type' => $eventType, 'recipient_id' => $recipient->id],
+                    [
+                        'notification_id' => (string) Str::uuid(),
+                        'channels' => $critical ? 'database,mail' : 'database',
+                        'recipient_address' => $recipient->email,
+                        'status' => 'PENDING',
+                        'attempts' => 0,
+                    ],
+                );
+                if ($delivery->status === 'SENT') {
+                    return 0;
+                }
+
+                $notificationExists = DB::table('notifications')->where('id', $delivery->notification_id)->exists();
+                $channels = $notificationExists ? ($critical ? ['mail'] : []) : null;
+                $notification = new NotificacionEventoDominio($this->content($eventType, $context), $critical, $channels);
+                $notification->id = $delivery->notification_id;
+                $attemptedAt = now();
+
+                try {
+                    $recipient->notify($notification);
+                    $delivery->forceFill([
+                        'status' => 'SENT',
+                        'result' => 'DELIVERED',
+                        'error' => null,
+                        'delivered_at' => now(),
+                        'failed_at' => null,
+                        'last_attempt_at' => $attemptedAt,
+                        'attempts' => $delivery->attempts + 1,
+                    ])->save();
+
+                    return 1;
+                } catch (Throwable $exception) {
+                    DB::table('notifications')->insertOrIgnore([
+                        'id' => $delivery->notification_id,
+                        'type' => NotificacionEventoDominio::class,
+                        'notifiable_type' => $recipient::class,
+                        'notifiable_id' => $recipient->id,
+                        'data' => json_encode($notification->content, JSON_THROW_ON_ERROR),
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                    $delivery->forceFill([
+                        'status' => 'FAILED',
+                        'result' => 'DELIVERY_FAILED',
+                        'error' => mb_substr($exception->getMessage(), 0, 2000),
+                        'delivered_at' => null,
+                        'failed_at' => now(),
+                        'last_attempt_at' => $attemptedAt,
+                        'attempts' => $delivery->attempts + 1,
+                    ])->save();
+
+                    report($exception);
+
+                    return 0;
+                }
+            });
         }
 
         return $delivered;

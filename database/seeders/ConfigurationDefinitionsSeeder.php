@@ -1,0 +1,73 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Database\Seeders;
+
+use App\Models\ConfigurationDefinition;
+use App\Models\User;
+use Illuminate\Database\Seeder;
+use Illuminate\Support\Facades\DB;
+use RuntimeException;
+
+final class ConfigurationDefinitionsSeeder extends Seeder
+{
+    public function run(): void
+    {
+        DB::transaction(function (): void {
+            $managerId = $this->managerId();
+
+            foreach (self::definitions() as $data) {
+                $definition = ConfigurationDefinition::query()->firstOrNew(['key' => $data['key']]);
+                $definition->fill($data);
+                $definition->is_required = true;
+                $definition->is_sensitive = false;
+                $definition->status = 'ACTIVE';
+
+                if (! $definition->exists) {
+                    $definition->lock_version = 0;
+                    $definition->created_by = $managerId;
+                } else {
+                    $definition->updated_by = $managerId;
+                }
+
+                $definition->save();
+            }
+        });
+    }
+
+    /** @return list<array{key: string, name: string, description: string, value_type: string, unit: ?string}> */
+    public static function definitions(): array
+    {
+        return [
+            ['key' => 'CUT_DAY_OF_MONTH', 'name' => 'Día global de corte', 'description' => 'Día del mes en que se ejecuta el corte global.', 'value_type' => 'INTEGER', 'unit' => 'day_of_month'],
+            ['key' => 'PAYMENT_DAYS_AFTER_CUT', 'name' => 'Días posteriores al corte', 'description' => 'Número de días posteriores al corte para el vencimiento del pago.', 'value_type' => 'INTEGER', 'unit' => 'days'],
+            ['key' => 'BUSINESS_TIMEZONE', 'name' => 'Zona horaria operativa', 'description' => 'Zona horaria oficial para los procesos de negocio.', 'value_type' => 'TIMEZONE', 'unit' => null],
+            ['key' => 'CUT_TIME', 'name' => 'Hora de ejecución del corte', 'description' => 'Hora local en que inicia el proceso de corte.', 'value_type' => 'TIME', 'unit' => null],
+            ['key' => 'PAYMENT_DEADLINE_TIME', 'name' => 'Hora límite de pago', 'description' => 'Hora local límite para considerar un pago oportuno.', 'value_type' => 'TIME', 'unit' => null],
+            ['key' => 'BANK_UPLOAD_DEADLINE_TIME', 'name' => 'Hora límite de carga bancaria', 'description' => 'Hora local límite para cargar el archivo bancario.', 'value_type' => 'TIME', 'unit' => null],
+            ['key' => 'POST_DUE_EVALUATION_TIME', 'name' => 'Hora de evaluación posterior al vencimiento', 'description' => 'Hora local para evaluar obligaciones vencidas.', 'value_type' => 'TIME', 'unit' => null],
+            ['key' => 'CREDIT_TOLERANCE_AMOUNT', 'name' => 'Tolerancia de la regla del 50 %', 'description' => 'Tolerancia monetaria aplicada a la restricción inicial de uso de crédito.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'LATE_FEE_AMOUNT', 'name' => 'Recargo por falta de pago', 'description' => 'Importe del recargo aplicable por falta de pago.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'POINTS_DIVISOR_AMOUNT', 'name' => 'Divisor para generación de puntos', 'description' => 'Importe base utilizado como divisor para generar puntos.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'POINTS_MULTIPLIER', 'name' => 'Multiplicador de puntos', 'description' => 'Multiplicador aplicado al cálculo de puntos.', 'value_type' => 'INTEGER', 'unit' => null],
+            ['key' => 'POINT_VALUE_AMOUNT', 'name' => 'Valor monetario por punto', 'description' => 'Valor monetario vigente de cada punto.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'LATE_POINTS_REDUCTION_RATE', 'name' => 'Reducción de puntos por liquidación tardía', 'description' => 'Proporción de reducción de puntos por liquidación tardía.', 'value_type' => 'PERCENTAGE', 'unit' => 'ratio'],
+            ['key' => 'MODIFICATION_TOKEN_TTL', 'name' => 'Vigencia del token de modificación', 'description' => 'Duración de vigencia de un token de modificación autorizada.', 'value_type' => 'DURATION', 'unit' => 'minutes'],
+            ['key' => 'EARLY_PAYMENT_PERIOD', 'name' => 'Periodo de pago anticipado', 'description' => 'Desplazamientos en días, desde el corte, para el inicio y fin del periodo de pago anticipado.', 'value_type' => 'JSON', 'unit' => 'days_after_cutoff'],
+            ['key' => 'RELATION_PAYMENT_BANK', 'name' => 'Datos bancarios para relaciones', 'description' => 'Banco, beneficiario, convenio y CLABE publicados para el pago de relaciones.', 'value_type' => 'JSON', 'unit' => null],
+        ];
+    }
+
+    private function managerId(): string
+    {
+        return User::query()
+            ->whereHas('roleScopes', fn ($query) => $query
+                ->where('scope_type', 'GLOBAL')
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereHas('role', fn ($roleQuery) => $roleQuery->where('code', 'general_manager')))
+            ->oldest('created_at')
+            ->value('id') ?? throw new RuntimeException('No existe un gerente general para atribuir las configuraciones iniciales.');
+    }
+}

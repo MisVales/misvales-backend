@@ -2,9 +2,11 @@
 
 namespace App\Http\Resources\Api\V1\Credito;
 
+use App\Enums\EstadoSolicitudIncremento;
+use App\Models\MovimientoLineaCredito;
+use App\Services\Credito\CalculadorSaldoCredito;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
-use App\Models\MovimientoLineaCredito;
 
 class SolicitudIncrementoDetalleResource extends JsonResource
 {
@@ -55,10 +57,11 @@ class SolicitudIncrementoDetalleResource extends JsonResource
             'completed_at' => $this->completed_at?->toIso8601String(),
             'lock_version' => $this->lock_version,
             'created_at' => $this->created_at->toIso8601String(),
-            
+
             'current_credit_line' => $this->whenLoaded('lineaCredito', function () {
-                $calculador = app(\App\Services\Credito\CalculadorSaldoCredito::class);
+                $calculador = app(CalculadorSaldoCredito::class);
                 $saldos = $calculador->calcular($this->lineaCredito->total_authorized, $this->lineaCredito->used_balance);
+
                 return [
                     'id' => $this->lineaCredito->id,
                     'total_authorized' => $saldos['total_authorized'],
@@ -66,7 +69,7 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'available_balance' => $saldos['available_balance'],
                 ];
             }),
-            
+
             'restriction' => $this->whenLoaded('restriccion', function () {
                 return [
                     'id' => $this->restriccion->id,
@@ -76,7 +79,7 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'tolerance_amount' => (string) $this->restriccion->tolerance_amount,
                 ];
             }),
-            
+
             'movements' => $movimientos->map(function ($movimiento) {
                 return [
                     'id' => $movimiento->id,
@@ -90,7 +93,7 @@ class SolicitudIncrementoDetalleResource extends JsonResource
                     'occurred_at' => $movimiento->occurred_at->toIso8601String(),
                 ];
             }),
-            
+
             'state_history' => $this->whenLoaded('transiciones', function () {
                 return $this->transiciones->map(function ($transicion) {
                     return [
@@ -106,9 +109,9 @@ class SolicitudIncrementoDetalleResource extends JsonResource
 
         if ($request->user()) {
             $data['capabilities'] = [
-                'can_preauthorize' => $request->user()->can('preauthorize', $this->resource) && $this->status === 'REQUESTED',
-                'can_reject_by_coordinator' => $request->user()->can('rejectByCoordinator', $this->resource) && $this->status === 'REQUESTED',
-                'can_decide' => $request->user()->can('managerDecision', $this->resource) && $this->status === 'PREAUTHORIZED',
+                'can_preauthorize' => $request->user()->can('preauthorize', $this->resource) && $this->status === EstadoSolicitudIncremento::REQUESTED,
+                'can_reject_by_coordinator' => $request->user()->can('rejectByCoordinator', $this->resource) && $this->status === EstadoSolicitudIncremento::REQUESTED,
+                'can_decide' => $request->user()->can('managerDecision', $this->resource) && $this->status === EstadoSolicitudIncremento::PREAUTHORIZED,
             ];
         }
 

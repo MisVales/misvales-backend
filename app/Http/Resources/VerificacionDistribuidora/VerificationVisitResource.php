@@ -1,10 +1,15 @@
 <?php
+
 namespace App\Http\Resources\VerificacionDistribuidora;
+
+use App\Http\Resources\Api\V1\SolicitudDistribuidora\SolicitudDistribuidoraDetalleResource;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class VerificationVisitResource extends JsonResource {
-    public function toArray(Request $request): array {
+class VerificationVisitResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
         return [
             'id' => $this->id,
             'application_id' => $this->application_id,
@@ -23,7 +28,13 @@ class VerificationVisitResource extends JsonResource {
             'completed_at' => $this->completed_at?->toIso8601String(),
             'lock_version' => $this->lock_version,
             'created_at' => $this->created_at?->toIso8601String(),
-            'application' => new DistributorApplicationResource($this->whenLoaded('application')),
+            'application' => $this->whenLoaded('application', function () {
+                if ($this->application->relationLoaded('datosPersonales')) {
+                    return new SolicitudDistribuidoraDetalleResource($this->application);
+                }
+
+                return new DistributorApplicationResource($this->application);
+            }),
             'media_files' => MediaFileResource::collection($this->whenLoaded('mediaFiles')),
         ];
     }

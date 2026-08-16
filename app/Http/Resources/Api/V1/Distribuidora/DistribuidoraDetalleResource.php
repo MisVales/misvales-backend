@@ -18,6 +18,7 @@ class DistribuidoraDetalleResource extends JsonResource
             'application_id' => $this->application_id,
             'user_id' => $this->user_id,
             'distributor_number' => $this->distributor_number,
+            'full_name' => $this->usuario?->name,
             'status' => $this->status->value,
             'activation_status' => $this->usuario?->state,
             'branch' => $this->sucursal ? ['id' => $this->sucursal->id, 'name' => $this->sucursal->name] : null,

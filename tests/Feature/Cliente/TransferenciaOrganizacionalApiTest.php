@@ -75,6 +75,29 @@ final class TransferenciaOrganizacionalApiTest extends TestCase
             ->assertJsonPath('data.type', 'VALE_DIGITAL');
     }
 
+    public function test_distribuidora_lista_destinos_activos_sin_obtener_acceso_al_catalogo_global(): void
+    {
+        $branch = Branch::factory()->create();
+        $originUser = $this->user('distributor', $branch->id);
+        $receiverUser = $this->user('distributor', $branch->id);
+        $inactiveUser = $this->user('distributor', $branch->id);
+        $origin = Distribuidora::factory()->active()->create(['user_id' => $originUser->id, 'branch_id' => $branch->id]);
+        $receiver = Distribuidora::factory()->active()->create(['user_id' => $receiverUser->id, 'branch_id' => $branch->id]);
+        Distribuidora::factory()->create(['user_id' => $inactiveUser->id, 'branch_id' => $branch->id]);
+
+        Sanctum::actingAs($originUser);
+        $this->getJson('/api/v1/client-transfer-destinations')
+            ->assertOk()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $receiver->id)
+            ->assertJsonPath('data.0.distributor_number', $receiver->distributor_number);
+        $this->getJson('/api/v1/distributors')->assertForbidden();
+
+        Sanctum::actingAs($this->user('cashier', $branch->id));
+        $this->getJson('/api/v1/client-transfer-destinations')->assertForbidden();
+        $this->assertNotSame($origin->id, $receiver->id);
+    }
+
     public function test_rechazos_no_cambian_asignacion_y_transiciones_no_se_saltan(): void
     {
         [$branch, $originUser, $receiverUser, $coordinator, $origin, $receiver, $client] = $this->contextoTransferencia();
@@ -84,6 +107,29 @@ final class TransferenciaOrganizacionalApiTest extends TestCase
         $this->postIdempotent("/api/v1/client-transfers/{$transfer['id']}/complete", [])->assertStatus(409)->assertJsonPath('error.code', 'CLIENT_TRANSFER_INVALID_STATE');
         $this->postIdempotent("/api/v1/client-transfers/{$transfer['id']}/preaccept", ['accept' => false])->assertOk()->assertJsonPath('data.status', 'REJECTED_BY_RECEIVER');
         $this->assertDatabaseHas('client_distributor_assignments', ['client_id' => $client->id, 'distributor_id' => $origin->id, 'ends_at' => null]);
+    }
+
+    public function test_iniciador_puede_cancelar_antes_del_cambio_definitivo_con_trazabilidad(): void
+    {
+        [, $originUser, $receiverUser, , $origin, $receiver, $client] = $this->contextoTransferencia();
+        Sanctum::actingAs($originUser);
+        $transfer = $this->postIdempotent("/api/v1/clients/{$client->id}/transfers", ['destination_distributor_id' => $receiver->id])->assertCreated()->json('data');
+
+        Sanctum::actingAs($receiverUser);
+        $this->postIdempotent("/api/v1/client-transfers/{$transfer['id']}/preaccept", ['accept' => true])->assertOk();
+        Sanctum::actingAs($originUser);
+        $this->postIdempotent("/api/v1/client-transfers/{$transfer['id']}/cancel", ['reason' => 'El cliente desistió antes del cambio'])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'CANCELLED');
+
+        $this->assertDatabaseHas('client_transfer_requests', [
+            'id' => $transfer['id'],
+            'status' => 'CANCELLED',
+            'cancelled_by' => $originUser->id,
+            'cancellation_reason' => 'El cliente desistió antes del cambio',
+        ]);
+        $this->assertDatabaseHas('client_distributor_assignments', ['client_id' => $client->id, 'distributor_id' => $origin->id, 'ends_at' => null]);
+        $this->assertDatabaseHas('outbox_events', ['event_type' => 'EV-081']);
     }
 
     public function test_cambios_gerenciales_preservan_historial_y_no_dejan_distribuidora_activa_sin_coordinador(): void

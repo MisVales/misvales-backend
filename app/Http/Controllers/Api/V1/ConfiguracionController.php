@@ -24,7 +24,12 @@ class ConfiguracionController extends Controller
         Gate::authorize('viewAny', ConfigurationDefinition::class);
         $configuraciones = ConfigurationDefinition::with(['versions' => function ($q) {
             $q->where('status', VersionStatus::PUBLISHED)
-                ->whereNull('effective_to');
+                ->where('effective_from', '<=', now())
+                ->where(function ($query) {
+                    $query->whereNull('effective_to')
+                        ->orWhere('effective_to', '>', now());
+                })
+                ->latest('effective_from');
         }])->get();
 
         return ConfiguracionResource::collection($configuraciones);

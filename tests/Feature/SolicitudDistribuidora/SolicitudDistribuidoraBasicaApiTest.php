@@ -165,7 +165,10 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $this->getJson('/api/v1/distributor-applications')->assertForbidden();
 
         Sanctum::actingAs($this->usuarioConRol('verifier', $sucursal->id));
-        $this->getJson('/api/v1/distributor-applications')->assertForbidden();
+        $this->getJson('/api/v1/distributor-applications')
+            ->assertOk()
+            ->assertJsonCount(0, 'data');
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")->assertForbidden();
     }
 
     public function test_no_acepta_estado_propiedades_desconocidas_ni_version_obsoleta(): void

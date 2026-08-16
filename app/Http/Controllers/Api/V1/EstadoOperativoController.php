@@ -25,7 +25,7 @@ final class EstadoOperativoController extends Controller
         $lines = [
             '# TYPE misvales_failed_jobs gauge', 'misvales_failed_jobs '.DB::table('failed_jobs')->count(),
             '# TYPE misvales_outbox_pending gauge', 'misvales_outbox_pending '.DB::table('outbox_events')->where('status', 'PENDING')->count(),
-            '# TYPE misvales_unprocessed_notifications gauge', 'misvales_unprocessed_notifications '.DB::table('notification_deliveries')->count(),
+            '# TYPE misvales_unprocessed_notifications gauge', 'misvales_unprocessed_notifications '.DB::table('notification_deliveries')->where('status', '<>', 'SENT')->count(),
             '# TYPE misvales_http_errors_total gauge', 'misvales_http_errors_total '.DB::table('operational_logs')->where('status_code', '>=', 500)->count(),
         ];
 

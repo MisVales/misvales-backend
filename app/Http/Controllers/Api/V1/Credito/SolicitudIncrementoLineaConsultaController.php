@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1\Credito;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Credito\ListarSolicitudesIncrementoRequest;
 use App\Http\Resources\Api\V1\Credito\SolicitudIncrementoDetalleResource;
+use App\Models\Distribuidora;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\UserRoleScope;
 use Illuminate\Support\Facades\Gate;
@@ -16,18 +17,18 @@ class SolicitudIncrementoLineaConsultaController extends Controller
         Gate::authorize('viewAny', SolicitudIncrementoLinea::class);
 
         $query = SolicitudIncrementoLinea::query()->with([
-            'distributor', 
-            'distributor.usuario',
-            'branch', 
-            'coordinator'
+            'distribuidora',
+            'distribuidora.usuario',
+            'sucursal',
+            'coordinadorSnapshot',
         ]);
 
         $user = $request->user();
 
         // 1. Aplicar el alcance (Scope) antes de los filtros
-        if (!$user->hasPermissionTo('credit_increase_requests.view_global')) {
+        if (! $user->hasPermissionTo('credit_increase_requests.view_global')) {
             if ($user->hasPermissionTo('credit_increase_requests.view_own')) {
-                $distribuidorasIds = \App\Models\Distribuidora::where('user_id', $user->id)->pluck('id');
+                $distribuidorasIds = Distribuidora::where('user_id', $user->id)->pluck('id');
                 $query->whereIn('distributor_id', $distribuidorasIds);
             } elseif ($user->hasPermissionTo('credit_increase_requests.view_assigned')) {
                 $query->where('coordinator_id', $user->id);
@@ -45,7 +46,7 @@ class SolicitudIncrementoLineaConsultaController extends Controller
 
         // 2. Filtros
         if ($request->filled('request_number')) {
-            $query->where('request_number', 'ilike', '%' . $request->input('request_number') . '%');
+            $query->where('request_number', 'ilike', '%'.$request->input('request_number').'%');
         }
         if ($request->filled('distributor_id')) {
             $query->where('distributor_id', $request->input('distributor_id'));
@@ -88,9 +89,9 @@ class SolicitudIncrementoLineaConsultaController extends Controller
         return SolicitudIncrementoDetalleResource::collection($solicitudes);
     }
 
-    public function show(\App\Models\SolicitudIncrementoLinea $solicitud)
+    public function show(SolicitudIncrementoLinea $solicitud)
     {
-        \Illuminate\Support\Facades\Gate::authorize('view', $solicitud);
+        Gate::authorize('view', $solicitud);
 
         $solicitud->load([
             'distribuidora.usuario',
@@ -98,7 +99,7 @@ class SolicitudIncrementoLineaConsultaController extends Controller
             'coordinadorSnapshot',
             'lineaCredito',
             'restriccion',
-            'transiciones'
+            'transiciones',
         ]);
 
         return new SolicitudIncrementoDetalleResource($solicitud);

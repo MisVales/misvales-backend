@@ -5,9 +5,11 @@ namespace App\Http\Requests\Api\V1\SolicitudDistribuidora;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
+use App\Http\Requests\AllowsPartialDrafts;
+
 final class GuardarDatosPersonalesRequest extends FormRequest
 {
-    use RechazaPropiedadesDesconocidas;
+    use RechazaPropiedadesDesconocidas, AllowsPartialDrafts;
 
     public function authorize(): bool
     {
@@ -17,7 +19,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        return [
+        $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'first_name' => ['required', 'string', 'max:120'],
             'first_last_name' => ['required', 'string', 'max:120'],
@@ -33,5 +35,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'official_id_type' => ['required', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
             'official_id_number' => ['required', 'string', 'min:3', 'max:100'],
         ];
+
+        return $this->applyDraftRules($rules, ['lock_version']);
     }
 }

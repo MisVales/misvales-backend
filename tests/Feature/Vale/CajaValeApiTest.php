@@ -43,6 +43,7 @@ use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -80,6 +81,7 @@ final class CajaValeApiTest extends TestCase
         $product = Product::query()->create(['code' => 'CASH-10000', 'status' => 'ACTIVE', 'created_by' => $this->distributorUser->id]);
         $productVersion = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale caja', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
         $this->voucher = Vale::query()->create(['folio' => 'VAL-2026-99999999', 'type' => 'PREVALE', 'status' => EstadoVale::GENERADO, 'client_id' => $client->id, 'distributor_id' => $distributor->id, 'branch_id' => $this->branch->id, 'credit_line_id' => $line->id, 'product_id' => $product->id, 'product_version_id' => $productVersion->id, 'category_version_id' => $categoryVersion->id, 'capital' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'loan_commission_amount' => '1000.0000', 'simple_interest_percentage' => '0.020000', 'fortnights_count' => 4, 'insurance_amount' => '100.0000', 'interest_total' => '800.0000', 'misvales_total' => '11900.0000', 'misvales_payment_per_fortnight' => '2975.0000', 'distributor_profit_percentage' => '0.050000', 'distributor_profit_total' => '500.0000', 'distributor_profit_per_fortnight' => '125.0000', 'client_payment_per_fortnight' => '3100.0000', 'client_total' => '12400.0000', 'financial_snapshot' => [], 'created_by' => $this->distributorUser->id, 'generated_at' => now()]);
+        $this->publishRelationConfiguration();
     }
 
     public function test_cajera_busca_libera_y_feria_incrementando_saldo(): void
@@ -96,9 +98,6 @@ final class CajaValeApiTest extends TestCase
     public function test_flujo_financiero_integrado_desde_feria_hasta_liquidacion_y_puntos(): void
     {
         Storage::fake('local');
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.payment_deadline_days', 20);
-        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
 
         Sanctum::actingAs($this->cashier);
         $released = $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/release", ['lock_version' => 1])->assertSuccessful();
@@ -212,8 +211,6 @@ final class CajaValeApiTest extends TestCase
 
     public function test_corte_genera_una_relacion_con_parcialidades_antiguas_snapshots_y_fecha_limite(): void
     {
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.bank', ['name' => 'Banco configurado', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
         $cutoff = CarbonImmutable::parse('2027-01-25 00:05:00', 'America/Monterrey');
         $this->voucher->update(['status' => 'CASHED']);
         $this->voucher->parcialidades()->createMany([
@@ -229,14 +226,15 @@ final class CajaValeApiTest extends TestCase
         $relation = RelacionDistribuidora::query()->firstOrFail();
         $this->assertSame('2975.0000', $relation->balance);
         $this->assertSame('2027-02-14 23:59:59', $relation->payment_deadline_at->setTimezone('America/Monterrey')->format('Y-m-d H:i:s'));
+        $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
+        $this->assertArrayHasKey('EARLY_PAYMENT_PERIOD', $relation->header_snapshot['configuration_versions']);
+        $this->assertSame(0, $relation->header_snapshot['points']);
         $this->assertSame('VAL-2026-99999999', $relation->partidas()->firstOrFail()->snapshot['folio']);
         $this->assertDatabaseCount('relation_process_runs', 2);
     }
 
     public function test_relacion_respeta_consulta_descarga_y_administrador_solo_lectura(): void
     {
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.bank', ['name' => 'Banco configurado', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
         $this->voucher->update(['status' => 'CASHED']);
         $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500.0000', 'loan_commission' => '250.0000', 'interest' => '200.0000', 'insurance' => '25.0000', 'distributor_profit' => '125.0000', 'misvales_payment' => '2975.0000', 'client_payment' => '3100.0000', 'due_at' => now()->subDay()]);
         app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
@@ -253,7 +251,10 @@ final class CajaValeApiTest extends TestCase
 
     public function test_corte_falla_cerrado_sin_periodo_anticipado_o_banco_publicado(): void
     {
-        config()->set('relations.advance_period_days', null);
+        ConfigurationVersion::query()
+            ->whereHas('definition', fn ($query) => $query->where('key', 'EARLY_PAYMENT_PERIOD'))
+            ->delete();
+        Cache::forget('configuracion:EARLY_PAYMENT_PERIOD');
         $this->expectExceptionMessage('RELATION_CONFIGURATION_INCOMPLETE');
         app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
     }
@@ -261,8 +262,6 @@ final class CajaValeApiTest extends TestCase
     public function test_xlsx_concilia_abono_liquidacion_excedente_no_conciliado_y_rechaza_doble_archivo(): void
     {
         Storage::fake('local');
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
         $this->voucher->update(['status' => 'CASHED']);
         $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDay()]);
         app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
@@ -296,8 +295,6 @@ final class CajaValeApiTest extends TestCase
 
     public function test_recargo_es_unico_y_se_difiere_sin_archivo_bancario_valido(): void
     {
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
         $this->voucher->update(['status' => 'CASHED']);
         $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDays(30)]);
         app(ServicioGeneracionRelacion::class)->generar(now('America/Monterrey')->subDays(25)->toImmutable());
@@ -316,8 +313,6 @@ final class CajaValeApiTest extends TestCase
     public function test_excedente_no_se_duplica_y_puede_convertirse_en_saldo_a_favor(): void
     {
         Storage::fake('local');
-        config()->set('relations.advance_period_days', 10);
-        config()->set('relations.bank', ['name' => 'Banco', 'beneficiary' => 'MisVales', 'clabe' => '012345678901234567']);
         $this->voucher->update(['status' => 'CASHED']);
         $this->voucher->parcialidades()->create(['number' => 1, 'capital' => '2500', 'loan_commission' => '250', 'interest' => '200', 'insurance' => '25', 'distributor_profit' => '125', 'misvales_payment' => '2975', 'client_payment' => '3100', 'due_at' => now()->subDay()]);
         app(ServicioGeneracionRelacion::class)->generar(now('America/Monterrey')->toImmutable());
@@ -461,6 +456,38 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
     }
 
+    public function test_morosidad_permite_revisar_ciclos_sucesivos_sin_perder_historial(): void
+    {
+        $d = $this->distributorUser->distribuidora;
+        $manager = $this->user('branch_manager', $this->branch->id);
+        $service = app(ServicioMorosidadDistribuidora::class);
+
+        $first = AlertaRiesgoDistribuidora::create([
+            'distributor_id' => $d->id,
+            'branch_id' => $this->branch->id,
+            'type' => 'THREE_CONSECUTIVE_DEFAULTS',
+            'consecutive_defaults' => 3,
+            'relation_ids' => [],
+            'overdue_balance' => '300.0000',
+        ]);
+        $service->decidir($first, $manager, false, 'Primer ciclo revisado');
+
+        $second = AlertaRiesgoDistribuidora::create([
+            'distributor_id' => $d->id,
+            'branch_id' => $this->branch->id,
+            'type' => 'THREE_CONSECUTIVE_DEFAULTS',
+            'consecutive_defaults' => 3,
+            'relation_ids' => [],
+            'overdue_balance' => '450.0000',
+        ]);
+        $service->decidir($second, $manager, false, 'Segundo ciclo revisado');
+
+        $this->assertDatabaseCount('distributor_risk_alerts', 2);
+        $this->assertDatabaseHas('distributor_risk_alerts', ['id' => $first->id, 'status' => 'REVIEWED']);
+        $this->assertDatabaseHas('distributor_risk_alerts', ['id' => $second->id, 'status' => 'REVIEWED']);
+        $this->assertDatabaseCount('distributor_delinquency_decisions', 2);
+    }
+
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'bank').'.xlsx';
@@ -480,6 +507,42 @@ final class CajaValeApiTest extends TestCase
         $zip->close();
 
         return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+    }
+
+    private function publishRelationConfiguration(): void
+    {
+        $values = [
+            'BUSINESS_TIMEZONE' => ['TIMEZONE', 'America/Monterrey'],
+            'PAYMENT_DAYS_AFTER_CUT' => ['INTEGER', 20],
+            'PAYMENT_DEADLINE_TIME' => ['TIME', '23:59:59'],
+            'EARLY_PAYMENT_PERIOD' => ['JSON', ['start' => 0, 'end' => 10]],
+            'RELATION_PAYMENT_BANK' => ['JSON', ['name' => 'Banco configurado', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-TEST', 'clabe' => '012345678901234567']],
+            'BANK_UPLOAD_DEADLINE_TIME' => ['TIME', '08:00'],
+            'POST_DUE_EVALUATION_TIME' => ['TIME', '08:30'],
+            'LATE_FEE_AMOUNT' => ['DECIMAL', '300.0000'],
+        ];
+
+        foreach ($values as $key => [$type, $value]) {
+            Cache::forget("configuracion:{$key}");
+            $definition = ConfigurationDefinition::query()->create([
+                'key' => $key,
+                'name' => $key,
+                'value_type' => $type,
+                'status' => 'ACTIVE',
+                'created_by' => $this->distributorUser->id,
+            ]);
+            ConfigurationVersion::query()->create([
+                'configuration_definition_id' => $definition->id,
+                'version' => 1,
+                'value' => $value,
+                'status' => 'PUBLISHED',
+                'effective_from' => now()->subDay(),
+                'reason' => 'Configuración de prueba',
+                'created_by' => $this->distributorUser->id,
+                'published_by' => $this->distributorUser->id,
+                'published_at' => now(),
+            ]);
+        }
     }
 
     private function postIdempotent(string $uri, array $data)

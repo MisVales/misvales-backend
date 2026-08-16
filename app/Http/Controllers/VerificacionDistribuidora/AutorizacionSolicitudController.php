@@ -1,30 +1,34 @@
 <?php
+
 namespace App\Http\Controllers\VerificacionDistribuidora;
 
-use App\Http\Controllers\Controller;
-use App\Services\VerificacionDistribuidora\ServicioAutorizacionSolicitud;
-use Illuminate\Http\JsonResponse;
-use App\Http\Requests\VerificacionDistribuidora\AutorizarSolicitudRequest;
 use App\Enums\ApplicationAuthorizationDecision;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\VerificacionDistribuidora\AutorizarSolicitudRequest;
+use App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResource;
+use App\Services\VerificacionDistribuidora\ServicioAutorizacionSolicitud;
 
-class AutorizacionSolicitudController extends Controller {
-    
+class AutorizacionSolicitudController extends Controller
+{
     public function __construct(private ServicioAutorizacionSolicitud $autorizacionService) {}
 
-    public function consultarAutorizacion(string $applicationId) {
+    public function consultarAutorizacion(string $applicationId)
+    {
         $auth = $this->autorizacionService->consultarAutorizacion($applicationId);
-        return new \App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResource($auth);
+
+        return new ApplicationAuthorizationResource($auth);
     }
 
-    public function autorizar(AutorizarSolicitudRequest $request, string $applicationId) {
+    public function autorizar(AutorizarSolicitudRequest $request, string $applicationId)
+    {
         $data = $request->validated();
-        
+
         $decision = $data['decision'] ?? ApplicationAuthorizationDecision::APPROVED->value;
 
         if ($decision === ApplicationAuthorizationDecision::APPROVED->value) {
             $auth = $this->autorizacionService->autorizar(
-                $applicationId, 
-                auth()->id(), 
+                $applicationId,
+                auth()->id(),
                 $data['reason'],
                 (string) $data['initial_credit_line_amount'],
                 (int) $data['lock_version'],
@@ -32,8 +36,8 @@ class AutorizacionSolicitudController extends Controller {
             $msg = 'Solicitud autorizada exitosamente.';
         } else {
             $auth = $this->autorizacionService->rechazar(
-                $applicationId, 
-                auth()->id(), 
+                $applicationId,
+                auth()->id(),
                 $data['reason'], (int) $data['lock_version']
             );
             $msg = 'Solicitud rechazada exitosamente.';

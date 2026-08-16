@@ -56,7 +56,7 @@ class UserController extends Controller
             $search = strtolower(trim($request->search));
             $query->where(function ($q) use ($search) {
                 $q->where('normalized_email', 'like', "%{$search}%")
-                    ->orWhere('name', 'like', "%{$search}%");
+                    ->orWhereRaw('LOWER(name) LIKE ?', ["%{$search}%"]);
             });
         }
 

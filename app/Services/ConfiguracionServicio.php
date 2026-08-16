@@ -79,9 +79,8 @@ class ConfiguracionServicio
 
         if (array_key_exists('lock_version', $datos)) {
             if ($version->lock_version !== (int) $datos['lock_version']) {
-                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.', 409);
             }
-            $version->lock_version++;
         }
 
         if (array_key_exists('value', $datos)) {
@@ -99,8 +98,12 @@ class ConfiguracionServicio
         return $version;
     }
 
-    public function desactivarVersion(ConfigurationVersion $version, string $usuarioId): ConfigurationVersion
+    public function desactivarVersion(ConfigurationVersion $version, array $datos, string $usuarioId): ConfigurationVersion
     {
+        if ($version->lock_version !== (int) $datos['lock_version']) {
+            throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.', 409);
+        }
+
         $version->status = VersionStatus::INACTIVE;
 
         // Si estaba publicada y ya había iniciado, cerramos su vigencia en este momento exacto
@@ -127,9 +130,8 @@ class ConfiguracionServicio
 
         if (array_key_exists('lock_version', $datos)) {
             if ($version->lock_version !== (int) $datos['lock_version']) {
-                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.');
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión de la configuración fue modificada por otro usuario.', 409);
             }
-            $version->lock_version++;
         }
 
         return DB::transaction(function () use ($version, $usuarioId) {

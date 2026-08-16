@@ -114,6 +114,34 @@ final readonly class ServicioTransferenciasOrganizacionales
         }, 3);
     }
 
+    public function cancelar(SolicitudTransferenciaCliente $solicitud, User $actor, string $motivo): SolicitudTransferenciaCliente
+    {
+        return DB::transaction(function () use ($solicitud, $actor, $motivo): SolicitudTransferenciaCliente {
+            $solicitud = SolicitudTransferenciaCliente::query()->lockForUpdate()->findOrFail($solicitud->id);
+            if (! in_array($solicitud->status, ['REQUESTED', 'PREACCEPTED', 'ORIGIN_AUTHORIZED'], true)) {
+                throw new ExcepcionCliente('CLIENT_TRANSFER_INVALID_STATE', 'La transferencia ya no puede cancelarse.', 409);
+            }
+            if ($solicitud->initiated_by !== $actor->id) {
+                throw new ExcepcionCliente('CLIENT_TRANSFER_CANCELLATION_FORBIDDEN', 'Solo quien inició la transferencia puede cancelarla.', 403);
+            }
+
+            $solicitud->update([
+                'status' => 'CANCELLED',
+                'cancelled_by' => $actor->id,
+                'cancelled_at' => now(),
+                'cancellation_reason' => $motivo,
+            ]);
+            $this->notificar('EV-081', $solicitud->id, [
+                'event_type' => 'CLIENT_TRANSFER_CANCELLED',
+                'client_id' => $solicitud->client_id,
+                'cancelled_by' => $actor->id,
+                'reason' => $motivo,
+            ]);
+
+            return $solicitud->refresh();
+        }, 3);
+    }
+
     public function reasignarCliente(Cliente $cliente, Distribuidora $destino, User $actor, string $motivo): AsignacionClienteDistribuidora
     {
         return DB::transaction(function () use ($cliente, $destino, $actor, $motivo): AsignacionClienteDistribuidora {

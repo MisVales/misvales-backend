@@ -5,6 +5,7 @@ namespace App\Services\Auth;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use Illuminate\Database\Eloquent\Collection;
 use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
 use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
@@ -145,5 +146,19 @@ class RoleAssignmentPolicyService
         }
 
         return null;
+    }
+
+    /**
+     * Retorna los roles que el actor puede asignar según su jerarquía.
+     */
+    public function getAssignableRoles(User $actor): Collection
+    {
+        $actorMaxRank = $this->getActorMaxRank($actor);
+
+        return Role::where('is_active', true)
+            ->whereIn('code', array_keys($this->ranks))
+            ->get()
+            ->filter(fn (Role $role) => ($this->ranks[$role->code] ?? 0) < $actorMaxRank)
+            ->values();
     }
 }
