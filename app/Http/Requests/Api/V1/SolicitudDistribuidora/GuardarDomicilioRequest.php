@@ -2,12 +2,13 @@
 
 namespace App\Http\Requests\Api\V1\SolicitudDistribuidora;
 
+use App\Http\Requests\AllowsPartialDrafts;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
 final class GuardarDomicilioRequest extends FormRequest
 {
-    use RechazaPropiedadesDesconocidas, \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+    use AllowsPartialDrafts, RechazaPropiedadesDesconocidas, \App\Http\Requests\Traits\ValidaDireccionEstructurada;
 
     public function authorize(): bool
     {

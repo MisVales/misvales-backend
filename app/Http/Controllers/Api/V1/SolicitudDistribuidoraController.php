@@ -64,7 +64,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new SolicitudDistribuidoraDetalleResource(
             $servicio->consultarSolicitud($request->user(), $application),
-        );
+        )->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function update(ActualizarSolicitudDistribuidoraRequest $request, SolicitudDistribuidora $application, ServicioSolicitudDistribuidora $servicio): SolicitudDistribuidoraResource
@@ -73,7 +77,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new SolicitudDistribuidoraResource(
             $servicio->actualizarSolicitud($request->user(), $application, $request->validated()),
-        );
+        )->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function guardarDatosPersonales(GuardarDatosPersonalesRequest $request, SolicitudDistribuidora $application, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -82,7 +90,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new DatosPersonalesSolicitudResource(
             $servicio->guardarDatosPersonales($request->user(), $application, $request->validated()),
-        ))->response()->setStatusCode(200);
+        ))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function listarDomicilios(Request $request, SolicitudDistribuidora $application, ServicioSolicitudDistribuidora $servicio): AnonymousResourceCollection
@@ -100,7 +112,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new DomicilioSolicitudResource(
             $servicio->guardarDomicilio($request->user(), $application, $request->validated()),
-        ))->response()->setStatusCode(201);
+        ))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarDomicilio(GuardarDomicilioRequest $request, SolicitudDistribuidora $application, DomicilioSolicitud $residence, ServicioSolicitudDistribuidora $servicio): DomicilioSolicitudResource
@@ -109,7 +125,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new DomicilioSolicitudResource(
             $servicio->guardarDomicilio($request->user(), $application, $request->validated(), $residence),
-        );
+        )->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarDomicilio(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, DomicilioSolicitud $residence, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -126,7 +146,11 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new SolicitudDistribuidoraResource(
             $servicio->enviarARevision($request->user(), $application, $request->integer('lock_version')),
-        );
+        )->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function listarFamiliares(Request $request, SolicitudDistribuidora $application, ServicioSolicitudDistribuidora $servicio): AnonymousResourceCollection
@@ -140,14 +164,22 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return (new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated())))->response()->setStatusCode(201);
+        return (new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated())))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarFamiliar(GuardarFamiliarRequest $request, SolicitudDistribuidora $application, FamiliarSolicitud $member, ServicioSolicitudDistribuidora $servicio): FamiliarSolicitudResource
     {
         Gate::authorize('update', $application);
 
-        return new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated(), $member));
+        return new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated(), $member))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarFamiliar(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, FamiliarSolicitud $member, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -169,14 +201,22 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return (new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated())))->response()->setStatusCode(201);
+        return (new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated())))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarVehiculo(GuardarVehiculoRequest $request, SolicitudDistribuidora $application, VehiculoSolicitud $vehicle, ServicioSolicitudDistribuidora $servicio): VehiculoSolicitudResource
     {
         Gate::authorize('update', $application);
 
-        return new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated(), $vehicle));
+        return new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated(), $vehicle))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarVehiculo(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, VehiculoSolicitud $vehicle, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -198,14 +238,22 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return (new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated())))->response()->setStatusCode(201);
+        return (new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated())))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarPatrimonio(GuardarPatrimonioRequest $request, SolicitudDistribuidora $application, PatrimonioSolicitud $entry, ServicioSolicitudDistribuidora $servicio): PatrimonioSolicitudResource
     {
         Gate::authorize('update', $application);
 
-        return new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated(), $entry));
+        return new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated(), $entry))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarPatrimonio(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, PatrimonioSolicitud $entry, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -227,14 +275,22 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return (new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated())))->response()->setStatusCode(201);
+        return (new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated())))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarEmpleo(GuardarEmpleoRequest $request, SolicitudDistribuidora $application, EmpleoSolicitud $employment, ServicioSolicitudDistribuidora $servicio): EmpleoSolicitudResource
     {
         Gate::authorize('update', $application);
 
-        return new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated(), $employment));
+        return new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated(), $employment))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarEmpleo(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, EmpleoSolicitud $employment, ServicioSolicitudDistribuidora $servicio): JsonResponse
@@ -256,14 +312,22 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return (new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated())))->response()->setStatusCode(201);
+        return (new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated())))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ])->response()->setStatusCode(201);
     }
 
     public function actualizarCreditoComercial(GuardarCreditoComercialRequest $request, SolicitudDistribuidora $application, CreditoComercialSolicitud $credit, ServicioSolicitudDistribuidora $servicio): CreditoComercialSolicitudResource
     {
         Gate::authorize('update', $application);
 
-        return new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated(), $credit));
+        return new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated(), $credit))->additional([
+            'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'lock_version' => $application->fresh()->lock_version,
+            'saved_at' => now()->toISOString(),
+        ]);
     }
 
     public function eliminarCreditoComercial(EliminarRegistroSolicitudRequest $request, SolicitudDistribuidora $application, CreditoComercialSolicitud $credit, ServicioSolicitudDistribuidora $servicio): JsonResponse
