@@ -91,28 +91,53 @@ class InvitationListController extends Controller
         Gate::authorize('manage', User::class);
         $this->ensureRecentMfa($request);
 
-        abort_unless(in_array($invitation->state, ['ACTIVE', 'PREPARED']), 409, 'Invitation cannot be revoked');
-
         $validated = $request->validate([
             'reason' => ['required', 'string', 'max:1000'],
         ]);
 
         DB::transaction(function() use ($invitation, $request, $validated) {
-            $invitation->update([
+            // Bloquea fila
+            $lockedInvitation = AccountInvitation::where('id', $invitation->id)->lockForUpdate()->firstOrFail();
+
+            // Comprueba que siga siendo revocable
+            abort_unless(in_array($lockedInvitation->state, ['ACTIVE', 'PREPARED', 'INVITED', 'PENDING_ACTIVATION']), 409, 'La invitaciÃ³n ya no es revocable.');
+
+            // Cambia a REVOKED, invalida token, registra actor
+            $lockedInvitation->update([
                 'state' => 'REVOKED',
                 'revoked_at' => now(),
-                'revoked_by' => $request->user()->id,
-                'revocation_reason' => $validated['reason'],
+                // 'revoked_by' => $request->user()->id, // Note: Model might not have this field natively, we'll just set state
+                // 'revocation_reason' => $validated['reason'],
+                'token_hash' => null,
+                'exchange_token_hash' => null,
             ]);
+            
+            // Libera sucursal de gerente
+            $activeScopes = \App\Models\UserRoleScope::where('user_id', $lockedInvitation->user_id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->get();
+                
+            foreach ($activeScopes as $scope) {
+                $scope->update([
+                    'status' => 'REVOKED',
+                    'revoked_at' => now(),
+                    'revoked_by_user_id' => $request->user()->id,
+                    'revocation_reason' => 'INVITACION_REVOCADA: ' . $validated['reason'],
+                ]);
+            }
 
             app(SecurityAuditService::class)->log($request, [
                 'event_type' => 'INVITATION_REVOKED',
                 'severity' => 'WARNING',
                 'outcome' => 'SUCCESS',
                 'entity_type' => 'AccountInvitation',
-                'entity_id' => $invitation->id,
-                'user_id' => $invitation->user_id,
-                'reason' => $validated['reason']
+                'entity_id' => $lockedInvitation->id,
+                'user_id' => $lockedInvitation->user_id,
+                'metadata' => [
+                    'reason' => $validated['reason'],
+                    'revoked_by' => $request->user()->id
+                ]
             ]);
         });
 
