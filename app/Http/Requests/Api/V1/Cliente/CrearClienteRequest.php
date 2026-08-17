@@ -9,6 +9,8 @@ use Illuminate\Validation\Rule;
 
 class CrearClienteRequest extends FormRequest
 {
+    use \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+
     protected function prepareForValidation(): void
     {
         if (is_string($this->input('curp'))) {
@@ -25,12 +27,12 @@ class CrearClienteRequest extends FormRequest
 
     public function rules(): array
     {
-        return [
+        $rules = [
             'first_name' => ['required', 'string', 'max:120'],
             'first_last_name' => ['required', 'string', 'max:120'],
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
-            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zÑñ&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
+            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zñÑ&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'birth_place' => ['required', 'string', 'max:160'],
             'birth_state' => ['required', 'string', 'max:120'],
@@ -40,15 +42,6 @@ class CrearClienteRequest extends FormRequest
             'official_id_media_id' => ['nullable', 'uuid', 'exists:media_files,id'],
 
             'address' => ['required', 'array'],
-            'address.street' => ['required', 'string', 'max:180'],
-            'address.exterior_number' => ['required', 'string', 'max:30'],
-            'address.interior_number' => ['nullable', 'string', 'max:30'],
-            'address.neighborhood' => ['required', 'string', 'max:160'],
-            'address.postal_code' => ['required', 'regex:/^\d{5}$/'],
-            'address.municipality' => ['required', 'string', 'max:160'],
-            'address.city' => ['required', 'string', 'max:160'],
-            'address.state' => ['required', 'string', 'max:120'],
-            'address.country' => ['sometimes', 'string', 'size:2'],
             'address.address_proof_media_id' => ['nullable', 'uuid', 'exists:media_files,id'],
 
             'bank_account' => ['required', 'array'],
@@ -57,6 +50,12 @@ class CrearClienteRequest extends FormRequest
             'bank_account.account_number' => ['nullable', 'string', 'regex:/^\d{4,30}$/'],
             'bank_account.clabe' => ['required', 'string', 'regex:/^\d{18}$/'],
         ];
+
+        return array_merge(
+            $rules,
+            $this->reglasDireccionEstructurada('address', 'required'),
+            $this->reglasCodigoPostalMexicano('address', 'required')
+        );
     }
 
     public function messages(): array
