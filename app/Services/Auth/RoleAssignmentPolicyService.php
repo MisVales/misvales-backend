@@ -69,6 +69,25 @@ class RoleAssignmentPolicyService
             return "Violación de Separación de Funciones (SoD): {$sodConflict}";
         }
 
+        // 6. Branch Manager Invariants
+        if ($roleToAssign->code === 'branch_manager' && $branchId !== null) {
+            $branch = \App\Models\Branch::find($branchId);
+            if ($branch && $branch->is_headquarters) {
+                return 'La sucursal matriz no puede tener gerente de sucursal.';
+            }
+
+            $hasActiveManager = UserRoleScope::where('branch_id', $branchId)
+                ->where('role_id', $roleToAssign->id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->lockForUpdate()
+                ->exists();
+
+            if ($hasActiveManager) {
+                return 'Esta sucursal ya cuenta con un gerente de sucursal activo.';
+            }
+        }
+
         return true;
     }
 

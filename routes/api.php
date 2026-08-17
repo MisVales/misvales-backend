@@ -169,6 +169,7 @@ Route::prefix('v1')->group(function () {
 
         // Invitaciones
         Route::get('invitations', [InvitationListController::class, 'index']);
+        Route::post('invitations/{invitation}/revoke', [InvitationListController::class, 'revoke']);
 
         // Asignaciones Jerárquicas (Punto 35)
         Route::get('users/{id}/assignments', [UserAssignmentQueryController::class, 'index']);

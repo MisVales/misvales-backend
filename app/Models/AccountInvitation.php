@@ -28,6 +28,8 @@ class AccountInvitation extends Model
         'recovery_codes_confirmed_at',
         'attempt_count',
         'last_attempt_at',
+        'revoked_by',
+        'revocation_reason',
     ];
 
     protected $casts = [

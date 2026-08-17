@@ -2,10 +2,13 @@
 
 namespace App\Http\Requests\Api\V1\SolicitudDistribuidora;
 
+use App\Http\Requests\AllowsPartialDrafts;
 use Illuminate\Foundation\Http\FormRequest;
 
 final class GuardarCreditoComercialRequest extends FormRequest
 {
+    use AllowsPartialDrafts;
+
     use RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
