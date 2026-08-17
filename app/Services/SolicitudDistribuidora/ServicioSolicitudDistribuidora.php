@@ -518,4 +518,27 @@ final class ServicioSolicitudDistribuidora
             'vehicles', 'assets', 'liabilities', 'employment', 'commercial_credits',
         ], 'PENDING');
     }
+
+    public function calcularCompletitud(SolicitudDistribuidora $app): array
+    {
+        $sections = [
+            'datos_personales' => $app->datosPersonales()->exists(),
+            'familiares' => $app->familiares()->exists(),
+            'domicilios' => $app->domicilios()->exists(),
+            'vehiculos' => $app->vehiculos()->exists(),
+            'patrimonio' => $app->patrimonio()->exists(),
+            'empleos' => $app->empleos()->exists(),
+            'creditos_comerciales' => $app->creditosComerciales()->exists(),
+        ];
+        
+        $completed = count(array_filter($sections));
+        $total = count($sections);
+        
+        return [
+            'completed_sections' => $completed,
+            'total_sections' => $total,
+            'can_submit' => $completed === $total,
+            'sections' => $sections,
+        ];
+    }
 }
