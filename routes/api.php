@@ -52,12 +52,7 @@ use App\Modules\Organization\Presentation\Http\Controllers\BranchPersonnelContro
 use App\Modules\Organization\Presentation\Http\Controllers\PersonnelController;
 use App\Modules\Organization\Presentation\Http\Controllers\UserAssignmentCommandController;
 use App\Modules\Organization\Presentation\Http\Controllers\UserAssignmentQueryController;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
-Route::middleware(['auth:sanctum'])->get('/user', function (Request $request) {
-    return $request->user();
-});
 
 Route::prefix('v1')->group(function () {
     Route::get('health/readiness', [EstadoOperativoController::class, 'readiness'])->middleware('throttle:60,1');

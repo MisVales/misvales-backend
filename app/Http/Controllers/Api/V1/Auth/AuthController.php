@@ -12,6 +12,7 @@ use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\ProgressiveLockoutService;
 use App\Services\Auth\SessionPolicyService;
+use App\Services\Auth\SessionTokenIdentifier;
 use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -551,7 +552,7 @@ class AuthController extends Controller
         $token->accessToken->save();
 
         // Actualizar el identificador de la sesión para que apunte al nuevo token
-        $session->session_identifier_hash = hash('sha256', $token->plainTextToken);
+        $session->session_identifier_hash = (string) $token->accessToken->getRawOriginal('token');
         $session->last_activity_at = now();
         $session->save();
 
@@ -569,21 +570,23 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/logout
      */
-    public function logout(Request $request)
+    public function logout(Request $request, SessionTokenIdentifier $tokenIdentifier)
     {
         $user = $request->user();
         $currentAccessToken = $user->currentAccessToken();
 
         if ($currentAccessToken) {
-            $tokenHash = hash('sha256', $request->bearerToken());
+            $tokenHash = $tokenIdentifier->current($request);
 
-            AuthSession::where('session_identifier_hash', $tokenHash)
-                ->whereNull('revoked_at')
-                ->update([
-                    'revoked_at' => now(),
-                    'revoked_by_user_id' => $user->id,
-                    'revocation_reason' => 'USER_LOGOUT',
-                ]);
+            if ($tokenHash !== null) {
+                AuthSession::where('session_identifier_hash', $tokenHash)
+                    ->whereNull('revoked_at')
+                    ->update([
+                        'revoked_at' => now(),
+                        'revoked_by_user_id' => $user->id,
+                        'revocation_reason' => 'USER_LOGOUT',
+                    ]);
+            }
 
             $currentAccessToken->delete();
         }
@@ -611,7 +614,7 @@ class AuthController extends Controller
         // 2. Registro de Sesión Maestra (Larga)
         $session = AuthSession::create([
             'user_id' => $user->id,
-            'session_identifier_hash' => hash('sha256', $token->plainTextToken),
+            'session_identifier_hash' => (string) $token->accessToken->getRawOriginal('token'),
             'authentication_method' => 'PASSWORD',
             'mfa_method' => $mfaMethod,
             'mfa_verified_at' => now(),
@@ -684,14 +687,24 @@ class AuthController extends Controller
             return $response;
         }
 
+        $tokenIdentifier = app(SessionTokenIdentifier::class);
+        $currentTokenHash = $tokenIdentifier->fromPlainTextToken($accessToken);
         $session = AuthSession::query()
-            ->where('session_identifier_hash', hash('sha256', $accessToken))
+            ->whereIn('session_identifier_hash', array_values(array_unique(array_filter([
+                $currentTokenHash,
+                hash('sha256', $accessToken),
+            ]))))
             ->latest('created_at')
             ->first();
         $accessTokenId = (int) Str::before($accessToken, '|');
 
         if ($session === null || $accessTokenId < 1) {
             return $response;
+        }
+
+        if ($currentTokenHash !== null && $session->getRawOriginal('session_identifier_hash') !== $currentTokenHash) {
+            $session->session_identifier_hash = $currentTokenHash;
+            $session->save();
         }
 
         Cache::put('auth_refresh_'.hash('sha256', $refreshToken), [
