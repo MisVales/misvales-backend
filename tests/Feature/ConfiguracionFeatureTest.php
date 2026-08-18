@@ -129,12 +129,12 @@ class ConfiguracionFeatureTest extends TestCase
         $this->postJson("/api/v1/configurations/{$period->key}/versions", [
             ...$base,
             'value' => ['start' => 10, 'end' => 5],
-        ])->assertUnprocessable()->assertJsonValidationErrors(['value.end']);
+        ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['value.end']]]);
 
         $this->postJson("/api/v1/configurations/{$bank->key}/versions", [
             ...$base,
             'value' => ['name' => 'Banco', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-1', 'clabe' => '1234'],
-        ])->assertUnprocessable()->assertJsonValidationErrors(['value.clabe']);
+        ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['value.clabe']]]);
 
         $this->postJson("/api/v1/configurations/{$period->key}/versions", [
             ...$base,
