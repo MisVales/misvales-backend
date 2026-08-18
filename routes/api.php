@@ -72,7 +72,7 @@ Route::prefix('v1')->group(function () {
         Route::post('mfa/recovery-code/verify', [AuthController::class, 'verifyRecoveryCode'])->middleware('throttle:recovery_code');
         Route::post('refresh', [AuthController::class, 'refresh']);
         Route::post('password/forgot', [ForgotPasswordController::class, 'forgotPassword'])->middleware('throttle:forgot_password');
-        Route::post('password/reset', [ResetPasswordController::class, 'resetPassword']);
+        Route::post('password/reset', [ResetPasswordController::class, 'resetPassword'])->middleware('throttle:reset_password');
 
         // Rutas protegidas de la API (Zero Trust Layer)
         Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
