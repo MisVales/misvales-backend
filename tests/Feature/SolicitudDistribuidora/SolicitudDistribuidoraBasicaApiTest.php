@@ -12,7 +12,6 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
@@ -21,8 +20,6 @@ use Tests\TestCase;
 
 final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 {
-    use RefreshDatabase;
-
     protected function setUp(): void
     {
         parent::setUp();
@@ -112,6 +109,96 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_date' => $menorDeEdad,
         ])->assertUnprocessable()
             ->assertJsonPath('error.fields.birth_date.0', 'La referencia familiar debe tener al menos 18 años.');
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'first_name' => 'Ana123',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.first_name.0', 'El nombre sólo puede contener letras.');
+    }
+
+    public function test_autoguardado_parcial_de_datos_personales_conserva_los_campos_ya_guardados(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-19');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100019');
+        Sanctum::actingAs($general);
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX09',
+            'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => 'INE-001',
+        ])->assertCreated();
+
+        $this->withHeader('X-Autosave', 'true')
+            ->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+                'lock_version' => 2,
+                'email' => 'ana.actualizada@example.test',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.first_name', 'Ana')
+            ->assertJsonPath('data.first_last_name', 'Pérez')
+            ->assertJsonPath('data.email', 'ana.actualizada@example.test');
+    }
+
+    public function test_detalle_indica_la_evidencia_de_identificacion_ya_cargada(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-20');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100020');
+        Sanctum::actingAs($general);
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX09',
+            'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => 'INE-001',
+        ])->assertCreated();
+
+        $archivo = MediaFile::query()->create([
+            'file_type' => 'IDENTIFICATION_EVIDENCE',
+            'disk' => 'private',
+            'path' => "applications/{$solicitud->id}/identificacion.pdf",
+            'original_name' => 'identificacion.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 128,
+            'sha256' => hash('sha256', (string) Str::uuid()),
+            'uploaded_by' => $general->id,
+            'validation_status' => 'VALIDATED',
+            'validated_at' => now(),
+        ]);
+        MediaFileBinding::query()->create([
+            'media_file_id' => $archivo->id,
+            'owner_type' => 'distributor_application',
+            'owner_id' => $solicitud->id,
+            'purpose' => 'IDENTIFICATION',
+            'created_by' => $general->id,
+        ]);
+
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.personal_data.has_identification_evidence', true);
     }
 
     public function test_gerente_de_sucursal_solo_crea_y_lista_en_su_alcance(): void
@@ -430,11 +517,13 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
             ->assertOk()
+            ->assertJsonPath('data.personal_data.has_identification_evidence', true)
             ->assertJsonPath('data.section_declarations.personal_data', 'COMPLETED')
             ->assertJsonPath('data.section_declarations.residence', 'COMPLETED')
             ->assertJsonPath('data.section_declarations.vehicles', 'NOT_APPLICABLE')
             ->assertJsonPath('data.completion.can_submit', true);
 
+        Sanctum::actingAs($coordinador);
         $usuariosAntes = User::query()->count();
         $invitacionesAntes = DB::table('account_invitations')->count();
         $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 3])
@@ -445,7 +534,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $this->assertDatabaseHas('distributor_applications', [
             'id' => $solicitud->id,
             'status' => 'COORDINATOR_REVIEW',
-            'submitted_by' => $general->id,
+            'submitted_by' => $coordinador->id,
         ]);
         self::assertNotNull(SolicitudDistribuidora::query()->findOrFail($solicitud->id)->submitted_at);
         self::assertSame($usuariosAntes, User::query()->count());
@@ -458,7 +547,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", ['lock_version' => 4])
             ->assertConflict()
-            ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_NOT_EDITABLE');
+            ->assertJsonPath('error.code', 'APPLICATION_TERMINAL');
 
         $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 4])
             ->assertConflict()
@@ -467,7 +556,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $domicilio = $solicitud->domicilios()->firstOrFail();
         $this->deleteJson("/api/v1/distributor-applications/{$solicitud->id}/residences/{$domicilio->id}", ['lock_version' => 4])
             ->assertConflict()
-            ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_NOT_EDITABLE');
+            ->assertJsonPath('error.code', 'APPLICATION_TERMINAL');
 
         $this->assertDatabaseHas('application_residences', ['id' => $domicilio->id]);
         $this->assertDatabaseHas('security_events', [
@@ -490,10 +579,12 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'relationship' => 'CHILD',
             'first_name' => 'ana',
             'first_last_name' => 'pérez',
-            'declared_age' => 10,
             'school_name' => 'Primaria Centro',
-            'is_family_reference' => false,
         ])->assertCreated()->assertJsonPath('data.application_lock_version', 2);
+        $this->assertDatabaseHas('application_family_members', [
+            'id' => $familiar->json('data.id'),
+            'is_family_reference' => true,
+        ]);
 
         $vehiculo = $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles", [
             'lock_version' => 2,
@@ -644,8 +735,8 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         foreach ([
             ['relationship' => 'PARTNER', 'first_name' => 'Alex', 'first_last_name' => 'López'],
-            ['relationship' => 'CHILD', 'first_name' => 'Ana', 'first_last_name' => 'López', 'declared_age' => 8],
-            ['relationship' => 'CHILD', 'first_name' => 'Luis', 'first_last_name' => 'López', 'declared_age' => 5],
+            ['relationship' => 'CHILD', 'first_name' => 'Ana', 'first_last_name' => 'López'],
+            ['relationship' => 'CHILD', 'first_name' => 'Luis', 'first_last_name' => 'López'],
         ] as $indice => $familiar) {
             $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
                 'lock_version' => $indice + 1,

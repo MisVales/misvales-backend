@@ -166,17 +166,12 @@ final class ServicioSolicitudDistribuidora
     {
         return DB::transaction(function () use ($actor, $solicitud, $datos): DatosPersonalesSolicitud {
             $bloqueada = $this->bloquearBorradorEditable($actor, $solicitud->id, (int) $datos['lock_version']);
-            $rfc = $this->limpiarTexto($datos['rfc'] ?? null);
-
             $registro = DatosPersonalesSolicitud::query()->firstOrNew(['application_id' => $bloqueada->id]);
-            $curp = $this->limpiarTexto($datos['curp'] ?? null);
-            $birthCity = $this->limpiarTexto($datos['birth_city'] ?? null);
-            $birthState = $this->limpiarTexto($datos['birth_state'] ?? null);
-            $birthCountry = $this->limpiarTexto($datos['birth_country'] ?? null);
-            $birthPlace = $this->limpiarTexto($datos['birth_place'] ?? null)
-                ?? $this->formatearLugarNacimiento($birthCity, $birthState, $birthCountry);
-            $email = $this->limpiarTexto($datos['email'] ?? null);
-            $officialIdNumber = $this->limpiarTexto($datos['official_id_number'] ?? null);
+            $rfc = array_key_exists('rfc', $datos) ? $this->limpiarTexto($datos['rfc']) : null;
+            $curp = array_key_exists('curp', $datos) ? $this->limpiarTexto($datos['curp']) : null;
+            $officialIdNumber = array_key_exists('official_id_number', $datos)
+                ? $this->limpiarTexto($datos['official_id_number'])
+                : null;
 
             $curpHmac = $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp);
             if ($curpHmac !== null && DatosPersonalesSolicitud::query()
@@ -203,27 +198,53 @@ final class ServicioSolicitudDistribuidora
                 ]);
             }
 
-            $registro->forceFill([
-                'first_name' => $this->normalizarNombre($datos['first_name'] ?? null),
-                'first_last_name' => $this->normalizarNombre($datos['first_last_name'] ?? null),
-                'second_last_name' => $this->normalizarNombre($datos['second_last_name'] ?? null),
-                'nationality' => $datos['nationality'] ?? null,
-                'birth_country' => $birthCountry,
-                'curp_ciphertext' => $curp === null ? null : $this->protectorDatos->cifrarCurp($curp),
-                'curp_hmac' => $curpHmac,
-                'rfc_ciphertext' => $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc),
-                'rfc_hmac' => $rfc === null ? null : $this->protectorDatos->generarHmacRfc($rfc),
-                'birth_date' => $datos['birth_date'] ?? null,
-                'birth_place' => $birthPlace,
-                'birth_state' => $birthState,
-                'birth_city' => $birthCity,
-                'email' => $email === null ? null : mb_strtolower($email),
-                'phone_number' => $this->limpiarTexto($datos['phone_number'] ?? null),
-                'identification_country' => $datos['identification_country'] ?? null,
-                'official_id_type' => $datos['official_id_type'] ?? null,
-                'official_id_number_ciphertext' => $officialIdNumber === null ? null : $this->protectorDatos->cifrarIdentificacion($officialIdNumber),
-                'official_id_number_hmac' => $officialIdHmac,
-            ])->save();
+            // El autoguardado manda únicamente los campos ya válidos. No se
+            // deben convertir en null los demás valores existentes.
+            $atributos = [];
+            foreach (['first_name', 'first_last_name', 'second_last_name'] as $campo) {
+                if (array_key_exists($campo, $datos)) {
+                    $atributos[$campo] = $this->normalizarNombre($datos[$campo]);
+                }
+            }
+            foreach (['nationality', 'birth_date', 'identification_country', 'official_id_type'] as $campo) {
+                if (array_key_exists($campo, $datos)) {
+                    $atributos[$campo] = $datos[$campo];
+                }
+            }
+            foreach (['birth_country', 'birth_state', 'birth_city', 'phone_number'] as $campo) {
+                if (array_key_exists($campo, $datos)) {
+                    $atributos[$campo] = $this->limpiarTexto($datos[$campo]);
+                }
+            }
+            if (array_key_exists('birth_place', $datos)) {
+                $atributos['birth_place'] = $this->limpiarTexto($datos['birth_place']);
+            } elseif (array_key_exists('birth_country', $datos)
+                || array_key_exists('birth_state', $datos)
+                || array_key_exists('birth_city', $datos)) {
+                $atributos['birth_place'] = $this->formatearLugarNacimiento(
+                    $atributos['birth_city'] ?? $registro->birth_city,
+                    $atributos['birth_state'] ?? $registro->birth_state,
+                    $atributos['birth_country'] ?? $registro->birth_country,
+                );
+            }
+            if (array_key_exists('email', $datos)) {
+                $email = $this->limpiarTexto($datos['email']);
+                $atributos['email'] = $email === null ? null : mb_strtolower($email);
+            }
+            if (array_key_exists('curp', $datos)) {
+                $atributos['curp_ciphertext'] = $curp === null ? null : $this->protectorDatos->cifrarCurp($curp);
+                $atributos['curp_hmac'] = $curpHmac;
+            }
+            if (array_key_exists('rfc', $datos)) {
+                $atributos['rfc_ciphertext'] = $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc);
+                $atributos['rfc_hmac'] = $rfc === null ? null : $this->protectorDatos->generarHmacRfc($rfc);
+            }
+            if (array_key_exists('official_id_number', $datos)) {
+                $atributos['official_id_number_ciphertext'] = $officialIdNumber === null ? null : $this->protectorDatos->cifrarIdentificacion($officialIdNumber);
+                $atributos['official_id_number_hmac'] = $officialIdHmac;
+            }
+
+            $registro->forceFill($atributos)->save();
 
             $this->incrementarVersion($bloqueada);
             $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_PERSONAL_DATA_UPDATED', [], ['fields_updated' => array_keys($datos)]);
@@ -316,6 +337,10 @@ final class ServicioSolicitudDistribuidora
                 $datos[$campo] = $this->normalizarNombre($datos[$campo]);
             }
         }
+
+        // Esta colección corresponde exclusivamente a referencias familiares.
+        // El indicador heredado deja de depender de una selección manual.
+        $datos['is_family_reference'] = true;
 
         /** @var FamiliarSolicitud */
         return $this->guardarRegistro($actor, $solicitud, $datos, $registro ?? new FamiliarSolicitud);

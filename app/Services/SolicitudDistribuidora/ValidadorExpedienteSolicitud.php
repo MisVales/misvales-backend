@@ -138,7 +138,7 @@ final class ValidadorExpedienteSolicitud
             'children' => $this->camposPresentes($solicitud->familiares()->where('relationship', 'CHILD'), [
                 'relationship', 'first_name', 'first_last_name',
             ]),
-            'family_references' => $this->camposPresentes($solicitud->familiares()->where('is_family_reference', true), [
+            'family_references' => $this->camposPresentes($solicitud->familiares(), [
                 'relationship', 'first_name', 'first_last_name',
             ]),
             'vehicles' => $this->camposPresentes($solicitud->vehiculos(), ['vehicle_type']),
@@ -157,7 +157,7 @@ final class ValidadorExpedienteSolicitud
             'residence' => $solicitud->domicilios()->where('is_current', true)->exists(),
             'partner' => $solicitud->familiares()->whereIn('relationship', ['SPOUSE', 'PARTNER'])->exists(),
             'children' => $solicitud->familiares()->where('relationship', 'CHILD')->exists(),
-            'family_references' => $solicitud->familiares()->where('is_family_reference', true)->exists(),
+            'family_references' => $solicitud->familiares()->exists(),
             'vehicles' => $solicitud->vehiculos()->exists(),
             'assets' => $solicitud->patrimonio()->where('entry_type', 'ASSET')->exists(),
             'liabilities' => $solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->exists(),
@@ -171,7 +171,6 @@ final class ValidadorExpedienteSolicitud
     {
         return match ($seccion) {
             'family_references' => $solicitud->familiares()
-                ->where('is_family_reference', false)
                 ->where(function ($consulta): void {
                     $consulta
                         ->whereNull('relationship')

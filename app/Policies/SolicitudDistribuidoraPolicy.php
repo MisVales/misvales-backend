@@ -58,11 +58,6 @@ final class SolicitudDistribuidoraPolicy
 
     public function submit(User $user, SolicitudDistribuidora $solicitud): bool
     {
-        // COORDINADOR -> autorización final DENEGADO
-        if ($user->hasRole('coordinator')) {
-            return false;
-        }
-
         return $user->hasPermissionTo('distributor_applications.submit')
             && $this->puedeOperar($user, $solicitud);
     }

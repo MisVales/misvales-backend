@@ -21,9 +21,9 @@ final class GuardarDatosPersonalesRequest extends FormRequest
         $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'nationality' => ['required', Rule::in(['MEXICAN', 'FOREIGN'])],
-            'first_name' => ['required', 'string', 'max:120'],
-            'first_last_name' => ['required', 'string', 'max:120'],
-            'second_last_name' => ['nullable', 'string', 'max:120'],
+            'first_name' => ['required', 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
+            'first_last_name' => ['required', 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
+            'second_last_name' => ['nullable', 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
             'curp' => ['required_if:nationality,MEXICAN', 'nullable', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i'],
             'rfc' => ['nullable', 'string', 'regex:/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
@@ -45,6 +45,9 @@ final class GuardarDatosPersonalesRequest extends FormRequest
     {
         return [
             'birth_date.before_or_equal' => 'La persona solicitante debe tener al menos 18 años.',
+            'first_name.regex' => 'El nombre sólo puede contener letras.',
+            'first_last_name.regex' => 'El apellido paterno sólo puede contener letras.',
+            'second_last_name.regex' => 'El apellido materno sólo puede contener letras.',
         ];
     }
 }

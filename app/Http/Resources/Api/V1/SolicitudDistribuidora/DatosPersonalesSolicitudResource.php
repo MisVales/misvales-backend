@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1\SolicitudDistribuidora;
 
+use App\Models\MediaFileBinding;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -35,6 +36,11 @@ final class DatosPersonalesSolicitudResource extends JsonResource
             'official_id_type' => $this->official_id_type,
             'official_id_number_masked' => $this->official_id_number_ciphertext === null ? null : $protector->enmascarar($protector->descifrar($this->official_id_number_ciphertext), 2, 2),
             'official_id_number' => $this->when($puedeVerCompletos, fn (): ?string => $this->official_id_number_ciphertext === null ? null : $protector->descifrar($this->official_id_number_ciphertext)),
+            'has_identification_evidence' => MediaFileBinding::query()
+                ->where('owner_type', 'distributor_application')
+                ->where('owner_id', $this->application_id)
+                ->where('purpose', 'IDENTIFICATION')
+                ->exists(),
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),
             'application_lock_version' => $this->when($this->application_lock_version !== null, $this->application_lock_version),
