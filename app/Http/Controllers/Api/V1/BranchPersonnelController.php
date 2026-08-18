@@ -50,8 +50,8 @@ class BranchPersonnelController extends Controller
 
         // Use RoleAssignmentPolicyService to validate assignment rules
         $policyService = app(RoleAssignmentPolicyService::class);
-        if (!method_exists($policyService, 'validateAssignment')) {
-            throw new \Exception('validateAssignment method does not exist on ' . get_class($policyService));
+        if (! method_exists($policyService, 'validateAssignment')) {
+            throw new \Exception('validateAssignment method does not exist on '.get_class($policyService));
         }
 
         $validationResult = $policyService->validateAssignment(
@@ -62,7 +62,7 @@ class BranchPersonnelController extends Controller
         );
 
         if ($validationResult !== true) {
-            return response()->json(['message' => 'Error al asignar rol: ' . $validationResult], 403);
+            return response()->json(['message' => 'Error al asignar rol: '.$validationResult], 403);
         }
 
         return DB::transaction(function () use ($request, $branch, $user, $role) {

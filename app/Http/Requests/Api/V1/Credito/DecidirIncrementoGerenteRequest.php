@@ -25,10 +25,10 @@ class DecidirIncrementoGerenteRequest extends FormRequest
                 function ($attribute, $value, $fail) {
                     if ($this->input('decision') === 'APPROVE_LOWER') {
                         if (bccomp($value, '0.0000', 4) <= 0) {
-                            $fail("El importe autorizado debe ser mayor que cero.");
+                            $fail('El importe autorizado debe ser mayor que cero.');
                         }
                     }
-                }
+                },
             ],
         ];
     }

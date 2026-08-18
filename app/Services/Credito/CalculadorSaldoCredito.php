@@ -12,21 +12,17 @@ class CalculadorSaldoCredito
     /**
      * Calcula el saldo disponible a partir del total autorizado y el saldo usado.
      * Utiliza escala de 4 decimales según las reglas de negocio.
-     *
-     * @param string $totalAuthorized
-     * @param string $usedBalance
-     * @return array
      */
     public function calcular(string $totalAuthorized, string $usedBalance): array
     {
         // Validar que used_balance >= 0
         if (bccomp($usedBalance, '0.0000', 4) < 0) {
-            throw new InvalidArgumentException("Estado inconsistente: used_balance no puede ser negativo.");
+            throw new InvalidArgumentException('Estado inconsistente: used_balance no puede ser negativo.');
         }
 
         // Validar que used_balance <= total_authorized
         if (bccomp($usedBalance, $totalAuthorized, 4) > 0) {
-            throw new InvalidArgumentException("Estado inconsistente: used_balance no puede ser mayor a total_authorized.");
+            throw new InvalidArgumentException('Estado inconsistente: used_balance no puede ser mayor a total_authorized.');
         }
 
         // available_balance = total_authorized - used_balance
@@ -48,7 +44,7 @@ class CalculadorSaldoCredito
         // Obtener el último movimiento inmutable de la línea
         $ultimoMovimiento = $linea->movimientos()->orderBy('sequence', 'desc')->first();
 
-        if (!$ultimoMovimiento) {
+        if (! $ultimoMovimiento) {
             return; // No hay movimientos aún, nada que verificar contra el ledger
         }
 
@@ -59,8 +55,8 @@ class CalculadorSaldoCredito
         $inconsistenciaUsado = bccomp($linea->used_balance, $ledgerUsedBalance, 4) !== 0;
 
         if ($inconsistenciaTotal || $inconsistenciaUsado) {
-            $reason = "Inconsistencia grave detectada en línea {$linea->id}. " .
-                "Físico (auth: {$linea->total_authorized}, usado: {$linea->used_balance}). " .
+            $reason = "Inconsistencia grave detectada en línea {$linea->id}. ".
+                "Físico (auth: {$linea->total_authorized}, usado: {$linea->used_balance}). ".
                 "Ledger (auth: {$ledgerTotalAuthorized}, usado: {$ledgerUsedBalance}).";
 
             Log::critical($reason);
@@ -83,9 +79,9 @@ class CalculadorSaldoCredito
                 'ERROR'
             );
 
-            // Importante: No corregir silenciosamente. 
+            // Importante: No corregir silenciosamente.
             // Lanzamos excepción para abortar la operación que lo detectó.
-            throw new InvalidArgumentException("Inconsistencia en el libro de la línea de crédito. Reconstrucción fallida.");
+            throw new InvalidArgumentException('Inconsistencia en el libro de la línea de crédito. Reconstrucción fallida.');
         }
     }
 }

@@ -6,8 +6,8 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
-use App\Models\Role;
 use App\Models\Distribuidora;
+use App\Models\Role;
 use App\Models\SolicitudDistribuidora;
 use App\Models\User;
 use App\Models\UserRoleScope;

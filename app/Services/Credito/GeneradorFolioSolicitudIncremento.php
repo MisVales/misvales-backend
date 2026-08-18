@@ -15,7 +15,7 @@ class GeneradorFolioSolicitudIncremento
         // Ejemplo: "INC-2026-ABCD"
         $shortId = strtoupper(substr($solicitud->id, 0, 4));
         $year = date('Y');
-        
+
         return "INC-{$year}-{$shortId}";
     }
 }

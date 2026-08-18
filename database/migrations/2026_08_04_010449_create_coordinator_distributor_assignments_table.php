@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -66,8 +66,8 @@ return new class extends Migration
 
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("
+                if (DB::getDriverName() !== 'sqlite') {
+                    DB::statement("
                 CREATE OR REPLACE FUNCTION prevent_cda_deletion()
                 RETURNS trigger AS $$
                 BEGIN
@@ -75,13 +75,13 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             ");
-            DB::statement('
+                    DB::statement('
                 CREATE TRIGGER trg_prevent_cda_deletion
                 BEFORE DELETE ON coordinator_distributor_assignments
                 FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
             ');
-        }
-        }
+                }
+            }
         }
     }
 
@@ -92,12 +92,11 @@ return new class extends Migration
     {
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
-            DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
-        }
+                DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
+                DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
+            }
         }
 
         Schema::dropIfExists('coordinator_distributor_assignments');
     }
 };
-

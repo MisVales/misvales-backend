@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -116,9 +116,9 @@ return new class extends Migration
         });
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan fÃ­sicamente.'; END; $$ LANGUAGE plpgsql");
-        DB::statement('CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW EXECUTE FUNCTION prevent_voucher_deletion()');
-        }
+                DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan fÃ­sicamente.'; END; $$ LANGUAGE plpgsql");
+                DB::statement('CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW EXECUTE FUNCTION prevent_voucher_deletion()');
+            }
         }
     }
 
@@ -126,7 +126,7 @@ return new class extends Migration
     {
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_voucher_deletion ON vouchers');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_voucher_deletion()');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_voucher_deletion()');
         }
         Schema::table('client_portfolio_entries', function (Blueprint $table): void {
             $table->dropForeign(['related_voucher_id']);
@@ -142,4 +142,3 @@ return new class extends Migration
         }
     }
 };
-

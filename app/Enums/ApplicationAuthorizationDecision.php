@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Enums;
 
-enum ApplicationAuthorizationDecision: string {
+enum ApplicationAuthorizationDecision: string
+{
     case APPROVED = 'APPROVED';
     case REJECTED = 'REJECTED';
 }

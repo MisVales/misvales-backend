@@ -27,8 +27,6 @@ class Branch extends Model
         'lock_version' => 'integer',
     ];
 
-
-
     public function creator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'created_by');

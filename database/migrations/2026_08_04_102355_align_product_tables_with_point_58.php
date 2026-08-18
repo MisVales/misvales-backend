@@ -1,9 +1,9 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -18,20 +18,20 @@ return new class extends Migration
         // Drop checks that depend on columns to be renamed
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_amount');
-        }
+                DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_amount');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_amount_mod');
-        }
+                DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_amount_mod');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_commission');
-        }
+                DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_commission');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_interest');
-        }
+                DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_interest');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_fortnights');
-        }
+                DB::statement('ALTER TABLE product_versions DROP CONSTRAINT chk_pv_fortnights');
+            }
         }
 
         Schema::table('product_versions', function (Blueprint $table) {
@@ -47,18 +47,18 @@ return new class extends Migration
         // Recreate checks
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_nominal_amount CHECK (nominal_amount > 0)");
-        }
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_nominal_amount_mod CHECK (mod(nominal_amount, 100.0000) = 0)");
+                DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_nominal_amount CHECK (nominal_amount > 0)');
+            }
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_nominal_amount_mod CHECK (mod(nominal_amount, 100.0000) = 0)');
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_loan_commission CHECK (loan_commission_percentage >= 0 AND loan_commission_percentage <= 1)");
-        }
+                DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_loan_commission CHECK (loan_commission_percentage >= 0 AND loan_commission_percentage <= 1)');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_simple_interest CHECK (simple_interest_percentage >= 0 AND simple_interest_percentage <= 1)");
-        }
+                DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_simple_interest CHECK (simple_interest_percentage >= 0 AND simple_interest_percentage <= 1)');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights_count CHECK (fortnights_count > 0)");
-        }
+                DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights_count CHECK (fortnights_count > 0)');
+            }
         }
     }
 
@@ -97,20 +97,19 @@ return new class extends Migration
         });
 
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0)");
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0)');
         }
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0)");
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0)');
         }
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_commission CHECK (loan_commission_rate >= 0 AND loan_commission_rate <= 1)");
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_commission CHECK (loan_commission_rate >= 0 AND loan_commission_rate <= 1)');
         }
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_interest CHECK (interest_rate_per_fortnight >= 0 AND interest_rate_per_fortnight <= 1)");
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_interest CHECK (interest_rate_per_fortnight >= 0 AND interest_rate_per_fortnight <= 1)');
         }
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights CHECK (fortnights > 0)");
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_fortnights CHECK (fortnights > 0)');
         }
     }
 };
-

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1\Auth;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Mail\Security\SecurityAlertMail;
 use App\Models\AuthSession;
@@ -61,14 +62,14 @@ class AuthController extends Controller
         // 1. Bloqueo Progresivo Ciego (Punto 42)
         $lockoutSeconds = $rateLimitEnabled ? $lockoutService->checkLockout($ip, $email) : null;
         if ($lockoutSeconds) {
-            return response()->json(['error' => 'RATE_LIMIT_EXCEEDED', 'message' => "Demasiados intentos. Intente nuevamente en {$lockoutSeconds} segundos."], 429);
+            throw new ApiException('RATE_LIMIT_EXCEEDED', "Demasiados intentos. Intente nuevamente en {$lockoutSeconds} segundos.", 429);
         }
 
         // 2. Rate Limiting General (Punto 41)
         if ($rateLimitEnabled && RateLimiter::tooManyAttempts($throttleKey, 5)) {
             $seconds = RateLimiter::availableIn($throttleKey);
 
-            return response()->json(['error' => 'RATE_LIMIT_EXCEEDED', 'message' => "Demasiados intentos. Intente nuevamente en {$seconds} segundos."], 429);
+            throw new ApiException('RATE_LIMIT_EXCEEDED', "Demasiados intentos. Intente nuevamente en {$seconds} segundos.", 429);
         }
 
         $user = User::where('normalized_email', $email)->first();
@@ -88,7 +89,7 @@ class AuthController extends Controller
             ]);
 
             // Mensaje Ciego: idéntico si existe o no existe
-            return response()->json(['error' => 'INVALID_CREDENTIALS', 'message' => 'Credenciales inválidas.'], 401);
+            throw new ApiException('INVALID_CREDENTIALS', 'Credenciales inválidas.', 401);
         }
 
         // 4. Verificación de contraseña
@@ -106,7 +107,7 @@ class AuthController extends Controller
                 'metadata' => ['email' => $email, 'reason' => 'invalid_password'],
             ]);
 
-            return response()->json(['error' => 'INVALID_CREDENTIALS', 'message' => 'Credenciales inválidas.'], 401);
+            throw new ApiException('INVALID_CREDENTIALS', 'Credenciales inválidas.', 401);
         }
 
         // Éxito: Limpiamos los contadores
@@ -155,18 +156,18 @@ class AuthController extends Controller
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
         if (! $sessionState || ! is_array($sessionState)) {
-            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+            throw new ApiException('EXPIRED_MFA_CHALLENGE', 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.', 400);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (! $user) {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+            throw new ApiException('INVALID_SESSION', 'Usuario no encontrado.', 404);
         }
 
         $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
         if (! $mfaCredential) {
-            return response()->json(['error' => 'INVALID_MFA', 'message' => 'No hay configuración MFA activa para este usuario.'], 403);
+            throw new ApiException('INVALID_MFA', 'No hay configuración MFA activa para este usuario.', 403);
         }
 
         $secret = Crypt::decryptString($mfaCredential->secret_ciphertext);
@@ -187,7 +188,7 @@ class AuthController extends Controller
                 'metadata' => ['mfa_type' => 'TOTP'],
             ]);
 
-            return response()->json(['error' => 'INVALID_MFA', 'message' => 'El código de autenticador es incorrecto o ya fue utilizado.'], 401);
+            throw new ApiException('INVALID_MFA', 'El código de autenticador es incorrecto o ya fue utilizado.', 401);
         }
 
         app(SecurityAuditService::class)->log($request, [
@@ -259,17 +260,17 @@ class AuthController extends Controller
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
         if (! $sessionState || ! is_array($sessionState)) {
-            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+            throw new ApiException('EXPIRED_MFA_CHALLENGE', 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.', 400);
         }
 
         if (! $sessionState['totp_verified']) {
-            return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
+            throw new ApiException('REQUIRES_TOTP_FIRST', 'Debe verificar su TOTP primero.', 403);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (! $user) {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+            throw new ApiException('INVALID_SESSION', 'Usuario no encontrado.', 404);
         }
 
         // Check if user has a passkey
@@ -279,7 +280,7 @@ class AuthController extends Controller
             ->get();
 
         if ($credentials->isEmpty()) {
-            return response()->json(['error' => 'INVALID_MFA', 'message' => 'No hay configuración Passkey activa para este usuario.'], 403);
+            throw new ApiException('INVALID_MFA', 'No hay configuración Passkey activa para este usuario.', 403);
         }
 
         $credentialIds = $credentials->pluck('credential_identifier')->toArray();
@@ -309,16 +310,16 @@ class AuthController extends Controller
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
         if (! $sessionState || ! is_array($sessionState)) {
-            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+            throw new ApiException('EXPIRED_MFA_CHALLENGE', 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.', 400);
         }
 
         if (! $sessionState['totp_verified']) {
-            return response()->json(['error' => 'REQUIRES_TOTP_FIRST', 'message' => 'Debe verificar su TOTP primero.'], 403);
+            throw new ApiException('REQUIRES_TOTP_FIRST', 'Debe verificar su TOTP primero.', 403);
         }
 
         $cachedOptions = Cache::get("passkey_login_{$challengeHash}");
         if (! $cachedOptions) {
-            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+            throw new ApiException('EXPIRED_PASSKEY_SESSION', 'Sesión expirada.', 400);
         }
 
         $options = unserialize($cachedOptions);
@@ -326,7 +327,7 @@ class AuthController extends Controller
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (! $user) {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+            throw new ApiException('INVALID_SESSION', 'Usuario no encontrado.', 404);
         }
 
         // Convert base64url (from frontend) to standard base64
@@ -352,7 +353,7 @@ class AuthController extends Controller
                 ->first();
 
             if (! $mfaCredential) {
-                return response()->json(['error' => 'INVALID_MFA', 'message' => 'Credencial no encontrada.'], 403);
+                throw new ApiException('INVALID_MFA', 'Credencial no encontrada.', 403);
             }
         }
 
@@ -407,7 +408,7 @@ class AuthController extends Controller
                 'metadata' => ['mfa_type' => 'PASSKEY', 'reason' => $e->getMessage()],
             ]);
 
-            return response()->json(['error' => 'INVALID_MFA', 'message' => 'Autenticación con Passkey fallida.'], 401);
+            throw new ApiException('INVALID_MFA', 'Autenticación con Passkey fallida.', 401);
         }
     }
 
@@ -425,13 +426,13 @@ class AuthController extends Controller
         $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
 
         if (! $sessionState || ! is_array($sessionState)) {
-            return response()->json(['error' => 'EXPIRED_MFA_CHALLENGE', 'message' => 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.'], 400);
+            throw new ApiException('EXPIRED_MFA_CHALLENGE', 'El desafío MFA es inválido o ha expirado. Inicie sesión nuevamente.', 400);
         }
 
         $userId = $sessionState['user_id'];
         $user = User::find($userId);
         if (! $user) {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Usuario no encontrado.'], 404);
+            throw new ApiException('INVALID_SESSION', 'Usuario no encontrado.', 404);
         }
 
         $codeHash = hash('sha256', $request->recovery_code);
@@ -457,7 +458,7 @@ class AuthController extends Controller
                 'metadata' => ['mfa_type' => 'RECOVERY_CODE'],
             ]);
 
-            return response()->json(['error' => 'RECOVERY_CODE_USED', 'message' => 'El código de rescate es incorrecto o ya fue utilizado.'], 401);
+            throw new ApiException('RECOVERY_CODE_USED', 'El código de rescate es incorrecto o ya fue utilizado.', 401);
         }
 
         app(SecurityAuditService::class)->log($request, [
@@ -511,19 +512,19 @@ class AuthController extends Controller
         $refreshToken = $request->cookie(self::REFRESH_COOKIE);
 
         if (! is_string($refreshToken) || $refreshToken === '') {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Refresh token inválido o expirado.'], 401);
+            throw new ApiException('INVALID_SESSION', 'Refresh token inválido o expirado.', 401);
         }
 
         $hash = hash('sha256', $refreshToken);
         $data = Cache::get("auth_refresh_{$hash}");
 
         if (! $data) {
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Refresh token inválido o expirado.'], 401);
+            throw new ApiException('INVALID_SESSION', 'Refresh token inválido o expirado.', 401);
         }
 
         $user = User::find($data['user_id']);
         if (! $user || $user->state !== 'ACTIVE') {
-            return response()->json(['error' => 'ACCOUNT_INACTIVE', 'message' => 'Usuario inactivo.'], 401);
+            throw new ApiException('ACCOUNT_INACTIVE', 'Usuario inactivo.', 401);
         }
 
         // Buscar la sesión original
@@ -531,7 +532,7 @@ class AuthController extends Controller
         if (! $session || $session->revoked_at || ($session->expires_at && $session->expires_at->isPast())) {
             Cache::forget("auth_refresh_{$hash}");
 
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'La sesión maestra ha expirado o fue revocada.'], 401);
+            throw new ApiException('INVALID_SESSION', 'La sesión maestra ha expirado o fue revocada.', 401);
         }
 
         // Validar inactividad en el refresco
@@ -540,7 +541,7 @@ class AuthController extends Controller
             $session->update(['revoked_at' => now(), 'revocation_reason' => 'INACTIVITY_TIMEOUT_ON_REFRESH']);
             Cache::forget("auth_refresh_{$hash}");
 
-            return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Sesión cerrada por inactividad.'], 401);
+            throw new ApiException('INVALID_SESSION', 'Sesión cerrada por inactividad.', 401);
         }
 
         // Revocar token de Sanctum anterior (si sigue vivo)

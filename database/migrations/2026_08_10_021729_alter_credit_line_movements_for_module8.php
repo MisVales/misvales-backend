@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -16,8 +16,8 @@ return new class extends Migration
             }
 
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
-        }
+                DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
+            }
             Schema::table('credit_line_movements', function (Blueprint $table): void {
                 $table->dropColumn(['balance_before', 'balance_after', 'updated_at']);
                 $table->dropConstrainedForeignId('created_by');
@@ -55,7 +55,7 @@ return new class extends Migration
             $table->dropUnique(['credit_line_id', 'sequence']);
             $table->dropIndex(['distributor_id', 'occurred_at']);
             $table->dropIndex(['credit_line_id', 'occurred_at']);
-            
+
             $table->dropConstrainedForeignId('authorized_by');
             $table->dropConstrainedForeignId('performed_by');
             $table->dropConstrainedForeignId('distributor_id');
@@ -68,7 +68,7 @@ return new class extends Migration
                 'used_balance_after',
                 'reason',
                 'idempotency_key',
-                'occurred_at'
+                'occurred_at',
             ]);
 
             $table->decimal('balance_before', 19, 4);
@@ -82,4 +82,3 @@ return new class extends Migration
         }
     }
 };
-

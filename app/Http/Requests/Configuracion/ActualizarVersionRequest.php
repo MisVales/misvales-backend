@@ -2,8 +2,8 @@
 
 namespace App\Http\Requests\Configuracion;
 
-use Illuminate\Foundation\Http\FormRequest;
 use App\Models\ConfigurationVersion;
+use Illuminate\Foundation\Http\FormRequest;
 
 class ActualizarVersionRequest extends FormRequest
 {

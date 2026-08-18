@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Models\Branch;
+use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 class BranchFactory extends Factory
@@ -15,7 +16,7 @@ class BranchFactory extends Factory
             'name' => fake()->company(),
             'code' => fake()->unique()->numerify('BR-####'),
             'status' => 'ACTIVE',
-            'created_by' => \App\Models\User::factory(),
+            'created_by' => User::factory(),
         ];
     }
 }

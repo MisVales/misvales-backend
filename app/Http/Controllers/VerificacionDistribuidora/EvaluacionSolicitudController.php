@@ -1,31 +1,36 @@
 <?php
+
 namespace App\Http\Controllers\VerificacionDistribuidora;
 
-use App\Http\Controllers\Controller;
-use App\Services\VerificacionDistribuidora\ServicioEvaluacionSolicitud;
-use Illuminate\Http\JsonResponse;
-use App\Http\Requests\VerificacionDistribuidora\EvaluarSolicitudRequest;
 use App\Enums\ApplicationEvaluationResult;
+use App\Http\Controllers\Controller;
+use App\Http\Requests\VerificacionDistribuidora\EvaluarSolicitudRequest;
+use App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource;
+use App\Services\VerificacionDistribuidora\ServicioEvaluacionSolicitud;
 
-class EvaluacionSolicitudController extends Controller {
-    
+class EvaluacionSolicitudController extends Controller
+{
     public function __construct(private ServicioEvaluacionSolicitud $evaluacionService) {}
 
-    public function consultarEvaluacion(string $applicationId) {
+    public function consultarEvaluacion(string $applicationId)
+    {
         $eval = $this->evaluacionService->consultarEvaluacion($applicationId, auth()->id());
-        return new \App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource($eval);
+
+        return new ApplicationEvaluationResource($eval);
     }
 
-    public function evaluar(EvaluarSolicitudRequest $request, string $applicationId) {
+    public function evaluar(EvaluarSolicitudRequest $request, string $applicationId)
+    {
         $data = $request->validated();
         $eval = $this->evaluacionService->evaluar(
-            $applicationId, 
+            $applicationId,
             $data['visit_id'],
-            ApplicationEvaluationResult::from($data['result']), 
-            $data['reason'], 
+            ApplicationEvaluationResult::from($data['result']),
+            $data['reason'],
             auth()->id(),
             $data['payload'] ?? null, (int) $data['lock_version']
         );
+
         return response()->json(['message' => 'Evaluación registrada exitosamente.', 'data' => $eval]);
     }
 }

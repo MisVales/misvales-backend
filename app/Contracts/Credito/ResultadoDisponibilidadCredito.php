@@ -15,6 +15,5 @@ class ResultadoDisponibilidadCredito
         public readonly ?string $upper_limit,
         public readonly bool $capital_is_available,
         public readonly bool $capital_satisfies_restriction,
-    ) {
-    }
+    ) {}
 }

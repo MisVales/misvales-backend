@@ -3,6 +3,7 @@
 namespace Database\Factories;
 
 use App\Enums\EstadoSolicitudIncremento;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
@@ -18,10 +19,10 @@ class SolicitudIncrementoLineaFactory extends Factory
         $importe = fake()->numberBetween(10000000, 100000000);
 
         return [
-            'request_number' => 'INC-2026-' . fake()->unique()->numerify('######'),
+            'request_number' => 'INC-2026-'.fake()->unique()->numerify('######'),
             'credit_line_id' => LineaCredito::factory(),
             'distributor_id' => fn (array $attributes) => LineaCredito::query()->findOrFail($attributes['credit_line_id'])->distributor_id,
-            'branch_id' => fn (array $attributes) => \App\Models\Distribuidora::query()->findOrFail($attributes['distributor_id'])->branch_id,
+            'branch_id' => fn (array $attributes) => Distribuidora::query()->findOrFail($attributes['distributor_id'])->branch_id,
             'coordinator_id' => User::factory(),
             'status' => EstadoSolicitudIncremento::REQUESTED,
             'requested_amount' => bcdiv((string) $importe, '10000', 4),
@@ -51,6 +52,7 @@ class SolicitudIncrementoLineaFactory extends Factory
     {
         return $this->state(function (array $attributes) {
             $recommended = bcmul($attributes['requested_amount'], '0.8', 4);
+
             return [
                 'status' => EstadoSolicitudIncremento::PREAUTHORIZED,
                 'recommended_amount' => $recommended,
@@ -79,6 +81,7 @@ class SolicitudIncrementoLineaFactory extends Factory
         return $this->state(function (array $attributes) {
             $recommended = bcmul($attributes['requested_amount'], '0.8', 4);
             $authorized = bcmul($recommended, '0.9', 4);
+
             return [
                 'status' => EstadoSolicitudIncremento::AUTHORIZED_PARTIAL,
                 'recommended_amount' => $recommended,

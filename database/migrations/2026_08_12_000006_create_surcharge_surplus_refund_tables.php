@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -79,4 +79,3 @@ return new class extends Migration
         DB::statement('ALTER TABLE relation_payments ALTER COLUMN bank_movement_id SET NOT NULL');
     }
 };
-

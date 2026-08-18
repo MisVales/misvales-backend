@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -16,11 +16,11 @@ return new class extends Migration
             }
 
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
-        }
+                DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
-        }
+                DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
+            }
             Schema::table('credit_usage_restrictions', function (Blueprint $table): void {
                 $table->dropUnique('credit_usage_restrictions_credit_line_id_type_unique');
                 $table->dropColumn('voucher_id');
@@ -83,9 +83,8 @@ return new class extends Migration
             ]);
 
             $table->uuid('voucher_id')->nullable();
-            
+
             $table->unique(['credit_line_id', 'type']);
         });
     }
 };
-

@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\BaseStatus;
+use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Concerns\HasOptimisticLocking;
 
 class ConfigurationDefinition extends Model
 {
-    use HasFactory, HasUuids, HasOptimisticLocking;
+    use HasFactory, HasOptimisticLocking, HasUuids;
 
     protected $fillable = [
         'key',
@@ -28,7 +29,7 @@ class ConfigurationDefinition extends Model
     protected $casts = [
         'is_required' => 'boolean',
         'is_sensitive' => 'boolean',
-        'status' => \App\Enums\BaseStatus::class,
+        'status' => BaseStatus::class,
     ];
 
     public function versions()

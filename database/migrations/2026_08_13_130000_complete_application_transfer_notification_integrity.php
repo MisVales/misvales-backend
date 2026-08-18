@@ -51,7 +51,7 @@ return new class extends Migration
 
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update_delete ON notification_deliveries');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_notification_deliveries_mutation()');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_notification_deliveries_mutation()');
         }
         Schema::table('notification_deliveries', function (Blueprint $table): void {
             $table->string('recipient_address')->nullable();
@@ -124,4 +124,3 @@ return new class extends Migration
         }
     }
 };
-

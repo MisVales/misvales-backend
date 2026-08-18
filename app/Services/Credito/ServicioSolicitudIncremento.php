@@ -2,9 +2,9 @@
 
 namespace App\Services\Credito;
 
+use App\Models\ConfigurationDefinition;
 use App\Models\LineaCredito;
 use App\Models\SolicitudIncrementoLinea;
-use App\Models\ConfigurationDefinition;
 use Illuminate\Support\Facades\DB;
 
 class ServicioSolicitudIncremento
@@ -25,20 +25,20 @@ class ServicioSolicitudIncremento
                 ->exists();
 
             if ($pendiente) {
-                throw new \Exception("Ya existe una solicitud de incremento en proceso.");
+                throw new \Exception('Ya existe una solicitud de incremento en proceso.');
             }
 
             // Validar Regla de Integración: Obtener tolerancia desde DB (no hardcoded)
             $configDef = ConfigurationDefinition::where('key', 'CREDIT_TOLERANCE_AMOUNT')->first();
-            if (!$configDef) {
-                throw new \Exception("Falta configuración global CREDIT_TOLERANCE_AMOUNT.");
+            if (! $configDef) {
+                throw new \Exception('Falta configuración global CREDIT_TOLERANCE_AMOUNT.');
             }
-            
+
             $activeVersion = $configDef->versions()
                 ->where('status', 'PUBLISHED')
                 ->whereNull('effective_to')
                 ->first();
-                
+
             $tolerancia = $activeVersion ? (string) json_decode($activeVersion->value) : '0.00';
 
             // Verificar si el saldo disponible es menor o igual a la tolerancia

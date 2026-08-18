@@ -12,7 +12,7 @@ class CalculadorSaldoCreditoTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->calculador = new CalculadorSaldoCredito();
+        $this->calculador = new CalculadorSaldoCredito;
     }
 
     public function test_calcula_saldo_disponible_correctamente()

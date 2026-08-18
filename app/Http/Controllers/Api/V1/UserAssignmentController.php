@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReauthenticatesMfa;
 use App\Models\Role;
@@ -66,7 +67,7 @@ class UserAssignmentController extends Controller
 
             if ($validationResult !== true) {
                 // If it's a string message rather than an exception
-                abort(403, $validationResult);
+                throw new ApiException('AUTH_SCOPE_DENIED', $validationResult, 403);
             }
 
             // Evitar asignaciones duplicadas (mismo rol en la misma sucursal para el mismo usuario)
@@ -78,7 +79,7 @@ class UserAssignmentController extends Controller
                 ->exists();
 
             if ($exists) {
-                abort(400, 'El usuario ya tiene este rol asignado en este alcance.');
+                throw new ApiException('BAD_REQUEST', 'El usuario ya tiene este rol asignado en este alcance.', 400);
             }
 
             $assignment = UserRoleScope::create([

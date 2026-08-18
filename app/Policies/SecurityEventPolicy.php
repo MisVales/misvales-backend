@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\SecurityEvent;
 use App\Models\User;
 
 class SecurityEventPolicy

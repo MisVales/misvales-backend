@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Api\V1\Cliente;
 
+use App\Exceptions\ApiException;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 class RegistrarMovimientoCarteraRequest extends FormRequest
@@ -33,12 +33,6 @@ class RegistrarMovimientoCarteraRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new HttpResponseException(response()->json(['error' => [
-            'code' => 'CLIENT_PORTFOLIO_ENTRY_INVALID',
-            'message' => 'El movimiento de cartera no es válido.',
-            'fields' => $validator->errors(),
-            'details' => (object) [],
-            'request_id' => $this->attributes->get('request_id'),
-        ]], 422));
+        throw new ApiException('CLIENT_PORTFOLIO_ENTRY_INVALID', 'El movimiento de cartera no es vÃ¡lido.', 422, $validator->errors()->toArray(), []);
     }
 }

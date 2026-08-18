@@ -63,7 +63,7 @@ final readonly class AssignPersonnel
             if ($organizationBranch->status() !== BranchStatus::ACTIVE) {
                 throw new BranchInactive($branchId);
             }
-            
+
             if ($role['code'] === 'branch_manager' && $organizationBranch->isHeadquarters()) {
                 throw new \DomainException('La sucursal matriz no puede tener gerente de sucursal.');
             }

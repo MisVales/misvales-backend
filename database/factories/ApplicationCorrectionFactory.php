@@ -1,16 +1,21 @@
 <?php
+
 namespace Database\Factories;
+
+use App\Enums\ApplicationCorrectionSection;
 use App\Models\ApplicationCorrection;
 use App\Models\DistributorApplication;
-use App\Models\VerificationVisit;
 use App\Models\User;
+use App\Models\VerificationVisit;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
-use App\Enums\ApplicationCorrectionSection;
 
-class ApplicationCorrectionFactory extends Factory {
+class ApplicationCorrectionFactory extends Factory
+{
     protected $model = ApplicationCorrection::class;
-    public function definition() {
+
+    public function definition()
+    {
         return [
             'id' => Str::uuid(),
             'application_id' => DistributorApplication::factory(),

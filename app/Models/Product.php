@@ -2,14 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\BaseStatus;
+use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use App\Models\Concerns\HasOptimisticLocking;
 
 class Product extends Model
 {
-    use HasFactory, HasUuids, HasOptimisticLocking;
+    use HasFactory, HasOptimisticLocking, HasUuids;
 
     protected $fillable = [
         'code',
@@ -20,7 +21,7 @@ class Product extends Model
     ];
 
     protected $casts = [
-        'status' => \App\Enums\BaseStatus::class,
+        'status' => BaseStatus::class,
     ];
 
     public function versions()

@@ -15,7 +15,7 @@ class EvaluadorReglaCincuenta
         $availableBalance = bcadd($availableBalance, '0.0000', 4);
 
         // Cuando no exista restricción vigente, devolver nulls y no inventar un rango.
-        if (!$restriccion) {
+        if (! $restriccion) {
             return [
                 'restriction_id' => null,
                 'restriction_type' => null,
@@ -39,7 +39,7 @@ class EvaluadorReglaCincuenta
 
         // temp_lower = reference_amount - tolerance_amount
         $tempLower = bcsub($referenceAmount, $toleranceAmount, 4);
-        
+
         // lower_limit = max(0, reference_amount - tolerance_amount)
         $lowerLimit = bccomp($tempLower, '0.0000', 4) > 0 ? $tempLower : '0.0000';
 

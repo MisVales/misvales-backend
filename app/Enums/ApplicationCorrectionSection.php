@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Enums;
 
-enum ApplicationCorrectionSection: string {
+enum ApplicationCorrectionSection: string
+{
     case PERSONAL_INFO = 'personal_info';
     case PERSONAL_DATA = 'personal_data';
     case FAMILY_MEMBERS = 'family_members';

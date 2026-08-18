@@ -4,6 +4,7 @@ namespace Database\Factories;
 
 use App\Models\Distribuidora;
 use App\Models\LineaCredito;
+use App\Models\RestriccionUsoCredito;
 use Illuminate\Database\Eloquent\Factories\Factory;
 
 /** @extends Factory<LineaCredito> */
@@ -26,7 +27,7 @@ class LineaCreditoFactory extends Factory
     public function withActiveInitialRestriction(): self
     {
         return $this->has(
-            \App\Models\RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
+            RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
                 return [
                     'type' => 'INITIAL_50_PERCENT',
                     'status' => 'ACTIVE',
@@ -40,7 +41,7 @@ class LineaCreditoFactory extends Factory
     public function withActivePostIncreaseRestriction(): self
     {
         return $this->has(
-            \App\Models\RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
+            RestriccionUsoCredito::factory()->state(function (array $attributes, LineaCredito $linea) {
                 return [
                     'type' => 'POST_INCREASE_50_PERCENT',
                     'status' => 'ACTIVE',

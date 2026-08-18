@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1\Auth;
 
 use App\Enums\EstadoDistribuidora;
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Mail\ActivationInvitationMail;
 use App\Models\AccountInvitation;
@@ -41,15 +42,15 @@ class InvitationController extends Controller
         $invitation = AccountInvitation::where('token_hash', $tokenHash)->first();
 
         if (! $invitation) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Invitación inválida o no encontrada.'], 404);
+            throw new ApiException('INVALID_INVITATION', 'Invitación inválida o no encontrada.', 404);
         }
 
         if (! in_array($invitation->state, ['ACTIVE', 'PREPARED'])) {
-            return response()->json(['error' => 'USED_INVITATION', 'message' => 'La invitación ya fue usada o revocada.'], 400);
+            throw new ApiException('USED_INVITATION', 'La invitación ya fue usada o revocada.', 400);
         }
 
         if ($invitation->expires_at->isPast()) {
-            return response()->json(['error' => 'EXPIRED_INVITATION', 'message' => 'La invitación ha expirado.'], 400);
+            throw new ApiException('EXPIRED_INVITATION', 'La invitación ha expirado.', 400);
         }
 
         // Generar un token de intercambio (exchange_token) de un solo uso para continuar el flujo
@@ -128,13 +129,13 @@ class InvitationController extends Controller
         $invitation = AccountInvitation::where('token_hash', $tokenHash)->first();
 
         if (! $invitation) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token proporcionado no existe.'], 404);
+            throw new ApiException('INVALID_INVITATION', 'El token proporcionado no existe.', 404);
         }
 
         $user = $invitation->user;
 
         if ($user->state !== 'PENDING_ACTIVATION') {
-            return response()->json(['error' => 'USER_NOT_PENDING', 'message' => 'La cuenta ya está activa o no es elegible para activación.'], 400);
+            throw new ApiException('USER_NOT_PENDING', 'La cuenta ya está activa o no es elegible para activación.', 400);
         }
 
         // Generar un nuevo token
@@ -191,19 +192,19 @@ class InvitationController extends Controller
             ->first();
 
         if (! $invitation || $invitation->exchange_expires_at->isPast()) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token de intercambio es inválido o ha expirado.'], 400);
+            throw new ApiException('INVALID_INVITATION', 'El token de intercambio es inválido o ha expirado.', 400);
         }
 
         // Si ya configuró el MFA en un request previo a /setup, bloquemos el intento
         if ($invitation->mfa_setup_completed_at !== null) {
-            return response()->json(['error' => 'USED_INVITATION', 'message' => 'La configuración ya fue procesada. Debe confirmar los códigos.'], 400);
+            throw new ApiException('USED_INVITATION', 'La configuración ya fue procesada. Debe confirmar los códigos.', 400);
         }
 
         // Recuperar secreto TOTP de la caché
         $totpSecret = Cache::get("totp_setup_{$exchangeTokenHash}");
 
         if (! $totpSecret) {
-            return response()->json(['error' => 'EXPIRED_INVITATION', 'message' => 'La sesión de configuración MFA ha expirado. Vuelva a inspeccionar la invitación.'], 400);
+            throw new ApiException('EXPIRED_INVITATION', 'La sesión de configuración MFA ha expirado. Vuelva a inspeccionar la invitación.', 400);
         }
 
         // Validar el código TOTP protegiendo contra Replay Attacks
@@ -215,7 +216,7 @@ class InvitationController extends Controller
             $invitation->increment('attempt_count');
             $invitation->update(['last_attempt_at' => now()]);
 
-            return response()->json(['error' => 'INVALID_MFA', 'message' => 'El código de autenticador es incorrecto.'], 401);
+            throw new ApiException('INVALID_MFA', 'El código de autenticador es incorrecto.', 401);
         }
 
         // Generar 10 códigos de recuperación en texto plano (xxxx-xxxx)
@@ -291,7 +292,7 @@ class InvitationController extends Controller
             ->first();
 
         if (! $invitation || $invitation->exchange_expires_at->isPast()) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Token inválido o expirado.'], 400);
+            throw new ApiException('INVALID_INVITATION', 'Token inválido o expirado.', 400);
         }
 
         $options = $webAuthnService->generateRegistrationOptions($invitation->user);
@@ -320,12 +321,12 @@ class InvitationController extends Controller
             ->first();
 
         if (! $invitation || $invitation->exchange_expires_at->isPast()) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'Token inválido o expirado.'], 400);
+            throw new ApiException('INVALID_INVITATION', 'Token inválido o expirado.', 400);
         }
 
         $cachedOptions = Cache::get("passkey_setup_{$exchangeTokenHash}");
         if (! $cachedOptions) {
-            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+            throw new ApiException('EXPIRED_PASSKEY_SESSION', 'Sesión expirada.', 400);
         }
 
         $options = unserialize($cachedOptions);
@@ -352,7 +353,7 @@ class InvitationController extends Controller
 
             return response()->json(['message' => 'Passkey registrado correctamente.']);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: '.$e->getMessage()], 400);
+            throw new ApiException('PASSKEY_REGISTRATION_FAILED', 'Error al registrar el Passkey: '.$e->getMessage(), 400);
         }
     }
 
@@ -375,7 +376,7 @@ class InvitationController extends Controller
             ->first();
 
         if (! $invitation || $invitation->exchange_expires_at->isPast()) {
-            return response()->json(['error' => 'INVALID_INVITATION', 'message' => 'El token de intercambio es inválido, ha expirado, o no se ha completado el setup.'], 400);
+            throw new ApiException('INVALID_INVITATION', 'El token de intercambio es inválido, ha expirado, o no se ha completado el setup.', 400);
         }
 
         $userRoles = $invitation->user->roleScopes()->with('role')->get()->pluck('role.code')->toArray();

@@ -1,24 +1,26 @@
 <?php
+
 namespace Tests\Feature\VerificacionDistribuidora;
+
+use App\Enums\ApplicationStatus;
+use App\Models\Branch;
 use App\Models\DistributorApplication;
 use App\Models\User;
-use App\Models\AuditLog;
-use App\Enums\ApplicationStatus;
-use Illuminate\Foundation\Testing\WithFaker;
 
-class RevisionCoordinadorTest extends Modulo5TestCase {
-    
-    public function test_devolver_a_captura_cambia_estado_y_registra_auditoria() {
-        $branchId = \App\Models\Branch::factory()->create()->id;
+class RevisionCoordinadorTest extends Modulo5TestCase
+{
+    public function test_devolver_a_captura_cambia_estado_y_registra_auditoria()
+    {
+        $branchId = Branch::factory()->create()->id;
         $coordinator = User::factory()->create();
-        
+
         $app = DistributorApplication::factory()->create([
-            'branch_id' => $branchId, 'coordinator_id' => $coordinator->id, 'status' => ApplicationStatus::COORDINATOR_REVIEW
+            'branch_id' => $branchId, 'coordinator_id' => $coordinator->id, 'status' => ApplicationStatus::COORDINATOR_REVIEW,
         ]);
 
         $response = $this->actingAsMfaUser($coordinator, ['coordinator'], $branchId)
             ->postJson("/api/v1/distributor-applications/{$app->id}/return-to-draft", [
-                'reason' => 'Falta foto de comprobante', 'pending_sections' => ['address'], 'lock_version' => $app->lock_version
+                'reason' => 'Falta foto de comprobante', 'pending_sections' => ['address'], 'lock_version' => $app->lock_version,
             ]);
 
         $response->assertStatus(200);
@@ -26,10 +28,11 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
         $this->assertDatabaseHas('audit_logs', ['event_type' => 'DISTRIBUTOR_APPLICATION_RETURNED_TO_DRAFT', 'entity_id' => $app->id]);
     }
 
-    public function test_asignar_por_alcance_falla_si_es_otra_sucursal() {
-        $branchA = \App\Models\Branch::factory()->create()->id;
-        $branchB = \App\Models\Branch::factory()->create()->id;
-        
+    public function test_asignar_por_alcance_falla_si_es_otra_sucursal()
+    {
+        $branchA = Branch::factory()->create()->id;
+        $branchB = Branch::factory()->create()->id;
+
         $coordinatorA = User::factory()->create();
         $verifierB = User::factory()->create();
         $verifierB->assignRole('verifier', $branchB);
@@ -38,14 +41,15 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
 
         $response = $this->actingAsMfaUser($coordinatorA, ['coordinator'], $branchA)
             ->postJson("/api/v1/distributor-applications/{$app->id}/assign-verifier", [
-                'verifier_id' => $verifierB->id, 'lock_version' => $app->lock_version
+                'verifier_id' => $verifierB->id, 'lock_version' => $app->lock_version,
             ]);
 
         $response->assertStatus(403)->assertJsonPath('error', 'VERIFIER_BRANCH_MISMATCH');
     }
 
-    public function test_asignacion_exitosa_crea_visita_y_auditoria() {
-        $branchId = \App\Models\Branch::factory()->create()->id;
+    public function test_asignacion_exitosa_crea_visita_y_auditoria()
+    {
+        $branchId = Branch::factory()->create()->id;
         $coordinator = User::factory()->create();
         $verifier = User::factory()->create(['state' => 'ACTIVE']);
         $verifier->assignRole('verifier', $branchId);
@@ -54,7 +58,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
 
         $response = $this->actingAsMfaUser($coordinator, ['coordinator'], $branchId)
             ->postJson("/api/v1/distributor-applications/{$app->id}/assign-verifier", [
-                'verifier_id' => $verifier->id, 'lock_version' => $app->lock_version
+                'verifier_id' => $verifier->id, 'lock_version' => $app->lock_version,
             ]);
 
         $response->assertStatus(200);
@@ -64,8 +68,8 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
 
     public function test_lista_solo_verificadores_activos_de_la_sucursal_de_la_solicitud(): void
     {
-        $branch = \App\Models\Branch::factory()->create();
-        $otherBranch = \App\Models\Branch::factory()->create();
+        $branch = Branch::factory()->create();
+        $otherBranch = Branch::factory()->create();
         $coordinator = User::factory()->create(['state' => 'ACTIVE']);
         $available = User::factory()->create(['state' => 'ACTIVE']);
         $available->assignRole('verifier', $branch->id);
@@ -83,7 +87,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase {
 
     public function test_otro_coordinador_no_puede_listar_verificadores_de_la_solicitud(): void
     {
-        $branch = \App\Models\Branch::factory()->create();
+        $branch = Branch::factory()->create();
         $assigned = User::factory()->create();
         $other = User::factory()->create();
         $app = DistributorApplication::factory()->create(['branch_id' => $branch->id, 'coordinator_id' => $assigned->id]);

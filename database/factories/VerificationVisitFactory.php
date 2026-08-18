@@ -1,13 +1,16 @@
 <?php
+
 namespace Database\Factories;
-use App\Models\VerificationVisit;
+
+use App\Enums\VerificationVisitStatus;
 use App\Models\DistributorApplication;
 use App\Models\User;
+use App\Models\VerificationVisit;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
-use App\Enums\VerificationVisitStatus;
 
-class VerificationVisitFactory extends Factory {
+class VerificationVisitFactory extends Factory
+{
     protected $model = VerificationVisit::class;
 
     public function configure(): static
@@ -23,7 +26,8 @@ class VerificationVisitFactory extends Factory {
         });
     }
 
-    public function definition() {
+    public function definition()
+    {
         return [
             'id' => Str::uuid(),
             'application_id' => DistributorApplication::factory(),
@@ -31,7 +35,7 @@ class VerificationVisitFactory extends Factory {
             'assigned_by' => User::factory(),
             'status' => VerificationVisitStatus::ASSIGNED,
             'assigned_at' => now(),
-            'lock_version' => 1
+            'lock_version' => 1,
         ];
     }
 }

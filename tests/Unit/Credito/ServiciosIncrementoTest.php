@@ -3,20 +3,22 @@
 namespace Tests\Unit\Credito;
 
 use App\Enums\EstadoSolicitudIncremento;
+use App\Enums\TipoMovimientoLineaCredito;
 use App\Exceptions\ExcepcionCredito;
-use App\Models\CoordinatorDistributorAssignment;
-use App\Models\Distribuidora;
+use App\Models\ConfigurationDefinition;
+use App\Models\ConfigurationVersion;
 use App\Models\LineaCredito;
+use App\Models\MovimientoLineaCredito;
 use App\Models\RestriccionUsoCredito;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
-use App\Models\UserRoleScope;
+use App\Services\ConfiguracionServicio;
+use App\Services\Credito\AuditorIncrementos;
 use App\Services\Credito\ServicioDecisionIncremento;
 use App\Services\Credito\ServicioEstadoIncremento;
 use App\Services\Credito\ServicioPreautorizacionIncremento;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
-use Database\Seeders\TestConfiguracionSeeder;
 
 class ServiciosIncrementoTest extends TestCase
 {
@@ -26,19 +28,19 @@ class ServiciosIncrementoTest extends TestCase
     {
         parent::setUp();
         // Mock AuditorIncrementos and OutboxEvent to avoid side effects
-        $this->mock(\App\Services\Credito\AuditorIncrementos::class, function ($mock) {
+        $this->mock(AuditorIncrementos::class, function ($mock) {
             $mock->shouldReceive('registrar')->andReturn();
         });
-        
+
         $autor = User::factory()->create(['state' => 'ACTIVE']);
-        $definicion = \App\Models\ConfigurationDefinition::query()->create([
+        $definicion = ConfigurationDefinition::query()->create([
             'key' => 'CREDIT_TOLERANCE_AMOUNT',
             'name' => 'Tolerancia',
             'value_type' => 'DECIMAL',
             'status' => 'ACTIVE',
             'created_by' => $autor->id,
         ]);
-        $version = \App\Models\ConfigurationVersion::query()->create([
+        $version = ConfigurationVersion::query()->create([
             'configuration_definition_id' => $definicion->id,
             'version' => 1,
             'value' => '500.0000',
@@ -49,7 +51,7 @@ class ServiciosIncrementoTest extends TestCase
             'published_by' => $autor->id,
             'published_at' => now(),
         ]);
-        $this->mock(\App\Services\ConfiguracionServicio::class, function ($mock) use ($version) {
+        $this->mock(ConfiguracionServicio::class, function ($mock) use ($version) {
             $mock->shouldReceive('resolver')->with('CREDIT_TOLERANCE_AMOUNT')->andReturn([
                 'value' => '500.0000',
                 'version_id' => $version->id,
@@ -59,7 +61,7 @@ class ServiciosIncrementoTest extends TestCase
 
     public function test_transiciones_invalidas()
     {
-        $servicioEstado = new ServicioEstadoIncremento();
+        $servicioEstado = new ServicioEstadoIncremento;
         $solicitud = SolicitudIncrementoLinea::factory()->requested()->make();
         $user = User::factory()->make();
 
@@ -76,7 +78,7 @@ class ServiciosIncrementoTest extends TestCase
         $servicio = app(ServicioPreautorizacionIncremento::class);
         $solicitud = SolicitudIncrementoLinea::factory()->requested()->create([
             'requested_amount' => '5000.0000',
-            'lock_version' => 1
+            'lock_version' => 1,
         ]);
         $coordinador = User::factory()->create();
 
@@ -92,7 +94,7 @@ class ServiciosIncrementoTest extends TestCase
         $solicitud = SolicitudIncrementoLinea::factory()->preauthorized()->create([
             'requested_amount' => '5000.0000',
             'recommended_amount' => '4000.0000',
-            'lock_version' => 1
+            'lock_version' => 1,
         ]);
         $gerente = User::factory()->create();
 
@@ -114,7 +116,7 @@ class ServiciosIncrementoTest extends TestCase
             'distributor_id' => $linea->distributor_id,
             'requested_amount' => '5000.0000',
             'recommended_amount' => '5000.0000',
-            'lock_version' => 1
+            'lock_version' => 1,
         ]);
         $gerente = User::factory()->create();
 
@@ -122,14 +124,14 @@ class ServiciosIncrementoTest extends TestCase
 
         $this->assertEquals(EstadoSolicitudIncremento::AUTHORIZED_TOTAL, $solicitudResult->status);
         $this->assertEquals('5000.0000', $solicitudResult->authorized_amount);
-        
+
         $linea->refresh();
         $this->assertEquals('15000.0000', $linea->total_authorized);
         $this->assertEquals('2000.0000', $linea->used_balance);
 
-        $movimiento = \App\Models\MovimientoLineaCredito::where('credit_line_id', $linea->id)->first();
+        $movimiento = MovimientoLineaCredito::where('credit_line_id', $linea->id)->first();
         $this->assertNotNull($movimiento);
-        $this->assertEquals(\App\Enums\TipoMovimientoLineaCredito::INCREASE, $movimiento->type);
+        $this->assertEquals(TipoMovimientoLineaCredito::INCREASE, $movimiento->type);
         $this->assertEquals('5000.0000', $movimiento->amount);
         $this->assertEquals('10000.0000', $movimiento->total_authorized_before);
         $this->assertEquals('15000.0000', $movimiento->total_authorized_after);
@@ -155,7 +157,7 @@ class ServiciosIncrementoTest extends TestCase
             'distributor_id' => $linea->distributor_id,
             'requested_amount' => '5000.0000',
             'recommended_amount' => '4000.0000',
-            'lock_version' => 1
+            'lock_version' => 1,
         ]);
         $gerente = User::factory()->create();
 
@@ -163,13 +165,13 @@ class ServiciosIncrementoTest extends TestCase
 
         $this->assertEquals(EstadoSolicitudIncremento::REJECTED_BY_MANAGER, $solicitudResult->status);
         $this->assertNull($solicitudResult->authorized_amount);
-        
+
         $linea->refresh();
         $this->assertEquals('10000.0000', $linea->total_authorized);
 
-        $movimientosCount = \App\Models\MovimientoLineaCredito::where('credit_line_id', $linea->id)->count();
+        $movimientosCount = MovimientoLineaCredito::where('credit_line_id', $linea->id)->count();
         $this->assertEquals(0, $movimientosCount);
-        
+
         $restriccionCount = RestriccionUsoCredito::where('credit_line_id', $linea->id)->count();
         $this->assertEquals(0, $restriccionCount);
     }
@@ -186,7 +188,7 @@ class ServiciosIncrementoTest extends TestCase
             'distributor_id' => $linea->distributor_id,
             'requested_amount' => '5000.0000',
             'recommended_amount' => '4000.0000',
-            'lock_version' => 1
+            'lock_version' => 1,
         ]);
         $gerente = User::factory()->create();
 
@@ -194,7 +196,7 @@ class ServiciosIncrementoTest extends TestCase
 
         $this->assertEquals(EstadoSolicitudIncremento::AUTHORIZED_PARTIAL, $solicitudResult->status);
         $this->assertEquals('3000.0000', $solicitudResult->authorized_amount);
-        
+
         $linea->refresh();
         $this->assertEquals('13000.0000', $linea->total_authorized);
     }

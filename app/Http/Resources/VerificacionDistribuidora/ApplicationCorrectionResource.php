@@ -1,10 +1,14 @@
 <?php
+
 namespace App\Http\Resources\VerificacionDistribuidora;
+
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
-class ApplicationCorrectionResource extends JsonResource {
-    public function toArray(Request $request): array {
+class ApplicationCorrectionResource extends JsonResource
+{
+    public function toArray(Request $request): array
+    {
         return [
             'id' => $this->id,
             'application_id' => $this->application_id,
