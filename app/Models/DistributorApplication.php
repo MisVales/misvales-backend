@@ -83,6 +83,11 @@ class DistributorApplication extends Model
         return $this->hasOne(DomicilioSolicitud::class, 'application_id')->where('is_current', true);
     }
 
+    public function coordinator(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'coordinator_id');
+    }
+
     public function transitionTo(ApplicationStatus $newStatus, string $userId, ?string $reason = null): void
     {
         $validTransitions = [

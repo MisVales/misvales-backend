@@ -28,7 +28,7 @@ class DistribuidoraController extends Controller
         $distributor->load([
             'usuario', 'sucursal', 'solicitud.autorizacion', 'solicitud.datosPersonales', 'coordinadorVigente.coordinator',
             'categoriaVigente.versionCategoria', 'asignacionesCategoria.versionCategoria',
-            'lineaCredito.movimientos', 'lineaCredito.restricciones',
+            'asignacionesCoordinador.coordinator', 'asignacionesCoordinador.assignedBy',
         ]);
 
         return new DistribuidoraDetalleResource($distributor);

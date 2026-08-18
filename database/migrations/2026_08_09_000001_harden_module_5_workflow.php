@@ -24,7 +24,7 @@ return new class extends Migration
         DB::statement("ALTER TABLE application_authorizations ADD CONSTRAINT application_authorizations_decision_check CHECK (decision IN ('APPROVED', 'REJECTED'))");
         DB::statement("CREATE UNIQUE INDEX verification_visits_one_open_per_application ON verification_visits (application_id) WHERE status IN ('ASSIGNED', 'IN_PROGRESS')");
         DB::unprepared(<<<'SQL'
-            CREATE FUNCTION preserve_m5_original_application_data() RETURNS trigger AS $$
+            CREATE OR REPLACE FUNCTION preserve_m5_original_application_data() RETURNS trigger AS $$
             BEGIN
                 IF NEW.original_applicant_data IS DISTINCT FROM OLD.original_applicant_data THEN
                     RAISE EXCEPTION 'original_applicant_data is immutable';
@@ -33,6 +33,7 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql;
 
+            DROP TRIGGER IF EXISTS distributor_applications_m5_preserve_original ON distributor_applications_m5;
             CREATE TRIGGER distributor_applications_m5_preserve_original
             BEFORE UPDATE ON distributor_applications_m5
             FOR EACH ROW EXECUTE FUNCTION preserve_m5_original_application_data();
