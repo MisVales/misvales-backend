@@ -82,11 +82,11 @@ final class CentroOperacionApiTest extends TestCase
         $this->patchJson("/api/v1/notifications/{$notification->id}/read")->assertNotFound();
     }
 
-    public function test_los_veintidos_reportes_son_paginados_y_ejecutan_consultas_reales(): void
+    public function test_los_veinte_reportes_vigentes_son_paginados_y_ejecutan_consultas_reales(): void
     {
         $this->withoutExceptionHandling();
         Sanctum::actingAs($this->user('general_manager'));
-        $this->getJson('/api/v1/reports')->assertOk()->assertJsonCount(22, 'data');
+        $this->getJson('/api/v1/reports')->assertOk()->assertJsonCount(20, 'data');
         foreach (ServicioReportes::REPORTS as $report) {
             $this->getJson("/api/v1/reports/{$report}?per_page=10")->assertOk()->assertJsonStructure(['data' => ['data', 'current_page', 'per_page', 'total']]);
         }

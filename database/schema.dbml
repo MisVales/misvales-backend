@@ -1565,74 +1565,6 @@ Table "personal_access_tokens" {
   }
 }
 
-Table "point_accounts" {
-  "id" uuid [not null]
-  "distributor_id" uuid [not null]
-  "balance" biginteger [not null, default: 0]
-  "reserved" biginteger [not null, default: 0]
-  "lock_version" integer [not null, default: 1]
-  "created_at" timestamptz
-  "updated_at" timestamptz
-
-  indexes {
-    ("id") [name: 'point_accounts_id_primary', pk]
-    ("distributor_id") [name: 'point_accounts_distributor_id_unique', unique]
-  }
-
-  Note: 'point_accounts_balance_check: CHECK (balance >= 0 AND reserved >= 0 AND reserved <= balance)'
-}
-
-Table "point_movements" {
-  "id" uuid [not null]
-  "point_account_id" uuid [not null]
-  "relation_id" uuid
-  "type" varchar(24) [not null]
-  "balance_before" biginteger [not null]
-  "generated" biginteger [not null, default: 0]
-  "discounted" biginteger [not null, default: 0]
-  "redeemed" biginteger [not null, default: 0]
-  "balance_after" biginteger [not null]
-  "reason" text [not null]
-  "rule_snapshot" jsonb [not null]
-  "rule_version" varchar(255) [not null]
-  "performed_by" uuid
-  "occurred_at" timestamptz [not null]
-  "created_at" timestamptz
-  "updated_at" timestamptz
-
-  indexes {
-    ("id") [name: 'point_movements_id_primary', pk]
-    ("relation_id", "type") [name: 'point_movements_relation_id_type_unique', unique]
-  }
-
-  Note: 'point_movements_type_check: CHECK (type IN (\'EARLY_GENERATION\',\'LATE_DISCOUNT\',\'REDEMPTION\'))'
-}
-
-Table "point_redemption_requests" {
-  "id" uuid [not null]
-  "point_account_id" uuid [not null]
-  "redemption_period_id" uuid [not null]
-  "branch_id" uuid [not null]
-  "points" biginteger [not null]
-  "point_value_snapshot" decimal(19,4) [not null]
-  "monetary_value" decimal(19,4) [not null]
-  "status" varchar(24) [not null, default: 'REQUESTED']
-  "requested_by" uuid [not null]
-  "decided_by" uuid
-  "decision_reason" text
-  "delivered_by" uuid
-  "delivery_reference" text
-  "delivered_at" timestamptz
-  "created_at" timestamptz
-  "updated_at" timestamptz
-
-  indexes {
-    ("id") [name: 'point_redemption_requests_id_primary', pk]
-  }
-
-  Note: 'point_redemptions_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'DELIVERED\'))'
-}
-
 Table "product_versions" {
   "id" uuid [not null]
   "product_id" uuid [not null]
@@ -1683,35 +1615,6 @@ Table "products" {
   }
 
   Note: 'chk_prod_lock_version: CHECK (lock_version >= 0); chk_prod_status: CHECK (status IN (\'ACTIVE\', \'INACTIVE\'))'
-}
-
-Table "redemption_periods" {
-  "id" uuid [not null]
-  "code" varchar(255) [not null]
-  "name" varchar(255) [not null]
-  "starts_at" timestamptz [not null]
-  "ends_at" timestamptz [not null]
-  "status" varchar(255) [not null]
-  "reason" text [not null]
-  "created_by" uuid [not null]
-  "published_by" uuid
-  "published_at" timestamptz
-  "closed_by" uuid
-  "closed_at" timestamptz
-  "lock_version" integer [not null, default: 0]
-  "created_at" timestamptz
-  "updated_at" timestamptz
-  "description" text
-  "point_value" decimal(19,4)
-  "point_value_configuration_version_id" uuid
-
-  indexes {
-    ("id") [name: 'redemption_periods_id_primary', pk]
-    ("code") [name: 'redemption_periods_code_unique', unique]
-    ("status", "starts_at", "ends_at") [name: 'redemption_periods_status_starts_at_ends_at_index']
-  }
-
-  Note: 'chk_rp_dates: CHECK (starts_at < ends_at); chk_rp_lock_version: CHECK (lock_version >= 0); chk_rp_status: CHECK (status IN (\'DRAFT\', \'SCHEDULED\', \'OPEN\', \'CLOSED\', \'CANCELLED\')); chk_rp_point_value: CHECK (point_value IS NULL OR point_value > 0); chk_rp_operational_point_value: CHECK (status IN (\'DRAFT\', \'CANCELLED\') OR (point_value IS NOT NULL AND point_value_configuration_version_id IS NOT NULL))'
 }
 
 Table "relation_late_fees" {
@@ -2230,24 +2133,11 @@ Ref "payment_allocations_relation_item_id_foreign": "payment_allocations"."relat
 Ref "payment_clarifications_distributor_id_foreign": "payment_clarifications"."distributor_id" > "distributors"."id" [delete: restrict]
 Ref "payment_clarifications_relation_id_foreign": "payment_clarifications"."relation_id" > "distributor_relations"."id" [delete: restrict]
 Ref "payment_clarifications_evidence_media_id_foreign": "payment_clarifications"."evidence_media_id" > "media_files"."id" [delete: restrict]
-Ref "point_accounts_distributor_id_foreign": "point_accounts"."distributor_id" > "distributors"."id" [delete: restrict]
-Ref "point_movements_point_account_id_foreign": "point_movements"."point_account_id" > "point_accounts"."id" [delete: restrict]
-Ref "point_movements_relation_id_foreign": "point_movements"."relation_id" > "distributor_relations"."id" [delete: restrict]
-Ref "point_movements_performed_by_foreign": "point_movements"."performed_by" > "users"."id" [delete: restrict]
-Ref "point_redemption_requests_point_account_id_foreign": "point_redemption_requests"."point_account_id" > "point_accounts"."id" [delete: restrict]
-Ref "point_redemption_requests_redemption_period_id_foreign": "point_redemption_requests"."redemption_period_id" > "redemption_periods"."id" [delete: restrict]
-Ref "point_redemption_requests_branch_id_foreign": "point_redemption_requests"."branch_id" > "branches"."id" [delete: restrict]
-Ref "point_redemption_requests_requested_by_foreign": "point_redemption_requests"."requested_by" > "users"."id" [delete: restrict]
-Ref "point_redemption_requests_decided_by_foreign": "point_redemption_requests"."decided_by" > "users"."id" [delete: restrict]
-Ref "point_redemption_requests_delivered_by_foreign": "point_redemption_requests"."delivered_by" > "users"."id" [delete: restrict]
 Ref "product_versions_product_id_foreign": "product_versions"."product_id" > "products"."id" [delete: restrict]
 Ref "product_versions_created_by_foreign": "product_versions"."created_by" > "users"."id" [delete: restrict]
 Ref "product_versions_published_by_foreign": "product_versions"."published_by" > "users"."id" [delete: restrict]
 Ref "products_created_by_foreign": "products"."created_by" > "users"."id" [delete: restrict]
 Ref "products_updated_by_foreign": "products"."updated_by" > "users"."id" [delete: restrict]
-Ref "redemption_periods_created_by_foreign": "redemption_periods"."created_by" > "users"."id" [delete: restrict]
-Ref "redemption_periods_published_by_foreign": "redemption_periods"."published_by" > "users"."id" [delete: restrict]
-Ref "redemption_periods_closed_by_foreign": "redemption_periods"."closed_by" > "users"."id" [delete: restrict]
 Ref "relation_late_fees_relation_id_foreign": "relation_late_fees"."relation_id" > "distributor_relations"."id" [delete: restrict]
 Ref "relation_payments_relation_id_foreign": "relation_payments"."relation_id" > "distributor_relations"."id" [delete: restrict]
 Ref "relation_payments_bank_movement_id_foreign": "relation_payments"."bank_movement_id" > "bank_movements"."id" [delete: restrict]

@@ -3,7 +3,6 @@
 namespace App\Observers;
 
 use App\Enums\BaseStatus;
-use App\Enums\RedemptionPeriodStatus;
 use App\Enums\VersionStatus;
 use App\Models\AuditLog;
 use App\Models\Category;
@@ -12,7 +11,6 @@ use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
 use App\Models\Product;
 use App\Models\ProductVersion;
-use App\Models\RedemptionPeriod;
 use Illuminate\Support\Facades\Request;
 
 class VersionObserver
@@ -152,30 +150,6 @@ class VersionObserver
             }
 
             return 'Versión modificada.';
-        }
-
-        if ($model instanceof RedemptionPeriod) {
-            if ($model->wasRecentlyCreated) {
-                return 'Periodo de canje creado.';
-            }
-            $changes = $model->getChanges();
-            if (isset($changes['status'])) {
-                $statusValue = $changes['status'] instanceof RedemptionPeriodStatus ? $changes['status']->value : $changes['status'];
-                if (in_array($statusValue, [
-                    RedemptionPeriodStatus::SCHEDULED->value,
-                    RedemptionPeriodStatus::OPEN->value,
-                ], true)) {
-                    return 'Periodo de canje publicado.';
-                }
-                if ($statusValue === RedemptionPeriodStatus::CLOSED->value) {
-                    return 'Periodo de canje cerrado.';
-                }
-                if ($statusValue === RedemptionPeriodStatus::CANCELLED->value) {
-                    return 'Periodo de canje cancelado.';
-                }
-            }
-
-            return 'Periodo de canje modificado.';
         }
 
         return 'Evento detectado.';

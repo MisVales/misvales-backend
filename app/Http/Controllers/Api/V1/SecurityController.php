@@ -11,6 +11,7 @@ use App\Models\MfaRecoveryCode;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\SessionPolicyService;
+use App\Services\Auth\SessionTokenIdentifier;
 use App\Services\Auth\WebAuthnService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -268,15 +269,15 @@ class SecurityController extends Controller
             return response()->json(['message' => 'La contraseña actual es incorrecta.'], 401);
         }
 
-        $mfaCredential = \App\Models\MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
-        if (!$mfaCredential) {
+        $mfaCredential = MfaCredential::where('user_id', $user->id)->where('type', 'TOTP')->first();
+        if (! $mfaCredential) {
             return response()->json(['message' => 'No tienes TOTP configurado.'], 400);
         }
 
-        $secret = \Illuminate\Support\Facades\Crypt::decryptString($mfaCredential->secret_ciphertext);
-        $mfaService = new MfaService();
-        
-        if (!$mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
+        $secret = Crypt::decryptString($mfaCredential->secret_ciphertext);
+        $mfaService = new MfaService;
+
+        if (! $mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
             return response()->json(['message' => 'El código de autenticador es incorrecto.'], 401);
         }
 
@@ -288,10 +289,14 @@ class SecurityController extends Controller
      */
     private function revokeOtherSessions(Request $request)
     {
-        $currentTokenHash = hash('sha256', $request->bearerToken());
+        $tokenIdentifier = app(SessionTokenIdentifier::class);
+        $currentTokenHashes = array_values(array_unique(array_filter([
+            $tokenIdentifier->current($request),
+            $tokenIdentifier->legacy($request),
+        ])));
         $otherSessions = AuthSession::where('user_id', $request->user()->id)
             ->whereNull('revoked_at')
-            ->where('session_identifier_hash', '!=', $currentTokenHash)
+            ->whereNotIn('session_identifier_hash', $currentTokenHashes)
             ->get();
 
         foreach ($otherSessions as $session) {
@@ -312,7 +317,7 @@ class SecurityController extends Controller
         $passkeys = MfaCredential::where('user_id', $request->user()->id)
             ->where('type', 'PASSKEY')
             ->get(['id', 'created_at', 'last_used_at']);
-        
+
         return response()->json($passkeys);
     }
 
@@ -322,8 +327,9 @@ class SecurityController extends Controller
     public function passkeyOptions(Request $request, WebAuthnService $webAuthnService)
     {
         $options = $webAuthnService->generateRegistrationOptions($request->user());
-        $cacheKey = "passkey_setup_user_" . $request->user()->id;
+        $cacheKey = 'passkey_setup_user_'.$request->user()->id;
         Cache::put($cacheKey, serialize($options), now()->addMinutes(10));
+
         return response($webAuthnService->serializeOptions($options))->header('Content-Type', 'application/json');
     }
 
@@ -338,9 +344,9 @@ class SecurityController extends Controller
         ]);
 
         $user = $request->user();
-        $cacheKey = "passkey_setup_user_" . $user->id;
+        $cacheKey = 'passkey_setup_user_'.$user->id;
         $cachedOptions = Cache::get($cacheKey);
-        
+
         if (! $cachedOptions) {
             return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
         }
@@ -378,7 +384,7 @@ class SecurityController extends Controller
     public function deletePasskey(Request $request, $id)
     {
         $user = $request->user();
-        
+
         $passkey = MfaCredential::where('user_id', $user->id)
             ->where('type', 'PASSKEY')
             ->where('id', $id)

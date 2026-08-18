@@ -21,7 +21,7 @@ class AuthRefreshCookieTest extends TestCase
         $accessToken->accessToken->forceFill(['expires_at' => now()->addMinutes(5)])->save();
         $session = AuthSession::create([
             'user_id' => $user->id,
-            'session_identifier_hash' => hash('sha256', $accessToken->plainTextToken),
+            'session_identifier_hash' => $accessToken->accessToken->getRawOriginal('token'),
             'authentication_method' => 'PASSWORD',
             'mfa_method' => 'TOTP',
             'mfa_verified_at' => now(),
@@ -49,6 +49,10 @@ class AuthRefreshCookieTest extends TestCase
             ->assertJsonMissing(['refresh_token' => $refreshToken]);
 
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $accessToken->accessToken->id]);
+        $this->assertDatabaseHas('auth_sessions', [
+            'id' => $session->id,
+            'session_identifier_hash' => hash('sha256', Str::after($response->json('access_token'), '|')),
+        ]);
     }
 
     public function test_refresh_rejects_missing_cookie_even_if_body_contains_a_token(): void

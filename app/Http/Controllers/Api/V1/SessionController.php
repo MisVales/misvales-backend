@@ -8,6 +8,7 @@ use App\Mail\Security\SecurityAlertMail;
 use App\Models\AuthSession;
 use App\Models\User;
 use App\Services\Audit\SecurityAuditService;
+use App\Services\Auth\SessionTokenIdentifier;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -19,9 +20,9 @@ class SessionController extends Controller
 
     /**
      * GET /api/v1/me/sessions
-     * Puntos 23: Lista las sesiones activas
+     * Control 23: Lista las sesiones activas.
      */
-    public function index(Request $request)
+    public function index(Request $request, SessionTokenIdentifier $tokenIdentifier)
     {
         $sessions = AuthSession::where('user_id', $request->user()->id)
             ->whereNull('revoked_at')
@@ -36,9 +37,12 @@ class SessionController extends Controller
         $sessions->makeHidden(['session_identifier_hash']);
 
         // Marcar cuál es la sesión actual (opcional pero útil para UX)
-        $currentTokenHash = hash('sha256', $request->bearerToken());
-        $sessions->transform(function ($session) use ($currentTokenHash) {
-            $session->is_current = ($session->getRawOriginal('session_identifier_hash') === $currentTokenHash);
+        $currentTokenHashes = array_values(array_unique(array_filter([
+            $tokenIdentifier->current($request),
+            $tokenIdentifier->legacy($request),
+        ])));
+        $sessions->transform(function ($session) use ($currentTokenHashes) {
+            $session->is_current = in_array($session->getRawOriginal('session_identifier_hash'), $currentTokenHashes, true);
 
             return $session;
         });
@@ -48,7 +52,7 @@ class SessionController extends Controller
 
     /**
      * DELETE /api/v1/me/sessions/{id}
-     * Punto 24: Revoca una sesión específica validando propiedad.
+     * Control 24: Revoca una sesión específica validando propiedad.
      */
     public function destroy(Request $request, string $id)
     {
@@ -86,7 +90,7 @@ class SessionController extends Controller
                 new SecurityAlertMail(
                     $userOwner,
                     'Sesión Revocada',
-                    'Una de tus sesiones en '.env('APP_NAME').' ha sido revocada de forma remota.',
+                    'Una de tus sesiones en '.config('app.name').' ha sido revocada de forma remota.',
                     [
                         'ip' => $request->ip(),
                         'device' => app(SecurityAuditService::class)->parseDevice($request->userAgent()),
@@ -106,20 +110,23 @@ class SessionController extends Controller
 
     /**
      * DELETE /api/v1/me/sessions
-     * Punto 25: Revoca todas las DEMÁS sesiones
+     * Control 25: Revoca todas las demás sesiones.
      */
-    public function destroyOther(Request $request)
+    public function destroyOther(Request $request, SessionTokenIdentifier $tokenIdentifier)
     {
         $reauthResult = $this->requireMfaReauth($request);
         if ($reauthResult !== true) {
             return $reauthResult;
         }
 
-        $currentTokenHash = hash('sha256', $request->bearerToken());
+        $currentTokenHashes = array_values(array_unique(array_filter([
+            $tokenIdentifier->current($request),
+            $tokenIdentifier->legacy($request),
+        ])));
 
         $otherSessions = AuthSession::where('user_id', $request->user()->id)
             ->whereNull('revoked_at')
-            ->where('session_identifier_hash', '!=', $currentTokenHash)
+            ->whereNotIn('session_identifier_hash', $currentTokenHashes)
             ->get();
 
         foreach ($otherSessions as $session) {

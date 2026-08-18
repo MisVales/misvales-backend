@@ -8,7 +8,7 @@ trait ValidatesConfigurationValues
 {
     /**
      * Genera las reglas de validación dinámicas basadas en el tipo de valor y la llave (key).
-     * Garantiza la integridad técnica (Puntos 22 al 26).
+     * Garantiza la integridad técnica de los valores publicados.
      *
      * @param  string|null  $type  El tipo de valor (e.g., 'INTEGER', 'DECIMAL', 'TIME')
      * @param  string|null  $key  La llave de configuración (e.g., 'CUT_DAY_OF_MONTH')
@@ -45,7 +45,16 @@ trait ValidatesConfigurationValues
         if ($key) {
             if ($key === 'EARLY_PAYMENT_PERIOD') {
                 $rules['value.start'] = ['required', 'integer', 'min:0'];
-                $rules['value.end'] = ['required', 'integer', 'gt:value.start']; // Punto 28
+                $rules['value.end'] = [
+                    'required',
+                    'integer',
+                    function (string $attribute, mixed $value, \Closure $fail): void {
+                        $start = $this->input('value.start');
+                        if (is_numeric($start) && is_numeric($value) && (int) $value <= (int) $start) {
+                            $fail('El fin del periodo debe ser mayor que el inicio.');
+                        }
+                    },
+                ];
             } elseif ($key === 'RELATION_PAYMENT_BANK') {
                 $rules['value.name'] = ['required', 'string', 'max:160'];
                 $rules['value.beneficiary'] = ['required', 'string', 'max:255'];
@@ -53,11 +62,10 @@ trait ValidatesConfigurationValues
                 $rules['value.clabe'] = ['required', 'regex:/^\d{18}$/'];
             } else {
                 $specific = match ($key) {
-                    'CUT_DAY_OF_MONTH' => ['between:1,28'], // Punto 23
-                    'PAYMENT_DAYS_AFTER_CUT', 'POINTS_MULTIPLIER' => ['min:1'], // Punto 24 y 26
-                    'MODIFICATION_TOKEN_TTL' => ['min:1', 'max:1440'], // Punto 26
-                    'CREDIT_TOLERANCE_AMOUNT', 'LATE_FEE_AMOUNT', 'POINTS_DIVISOR_AMOUNT', 'POINT_VALUE_AMOUNT' => ['min:0', 'max:99999999.9999'], // Punto 26
-                    'LATE_POINTS_REDUCTION_RATE' => ['min:0', 'max:1'], // Punto 26
+                    'CUT_DAY_OF_MONTH' => ['between:1,28'],
+                    'PAYMENT_DAYS_AFTER_CUT' => ['min:1'],
+                    'MODIFICATION_TOKEN_TTL' => ['min:1', 'max:1440'],
+                    'CREDIT_TOLERANCE_AMOUNT', 'LATE_FEE_AMOUNT' => ['min:0', 'max:99999999.9999'],
                     default => [],
                 };
 
