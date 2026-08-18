@@ -58,8 +58,7 @@ final class SolicitudDistribuidoraPolicy
 
     public function submit(User $user, SolicitudDistribuidora $solicitud): bool
     {
-        // COORDINADOR -> autorización final DENEGADO
-        if ($user->hasRole('coordinator')) {
+        if ($user->hasRole('cashier') || $user->hasRole('verifier')) {
             return false;
         }
 

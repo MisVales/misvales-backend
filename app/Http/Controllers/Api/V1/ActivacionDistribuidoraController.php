@@ -37,7 +37,7 @@ class ActivacionDistribuidoraController extends Controller
                 'payload' => [
                     'application_id' => $application->id,
                     'branch_id' => $application->branch_id,
-                    'error_code' => $excepcion->codigo,
+                    'error_code' => $excepcion->errorCode,
                 ],
                 'status' => 'PENDING',
             ]);
@@ -48,7 +48,7 @@ class ActivacionDistribuidoraController extends Controller
                 $request->user(),
                 $application->branch_id,
                 resultado: 'FAILED',
-                motivo: $excepcion->codigo,
+                motivo: $excepcion->errorCode,
             );
 
             throw $excepcion;
