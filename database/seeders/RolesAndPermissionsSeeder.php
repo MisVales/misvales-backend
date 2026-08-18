@@ -213,7 +213,7 @@ class RolesAndPermissionsSeeder extends Seeder
 
             if (in_array($roleData['code'], ['admin', 'branch_manager'], true)) {
                 $permissionCodes = $roleData['code'] === 'branch_manager'
-                    ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'distributor_applications.view', 'distributor_applications.view_sensitive', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
+                    ? ['users.view', 'roles.view', 'roles.assign', 'branches.view', 'assignments.manage', 'catalogs.view_published', 'distributor_applications.view', 'distributor_applications.view_sensitive', 'distributor_applications.create', 'distributor_applications.update', 'distributor_applications.submit']
                     : ['users.view', 'roles.view', 'branches.view', 'catalogs.view_published', 'catalogs.view_history', 'distributor_applications.view'];
                 $permissions = Permission::query()->whereIn('code', $permissionCodes)->get();
                 $syncData = [];

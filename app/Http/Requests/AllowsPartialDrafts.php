@@ -9,8 +9,8 @@ trait AllowsPartialDrafts
      * Esto permite guardar parcialmente un formulario sin romper las validaciones estrictas
      * que solo deben aplicarse al momento del envío definitivo.
      *
-     * @param array<string, mixed> $rules
-     * @param array<int, string> $except Campos que siempre deben ser requeridos (ej. lock_version)
+     * @param  array<string, mixed>  $rules
+     * @param  array<int, string>  $except  Campos que siempre deben ser requeridos (ej. lock_version)
      * @return array<string, mixed>
      */
     protected function applyDraftRules(array $rules, array $except = []): array
@@ -25,14 +25,17 @@ trait AllowsPartialDrafts
             }
 
             if (is_array($fieldRules)) {
-                $fieldRules = array_filter($fieldRules, fn($rule) => $rule !== 'required');
-                if (!in_array('nullable', $fieldRules)) {
+                $fieldRules = array_filter(
+                    $fieldRules,
+                    fn ($rule) => ! is_string($rule) || ! str_starts_with($rule, 'required'),
+                );
+                if (! in_array('nullable', $fieldRules)) {
                     array_unshift($fieldRules, 'nullable');
                 }
             } elseif (is_string($fieldRules)) {
                 $stringRules = explode('|', $fieldRules);
-                $stringRules = array_filter($stringRules, fn($rule) => $rule !== 'required');
-                if (!in_array('nullable', $stringRules)) {
+                $stringRules = array_filter($stringRules, fn ($rule) => ! str_starts_with($rule, 'required'));
+                if (! in_array('nullable', $stringRules)) {
                     array_unshift($stringRules, 'nullable');
                 }
                 $fieldRules = implode('|', $stringRules);
