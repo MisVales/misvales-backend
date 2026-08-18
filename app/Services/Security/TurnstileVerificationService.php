@@ -52,18 +52,27 @@ class TurnstileVerificationService
         $verifyUrl = config('services.turnstile.url', 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
         $verifySsl = (bool) config('services.turnstile.verify_ssl', true);
 
-        try {
-            $httpClient = Http::asForm()->timeout(5);
+        $remoteIp = $request->header('CF-Connecting-IP') ?? $request->ip();
+        $payload = [
+            'secret' => $secret,
+            'response' => $token,
+        ];
 
-            if (! $verifySsl || app()->environment('local')) {
+        // Solo enviar remoteip si es una IP pública válida del visitante
+        if ($remoteIp && filter_var($remoteIp, FILTER_VALIDATE_IP, FILTER_FLAG_NO_PRIV_RANGE | FILTER_FLAG_NO_RES_RANGE)) {
+            $payload['remoteip'] = $remoteIp;
+        }
+
+        try {
+            $httpClient = Http::asForm()
+                ->timeout(10)
+                ->connectTimeout(5);
+
+            if (! $verifySsl || ! app()->isProduction()) {
                 $httpClient = $httpClient->withoutVerifying();
             }
 
-            $response = $httpClient->post($verifyUrl, [
-                'secret' => $secret,
-                'response' => $token,
-                'remoteip' => $request->ip(),
-            ]);
+            $response = $httpClient->post($verifyUrl, $payload);
 
             if (!$response->successful() || !$response->json('success')) {
                 $errorCodes = $response->json('error-codes', []);
