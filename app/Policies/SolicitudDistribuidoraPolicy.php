@@ -20,6 +20,9 @@ final class SolicitudDistribuidoraPolicy
 
     public function create(User $user): bool
     {
+        // CAJERA -> crear solicitud DENEGADO
+        if ($user->hasRole('cashier')) return false;
+
         return $user->hasPermissionTo('distributor_applications.create');
     }
 
@@ -30,6 +33,10 @@ final class SolicitudDistribuidoraPolicy
 
     public function update(User $user, SolicitudDistribuidora $solicitud): bool
     {
+        // VERIFICADOR -> corregir expediente DENEGADO
+        // ADMINISTRADOR -> modificar solicitud DENEGADO
+        if ($user->hasRole('verifier') || $user->hasRole('admin')) return false;
+
         if (! $user->hasPermissionTo('distributor_applications.update')) {
             return false;
         }
@@ -39,6 +46,9 @@ final class SolicitudDistribuidoraPolicy
 
     public function submit(User $user, SolicitudDistribuidora $solicitud): bool
     {
+        // COORDINADOR -> autorización final DENEGADO
+        if ($user->hasRole('coordinator')) return false;
+
         return $user->hasPermissionTo('distributor_applications.submit')
             && $this->puedeOperar($user, $solicitud);
     }

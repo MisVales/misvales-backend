@@ -27,49 +27,51 @@ return new class extends Migration
             $table->index('created_at');
         });
 
-        // Índice único parcial para is_headquarters = true
-        DB::statement('CREATE UNIQUE INDEX branches_is_headquarters_unique ON branches (is_headquarters) WHERE is_headquarters = true;');
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            // Índice único parcial para is_headquarters = true
+            DB::statement('CREATE UNIQUE INDEX branches_is_headquarters_unique ON branches (is_headquarters) WHERE is_headquarters = true;');
 
-        // Restricción: status solo admite ACTIVE o INACTIVE
-        DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'));");
-        DB::statement('ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);');
+            // Restricción: status solo admite ACTIVE o INACTIVE
+            DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'));");
+            DB::statement('ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);');
 
-        // Triggers para proteger la sucursal matriz
-        // 1. No puede eliminarse físicamente
-        DB::statement("
-            CREATE OR REPLACE FUNCTION prevent_headquarters_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                IF OLD.is_headquarters = true THEN
-                    RAISE EXCEPTION 'La sucursal matriz no puede eliminarse físicamente.';
-                END IF;
-                RETURN OLD;
-            END;
-            $$ LANGUAGE plpgsql;
-        ");
-        DB::statement('
-            CREATE TRIGGER check_headquarters_deletion
-            BEFORE DELETE ON branches
-            FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deletion();
-        ');
+            // Triggers para proteger la sucursal matriz
+            // 1. No puede eliminarse físicamente
+            DB::statement("
+                CREATE OR REPLACE FUNCTION prevent_headquarters_deletion()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF OLD.is_headquarters = true THEN
+                        RAISE EXCEPTION 'La sucursal matriz no puede eliminarse físicamente.';
+                    END IF;
+                    RETURN OLD;
+                END;
+                $$ LANGUAGE plpgsql;
+            ");
+            DB::statement('
+                CREATE TRIGGER check_headquarters_deletion
+                BEFORE DELETE ON branches
+                FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deletion();
+            ');
 
-        // 2. No puede desactivarse
-        DB::statement("
-            CREATE OR REPLACE FUNCTION prevent_headquarters_deactivation()
-            RETURNS trigger AS $$
-            BEGIN
-                IF OLD.is_headquarters = true AND NEW.status = 'INACTIVE' THEN
-                    RAISE EXCEPTION 'La sucursal matriz no puede desactivarse.';
-                END IF;
-                RETURN NEW;
-            END;
-            $$ LANGUAGE plpgsql;
-        ");
-        DB::statement('
-            CREATE TRIGGER check_headquarters_deactivation
-            BEFORE UPDATE ON branches
-            FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deactivation();
-        ');
+            // 2. No puede desactivarse
+            DB::statement("
+                CREATE OR REPLACE FUNCTION prevent_headquarters_deactivation()
+                RETURNS trigger AS $$
+                BEGIN
+                    IF OLD.is_headquarters = true AND NEW.status = 'INACTIVE' THEN
+                        RAISE EXCEPTION 'La sucursal matriz no puede desactivarse.';
+                    END IF;
+                    RETURN NEW;
+                END;
+                $$ LANGUAGE plpgsql;
+            ");
+            DB::statement('
+                CREATE TRIGGER check_headquarters_deactivation
+                BEFORE UPDATE ON branches
+                FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deactivation();
+            ');
+        }
     }
 
     /**
@@ -77,11 +79,13 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();');
+        if (DB::connection()->getDriverName() === 'pgsql') {
+            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();');
 
-        DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deletion();');
+            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deletion();');
+        }
 
         Schema::dropIfExists('branches');
     }

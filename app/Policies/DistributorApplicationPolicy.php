@@ -5,9 +5,10 @@ use App\Models\DistributorApplication;
 
 class DistributorApplicationPolicy {
     public function before(User $user) {
-        if ($user->hasRole('general_manager') || $user->hasRole('admin')) return true;
+        // Administradores y gerentes generales no deben tener blanket de escritura
     }
     public function view(User $user, DistributorApplication $app) {
+        if ($user->hasRole('admin') || $user->hasRole('general_manager')) return true;
         if ($user->hasRole('branch_manager') || $user->hasRole('coordinator')) return $user->branch_id === $app->branch_id;
         return false;
     }
