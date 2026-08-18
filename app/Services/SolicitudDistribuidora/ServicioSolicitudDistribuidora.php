@@ -284,6 +284,12 @@ final class ServicioSolicitudDistribuidora
             }
         }
 
+        if (!$registro?->exists && $solicitud->familiares()->count() >= 2) {
+            throw ValidationException::withMessages([
+                'relationship' => ['No se pueden agregar más de 2 familiares.']
+            ]);
+        }
+
         /** @var FamiliarSolicitud */
         return $this->guardarRegistro($actor, $solicitud, $datos, $registro ?? new FamiliarSolicitud);
     }
@@ -321,6 +327,11 @@ final class ServicioSolicitudDistribuidora
         $fin = array_key_exists('ended_at', $datos)
             ? $datos['ended_at']
             : $registro?->ended_at?->format('Y-m-d');
+
+        if (isset($datos['is_current']) && $datos['is_current']) {
+            $datos['ended_at'] = null;
+            $fin = null;
+        }
 
         if ($inicio !== null && $fin !== null && $fin < $inicio) {
             throw ValidationException::withMessages([

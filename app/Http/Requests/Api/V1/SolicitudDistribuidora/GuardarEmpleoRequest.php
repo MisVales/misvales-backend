@@ -25,7 +25,7 @@ final class GuardarEmpleoRequest extends FormRequest
             'lock_version' => ['required', 'integer', 'min:1'],
             'employer_name' => [$presencia, 'string', 'max:180'],
             'job_title' => ['nullable', 'string', 'max:150'],
-            'started_at' => ['nullable', 'date_format:Y-m-d'],
+            'started_at' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:today'],
             'ended_at' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:started_at'],
             'is_current' => ['sometimes', 'boolean'],
             'reference_payload' => ['nullable', 'array'],
