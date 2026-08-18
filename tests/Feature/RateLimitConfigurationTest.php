@@ -27,5 +27,43 @@ final class RateLimitConfigurationTest extends TestCase
             $this->postJson('/api/v1/auth/invitations/inspect', [])
                 ->assertUnprocessable();
         }
+
+        for ($attempt = 1; $attempt <= 6; $attempt++) {
+            $this->postJson('/api/v1/auth/password/forgot', [
+                'email' => $email,
+            ])->assertOk();
+        }
+
+        for ($attempt = 1; $attempt <= 7; $attempt++) {
+            $this->postJson('/api/v1/auth/password/reset', [
+                'email' => $email,
+                'token' => 'invalid-token',
+                'password' => 'Password123!@#',
+                'password_confirmation' => 'Password123!@#',
+            ])->assertNotFound();
+        }
+    }
+
+    public function test_rate_limit_throttles_reset_password_when_enabled(): void
+    {
+        config(['ratelimit.enabled' => true]);
+
+        $email = Str::uuid()->toString().'@example.test';
+
+        for ($attempt = 1; $attempt <= 5; $attempt++) {
+            $this->postJson('/api/v1/auth/password/reset', [
+                'email' => $email,
+                'token' => 'invalid-token',
+                'password' => 'Password123!@#',
+                'password_confirmation' => 'Password123!@#',
+            ])->assertNotFound();
+        }
+
+        $this->postJson('/api/v1/auth/password/reset', [
+            'email' => $email,
+            'token' => 'invalid-token',
+            'password' => 'Password123!@#',
+            'password_confirmation' => 'Password123!@#',
+        ])->assertStatus(429);
     }
 }

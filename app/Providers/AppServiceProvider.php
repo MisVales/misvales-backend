@@ -139,6 +139,10 @@ class AppServiceProvider extends ServiceProvider
             return $configuredLimit(Limit::perMinute(3)->by($request->ip()));
         });
 
+        RateLimiter::for('reset_password', function (Request $request) use ($configuredLimit) {
+            return $configuredLimit(Limit::perMinute(5)->by($request->input('email', $request->ip())));
+        });
+
         RateLimiter::for('resend_invitation', function (Request $request) use ($configuredLimit) {
             $distribuidora = $request->route('distributor');
             $identifier = $distribuidora instanceof Distribuidora
