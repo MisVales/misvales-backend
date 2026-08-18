@@ -10,7 +10,15 @@ final class SolicitudDistribuidoraPolicy
 {
     public function before(User $user): ?bool
     {
-        return $user->state === 'ACTIVE' ? null : false;
+        if ($user->state !== 'ACTIVE') {
+            return false;
+        }
+
+        if ($user->hasRole('general_manager') || $user->hasRole('admin')) {
+            return true;
+        }
+
+        return null;
     }
 
     public function viewAny(User $user): bool
@@ -76,7 +84,7 @@ final class SolicitudDistribuidoraPolicy
     {
         $asignaciones = $this->asignacionesActivas($user);
 
-        if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'general_manager'
+        if ($asignaciones->contains(fn ($asignacion): bool => in_array($asignacion->role_code, ['general_manager', 'admin'], true)
             && $asignacion->scope_type === 'GLOBAL')) {
             return true;
         }
@@ -86,9 +94,12 @@ final class SolicitudDistribuidoraPolicy
             return true;
         }
 
-        return $solicitud->coordinator_id === $user->id
-            && $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
-                && $asignacion->branch_id === $solicitud->branch_id);
+        if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
+            && $asignacion->branch_id === $solicitud->branch_id)) {
+            return true;
+        }
+
+        return $solicitud->coordinator_id === $user->id || $solicitud->created_by === $user->id;
     }
 
     private function asignacionesActivas(User $user)

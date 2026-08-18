@@ -526,7 +526,7 @@ final class ServicioSolicitudDistribuidora
     {
         $asignaciones = $this->asignacionesActivas($actor);
 
-        if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'general_manager' && $asignacion->scope_type === 'GLOBAL')) {
+        if ($asignaciones->contains(fn ($asignacion): bool => in_array($asignacion->role_code, ['general_manager', 'admin'], true) && $asignacion->scope_type === 'GLOBAL')) {
             return true;
         }
 
@@ -534,8 +534,11 @@ final class ServicioSolicitudDistribuidora
             return true;
         }
 
-        return $actor->id === $coordinatorId
-            && $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator' && $asignacion->branch_id === $branchId);
+        if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator' && $asignacion->branch_id === $branchId)) {
+            return true;
+        }
+
+        return $actor->id === $coordinatorId;
     }
 
     private function actorPuedeOperar(User $actor, SolicitudDistribuidora $solicitud): bool
