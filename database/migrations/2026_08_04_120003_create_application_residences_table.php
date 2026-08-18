@@ -18,8 +18,6 @@ return new class extends Migration
             if ($isMysql) {
                 $table->unsignedTinyInteger('current_application_unique')->nullable()->storedAs('IF(is_current = 1, 1, NULL)');
                 $table->unique(['application_id', 'current_application_unique'], 'app_residences_current_unique');
-            } else {
-                $table->uuid('current_application_unique')->nullable()->virtualAs('IF(is_current = 1, application_id, NULL)')->unique();
             }
             $table->string('street');
             $table->string('exterior_number', 32);
@@ -40,6 +38,10 @@ return new class extends Migration
 
             $table->index('application_id');
         });
+
+        if (! $isMysql) {
+            DB::statement('CREATE UNIQUE INDEX app_residences_current_unique ON application_residences (application_id) WHERE is_current = true');
+        }
 
         DB::statement("ALTER TABLE application_residences ADD CONSTRAINT application_residences_tenure_check CHECK (housing_tenure IN ('OWNED', 'RENTED', 'BORROWED', 'OTHER'))");
         DB::statement("ALTER TABLE application_residences ADD CONSTRAINT application_residences_financing_check CHECK (financing_status IS NULL OR financing_status IN ('PAID', 'MORTGAGE', 'LOAN', 'INFONAVIT', 'OTHER', 'NOT_APPLICABLE'))");

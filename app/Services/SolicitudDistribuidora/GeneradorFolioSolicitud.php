@@ -8,7 +8,7 @@ final class GeneradorFolioSolicitud
 {
     public function generar(): string
     {
-        $resultado = DB::selectOne('SELECT NEXT VALUE FOR distributor_application_number_seq AS value');
+        $resultado = DB::selectOne("SELECT nextval('distributor_application_number_seq') AS value");
 
         return sprintf('SOL-%s-%06d', now()->format('Y'), (int) $resultado->value);
     }

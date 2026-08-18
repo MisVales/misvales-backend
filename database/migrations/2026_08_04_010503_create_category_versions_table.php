@@ -20,8 +20,6 @@ return new class extends Migration
             if ($isMysql) {
                 $table->unsignedTinyInteger('current_published_category_id')->nullable()->storedAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, 1, NULL)");
                 $table->unique(['category_id', 'current_published_category_id'], 'catv_current_published_unique');
-            } else {
-                $table->uuid('current_published_category_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, category_id, NULL)")->unique();
             }
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
@@ -35,6 +33,10 @@ return new class extends Migration
             $table->index(['category_id', 'status']);
             $table->index(['category_id', 'effective_from', 'effective_to']);
         });
+
+        if (! $isMysql) {
+            DB::statement("CREATE UNIQUE INDEX catv_current_published_unique ON category_versions (category_id) WHERE status = 'PUBLISHED' AND effective_to IS NULL");
+        }
 
         DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_rate CHECK (profit_rate >= 0 AND profit_rate <= 1);');

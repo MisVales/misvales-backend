@@ -24,8 +24,6 @@ return new class extends Migration
             if ($isMysql) {
                 $table->unsignedTinyInteger('current_published_product_id')->nullable()->storedAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, 1, NULL)");
                 $table->unique(['product_id', 'current_published_product_id'], 'pv_current_published_unique');
-            } else {
-                $table->uuid('current_published_product_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, product_id, NULL)")->unique();
             }
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
@@ -40,6 +38,10 @@ return new class extends Migration
             $table->index(['product_id', 'effective_from', 'effective_to']);
             $table->index(['status', 'effective_from']);
         });
+
+        if (! $isMysql) {
+            DB::statement("CREATE UNIQUE INDEX pv_current_published_unique ON product_versions (product_id) WHERE status = 'PUBLISHED' AND effective_to IS NULL");
+        }
 
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0);');

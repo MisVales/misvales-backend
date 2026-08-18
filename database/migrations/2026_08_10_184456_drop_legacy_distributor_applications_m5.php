@@ -12,11 +12,18 @@ return new class extends Migration
             return;
         }
 
-        $dependencias = DB::table('information_schema.KEY_COLUMN_USAGE')
-            ->selectRaw('TABLE_NAME AS tabla, CONSTRAINT_NAME AS conname')
-            ->whereRaw('TABLE_SCHEMA = DATABASE()')
-            ->where('REFERENCED_TABLE_NAME', 'distributor_applications_m5')
-            ->get();
+        $dependencias = collect(DB::select(<<<'SQL'
+            SELECT tc.table_name AS tabla, tc.constraint_name AS conname
+            FROM information_schema.table_constraints AS tc
+            INNER JOIN information_schema.constraint_column_usage AS ccu
+                ON ccu.constraint_catalog = tc.constraint_catalog
+                AND ccu.constraint_schema = tc.constraint_schema
+                AND ccu.constraint_name = tc.constraint_name
+            WHERE tc.constraint_type = 'FOREIGN KEY'
+                AND tc.table_schema = current_schema()
+                AND ccu.table_schema = current_schema()
+                AND ccu.table_name = 'distributor_applications_m5'
+            SQL));
         if ($dependencias !== []) {
             $detalle = collect($dependencias)->map(fn ($fk) => $fk->tabla.'.'.$fk->conname)->implode(', ');
             throw new RuntimeException('No se puede retirar la raíz legacy; conserva FKs funcionales: '.$detalle);
