@@ -25,6 +25,9 @@ use Symfony\Component\HttpKernel\Exception\ConflictHttpException;
 
 final class ServicioSolicitudDistribuidora
 {
+    /** @var array<string, array<string, string>> */
+    private array $declaracionesCache = [];
+
     public function __construct(
         private readonly GeneradorFolioSolicitud $generadorFolio,
         private readonly ProtectorDatosSolicitud $protectorDatos,
@@ -175,6 +178,31 @@ final class ServicioSolicitudDistribuidora
             $email = $this->limpiarTexto($datos['email'] ?? null);
             $officialIdNumber = $this->limpiarTexto($datos['official_id_number'] ?? null);
 
+            $curpHmac = $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp);
+            if ($curpHmac !== null && DatosPersonalesSolicitud::query()
+                ->where('curp_hmac', $curpHmac)
+                ->where('application_id', '<>', $bloqueada->id)
+                ->exists()) {
+                throw ValidationException::withMessages([
+                    'curp' => ['La CURP ya está registrada en otra solicitud.'],
+                ]);
+            }
+
+            $officialIdHmac = $officialIdNumber === null ? null : $this->protectorDatos->generarHmacIdentificacion($officialIdNumber);
+            if (($datos['nationality'] ?? $registro->nationality) === 'FOREIGN'
+                && $officialIdHmac !== null
+                && DatosPersonalesSolicitud::query()
+                    ->where('nationality', 'FOREIGN')
+                    ->where('identification_country', $datos['identification_country'] ?? $registro->identification_country)
+                    ->where('official_id_type', $datos['official_id_type'] ?? $registro->official_id_type)
+                    ->where('official_id_number_hmac', $officialIdHmac)
+                    ->where('application_id', '<>', $bloqueada->id)
+                    ->exists()) {
+                throw ValidationException::withMessages([
+                    'official_id_number' => ['El número de identificación ya está registrado en otra solicitud.'],
+                ]);
+            }
+
             $registro->forceFill([
                 'first_name' => $this->normalizarNombre($datos['first_name'] ?? null),
                 'first_last_name' => $this->normalizarNombre($datos['first_last_name'] ?? null),
@@ -182,7 +210,7 @@ final class ServicioSolicitudDistribuidora
                 'nationality' => $datos['nationality'] ?? null,
                 'birth_country' => $birthCountry,
                 'curp_ciphertext' => $curp === null ? null : $this->protectorDatos->cifrarCurp($curp),
-                'curp_hmac' => $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp),
+                'curp_hmac' => $curpHmac,
                 'rfc_ciphertext' => $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc),
                 'rfc_hmac' => $rfc === null ? null : $this->protectorDatos->generarHmacRfc($rfc),
                 'birth_date' => $datos['birth_date'] ?? null,
@@ -194,7 +222,7 @@ final class ServicioSolicitudDistribuidora
                 'identification_country' => $datos['identification_country'] ?? null,
                 'official_id_type' => $datos['official_id_type'] ?? null,
                 'official_id_number_ciphertext' => $officialIdNumber === null ? null : $this->protectorDatos->cifrarIdentificacion($officialIdNumber),
-                'official_id_number_hmac' => $officialIdNumber === null ? null : $this->protectorDatos->generarHmacIdentificacion($officialIdNumber),
+                'official_id_number_hmac' => $officialIdHmac,
             ])->save();
 
             $this->incrementarVersion($bloqueada);
@@ -549,6 +577,23 @@ final class ServicioSolicitudDistribuidora
 
     public function calcularCompletitud(SolicitudDistribuidora $app): array
     {
-        return $this->validadorExpediente->calcularSeccionesCompletas($app);
+        $declaraciones = $this->obtenerDeclaraciones($app);
+
+        return $this->validadorExpediente->calcularSeccionesCompletas($app, $declaraciones);
+    }
+
+    /** @return array<string, string> */
+    public function calcularDeclaraciones(SolicitudDistribuidora $app): array
+    {
+        return $this->obtenerDeclaraciones($app);
+    }
+
+    /** @return array<string, string> */
+    private function obtenerDeclaraciones(SolicitudDistribuidora $app): array
+    {
+        $cacheKey = $app->getKey().':'.$app->lock_version;
+
+        return $this->declaracionesCache[$cacheKey]
+            ??= $this->validadorExpediente->declaracionesAutomaticas($app);
     }
 }

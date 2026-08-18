@@ -27,7 +27,7 @@ final class GuardarFamiliarRequest extends FormRequest
             'first_name' => [$presencia, 'string', 'max:120'],
             'first_last_name' => [$presencia, 'string', 'max:120'],
             'second_last_name' => ['nullable', 'string', 'max:120'],
-            'birth_date' => ['nullable', 'date_format:Y-m-d', 'before:today'],
+            'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'declared_age' => ['nullable', 'integer', 'min:0', 'max:130'],
             'school_name' => ['nullable', 'string', 'max:180'],
             'is_family_reference' => ['sometimes', 'boolean'],
@@ -35,5 +35,12 @@ final class GuardarFamiliarRequest extends FormRequest
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'birth_date.before_or_equal' => 'La referencia familiar debe tener al menos 18 años.',
+        ];
     }
 }

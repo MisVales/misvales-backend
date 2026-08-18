@@ -111,15 +111,17 @@ final class ValidadorExpedienteSolicitud
     }
 
     /** @return array{completed_sections: int, total_sections: int, can_submit: bool} */
-    public function calcularSeccionesCompletas(SolicitudDistribuidora $solicitud): array
+    /** @param array<string, string>|null $declaraciones */
+    public function calcularSeccionesCompletas(SolicitudDistribuidora $solicitud, ?array $declaraciones = null): array
     {
-        $declaraciones = $this->declaracionesAutomaticas($solicitud);
-        $completadas = count(array_filter($declaraciones, fn (string $estado): bool => $estado !== 'PENDING'));
+        $declaraciones ??= $this->declaracionesAutomaticas($solicitud);
+        $aplicables = array_filter($declaraciones, fn (string $estado): bool => $estado !== 'NOT_APPLICABLE');
+        $completadas = count(array_filter($aplicables, fn (string $estado): bool => $estado === 'COMPLETED'));
 
         return [
             'completed_sections' => $completadas,
-            'total_sections' => count(self::SECCIONES),
-            'can_submit' => $completadas === count(self::SECCIONES),
+            'total_sections' => count($aplicables),
+            'can_submit' => ! in_array('PENDING', $declaraciones, true),
         ];
     }
 

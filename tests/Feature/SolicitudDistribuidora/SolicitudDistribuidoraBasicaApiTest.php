@@ -49,7 +49,8 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             ->assertJsonPath('data.branch.id', $sucursal->id)
             ->assertJsonPath('data.coordinator.id', $coordinador->id)
             ->assertJsonPath('data.lock_version', 1)
-            ->assertJsonPath('data.completion.total_sections', 10);
+            ->assertJsonPath('data.completion.completed_sections', 0)
+            ->assertJsonPath('data.completion.total_sections', 2);
 
         self::assertMatchesRegularExpression('/^SOL-\d{4}-\d{6,}$/', $respuesta->json('data.application_number'));
         $segunda = $this->postJson('/api/v1/distributor-applications', [
@@ -75,6 +76,42 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         self::assertNotSame($valorPrincipal, $valorConcurrente);
         DB::disconnect('pgsql_solicitudes_concurrentes');
+    }
+
+    public function test_rechaza_datos_personales_y_referencias_menores_de_edad_con_mensaje_claro(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-18');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100018');
+        Sanctum::actingAs($general);
+        $menorDeEdad = now()->subYears(18)->addDay()->toDateString();
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX09',
+            'birth_date' => $menorDeEdad,
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => 'INE-001',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.birth_date.0', 'La persona solicitante debe tener al menos 18 años.');
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
+            'lock_version' => 1,
+            'relationship' => 'SIBLING',
+            'first_name' => 'Luis',
+            'first_last_name' => 'Pérez',
+            'birth_date' => $menorDeEdad,
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.birth_date.0', 'La referencia familiar debe tener al menos 18 años.');
     }
 
     public function test_gerente_de_sucursal_solo_crea_y_lista_en_su_alcance(): void

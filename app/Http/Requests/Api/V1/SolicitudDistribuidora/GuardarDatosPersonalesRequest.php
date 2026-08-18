@@ -26,7 +26,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required_if:nationality,MEXICAN', 'nullable', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/i'],
             'rfc' => ['nullable', 'string', 'regex:/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i'],
-            'birth_date' => ['required', 'date_format:Y-m-d', 'before:today'],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'birth_country' => ['required', 'string', 'max:2'],
             'birth_place' => ['nullable', 'string', 'max:150'],
             'birth_state' => ['required', 'string', 'max:100'],
@@ -39,5 +39,12 @@ final class GuardarDatosPersonalesRequest extends FormRequest
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'birth_date.before_or_equal' => 'La persona solicitante debe tener al menos 18 años.',
+        ];
     }
 }

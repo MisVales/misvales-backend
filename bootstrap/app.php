@@ -349,6 +349,36 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->renderable(function (QueryException $e, Request $request) {
+            if ($e->getCode() === '23505' && $request->is('api/v1/distributor-applications*')) {
+                $constraint = mb_strtolower($e->getMessage());
+                $fields = match (true) {
+                    str_contains($constraint, 'app_pers_data_curp_hmac_unique') => [
+                        'curp' => ['La CURP ya está registrada en otra solicitud.'],
+                    ],
+                    str_contains($constraint, 'app_pers_data_foreign_id_unique') => [
+                        'official_id_number' => ['El número de identificación ya está registrado en otra solicitud.'],
+                    ],
+                    str_contains($constraint, 'official_id') => [
+                        'official_id_number' => ['El número de identificación ya está registrado en otra solicitud.'],
+                    ],
+                    str_contains($constraint, 'curp') => [
+                        'curp' => ['La CURP ya está registrada en otra solicitud.'],
+                    ],
+                    str_contains($constraint, 'application_residences_one_current') => [
+                        'is_current' => ['Ya existe un domicilio actual en la solicitud.'],
+                    ],
+                    default => [],
+                };
+
+                return response()->json(['error' => [
+                    'code' => 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE',
+                    'message' => 'Revisa el campo indicado.',
+                    'fields' => $fields === [] ? (object) [] : $fields,
+                    'details' => (object) [],
+                    'request_id' => $request->attributes->get('request_id'),
+                ]], 422);
+            }
+
             if ($e->getCode() === '23505' && ($request->is('api/v1/credit-increase-requests*') || $request->is('api/v1/credit-lines*'))) {
                 try {
                     if ($request->user()) {

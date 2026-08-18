@@ -33,4 +33,12 @@ final class GuardarEmpleoRequest extends FormRequest
 
         return $this->applyDraftRules($rules, ['lock_version']);
     }
+
+    public function messages(): array
+    {
+        return [
+            'started_at.before_or_equal' => 'La fecha de inicio no puede ser posterior a hoy.',
+            'ended_at.after_or_equal' => 'La fecha de terminación debe ser igual o posterior a la fecha de inicio.',
+        ];
+    }
 }

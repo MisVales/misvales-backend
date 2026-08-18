@@ -37,4 +37,11 @@ final class GuardarDomicilioRequest extends FormRequest
             $this->reglasCodigoPostalMexicano('', $presencia)
         ), ['lock_version']);
     }
+
+    public function messages(): array
+    {
+        return [
+            'country.size' => 'Selecciona un país válido.',
+        ];
+    }
 }

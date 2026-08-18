@@ -66,6 +66,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->consultarSolicitud($request->user(), $application),
         )->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -79,6 +80,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->actualizarSolicitud($request->user(), $application, $request->validated()),
         )->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -92,6 +94,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->guardarDatosPersonales($request->user(), $application, $request->validated()),
         ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -114,6 +117,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->guardarDomicilio($request->user(), $application, $request->validated()),
         ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -127,6 +131,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->guardarDomicilio($request->user(), $application, $request->validated(), $residence),
         )->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -148,6 +153,7 @@ final class SolicitudDistribuidoraController extends Controller
             $servicio->enviarARevision($request->user(), $application, $request->integer('lock_version')),
         )->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -166,6 +172,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated())))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -177,6 +184,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated(), $member))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -203,6 +211,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated())))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -214,6 +223,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated(), $vehicle))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -240,6 +250,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated())))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -251,6 +262,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated(), $entry))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -277,6 +289,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated())))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -288,6 +301,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated(), $employment))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
@@ -314,6 +328,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return (new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated())))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ])->response()->setStatusCode(201);
@@ -325,6 +340,7 @@ final class SolicitudDistribuidoraController extends Controller
 
         return new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated(), $credit))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
+            'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
             'saved_at' => now()->toISOString(),
         ]);
