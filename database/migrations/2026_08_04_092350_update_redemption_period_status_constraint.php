@@ -11,13 +11,21 @@ return new class extends Migration
      */
     public function up(): void
     {
-        DB::statement('ALTER TABLE redemption_periods DROP CONSTRAINT chk_rp_status');
-        DB::statement("ALTER TABLE redemption_periods ADD CONSTRAINT chk_rp_status CHECK (status IN ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED'));");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE redemption_periods DROP CONSTRAINT chk_rp_status');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE redemption_periods ADD CONSTRAINT chk_rp_status CHECK (status IN ('DRAFT', 'SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED'));");
+        }
     }
 
     public function down(): void
     {
-        DB::statement('ALTER TABLE redemption_periods DROP CONSTRAINT chk_rp_status');
-        DB::statement("ALTER TABLE redemption_periods ADD CONSTRAINT chk_rp_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'CLOSED', 'CANCELLED'));");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE redemption_periods DROP CONSTRAINT chk_rp_status');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE redemption_periods ADD CONSTRAINT chk_rp_status CHECK (status IN ('DRAFT', 'PUBLISHED', 'CLOSED', 'CANCELLED'));");
+        }
     }
 };

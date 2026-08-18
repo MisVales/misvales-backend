@@ -57,16 +57,22 @@ return new class extends Migration
 
         DB::statement("ALTER TABLE operational_logs ADD CONSTRAINT operational_log_channel_check CHECK (channel IN ('APPLICATION','SECURITY','OPERATION','ERROR','AUDIT'))");
         foreach (['audit_logs', 'operational_logs', 'notification_deliveries'] as $table) {
+            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement("CREATE OR REPLACE FUNCTION prevent_{$table}_mutation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION '{$table} es inmutable'; END; $$ LANGUAGE plpgsql");
             DB::statement("CREATE TRIGGER trg_prevent_{$table}_update_delete BEFORE UPDATE OR DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_mutation() ");
+        }
+        }
         }
     }
 
     public function down(): void
     {
         foreach (['audit_logs', 'operational_logs', 'notification_deliveries'] as $table) {
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_update_delete ON {$table}");
             DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_mutation()");
+        }
         }
         Schema::table('audit_logs', function (Blueprint $table): void {
             $table->dropColumn(['authorizer_id', 'executor_id', 'session_id', 'correlation_id', 'evidence', 'rule_snapshot']);

@@ -60,7 +60,9 @@ return new class extends Migration
             $t->timestampsTz();
         });
         DB::statement("ALTER TABLE distributor_surpluses ADD CONSTRAINT distributor_surpluses_status_check CHECK (status IN ('PENDING_DECISION','CREDIT_BALANCE','REFUND_PENDING','REFUNDED','CONSUMED'))");
-        DB::statement('ALTER TABLE distributor_surpluses ADD CONSTRAINT distributor_surpluses_amounts_check CHECK (original_amount > 0 AND available_amount >= 0 AND reserved_amount >= 0 AND available_amount + reserved_amount <= original_amount)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE distributor_surpluses ADD CONSTRAINT distributor_surpluses_amounts_check CHECK (original_amount > 0 AND available_amount >= 0 AND reserved_amount >= 0 AND available_amount + reserved_amount <= original_amount)');
+        }
         DB::statement("ALTER TABLE surplus_refund_requests ADD CONSTRAINT surplus_refunds_status_check CHECK (status IN ('REQUESTED','AUTHORIZED','REJECTED','EXECUTED'))");
     }
 

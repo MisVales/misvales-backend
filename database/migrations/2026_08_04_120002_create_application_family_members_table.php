@@ -27,7 +27,9 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE application_family_members ADD CONSTRAINT application_family_relationship_check CHECK (relationship IN ('SPOUSE', 'PARTNER', 'CHILD', 'FATHER', 'MOTHER', 'SIBLING', 'OTHER'))");
-        DB::statement('ALTER TABLE application_family_members ADD CONSTRAINT application_family_age_check CHECK (declared_age IS NULL OR declared_age <= 130)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_family_members ADD CONSTRAINT application_family_age_check CHECK (declared_age IS NULL OR declared_age <= 130)');
+        }
     }
 
     public function down(): void

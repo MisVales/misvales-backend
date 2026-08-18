@@ -29,7 +29,9 @@ return new class extends Migration
             $this->recreateApplicationForeignKey($table);
         }
 
-        DB::statement('ALTER TABLE application_authorizations DROP CONSTRAINT IF EXISTS application_authorizations_amount_check');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_authorizations DROP CONSTRAINT IF EXISTS application_authorizations_amount_check');
+        }
         DB::statement("ALTER TABLE application_authorizations ADD CONSTRAINT application_authorizations_amount_check CHECK ((decision = 'APPROVED' AND initial_credit_line_amount > 0) OR (decision = 'REJECTED' AND initial_credit_line_amount IS NULL))");
 
         Schema::table('client_transfer_requests', function (Blueprint $table): void {
@@ -37,12 +39,16 @@ return new class extends Migration
             $table->timestampTz('cancelled_at')->nullable();
             $table->text('cancellation_reason')->nullable();
         });
-        DB::statement('ALTER TABLE client_transfer_requests DROP CONSTRAINT IF EXISTS client_transfer_status_check');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE client_transfer_requests DROP CONSTRAINT IF EXISTS client_transfer_status_check');
+        }
         DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_status_check CHECK (status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED','COMPLETED','REJECTED_BY_RECEIVER','ORIGIN_REJECTED','CANCELLED'))");
         DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_cancellation_check CHECK ((status = 'CANCELLED' AND cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR (status <> 'CANCELLED' AND cancelled_by IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL))");
 
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update_delete ON notification_deliveries');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update_delete ON notification_deliveries');
         DB::statement('DROP FUNCTION IF EXISTS prevent_notification_deliveries_mutation()');
+        }
         Schema::table('notification_deliveries', function (Blueprint $table): void {
             $table->string('recipient_address')->nullable();
             $table->string('status', 16)->nullable();
@@ -65,7 +71,9 @@ return new class extends Migration
             'SELECT d.id FROM notification_deliveries d LEFT JOIN notifications n ON n.id = d.notification_id WHERE n.id IS NULL LIMIT 20',
             'Existen entregas sin notificación',
         );
-        DB::statement('ALTER TABLE notification_deliveries DROP CONSTRAINT IF EXISTS notification_deliveries_notification_id_foreign');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE notification_deliveries DROP CONSTRAINT IF EXISTS notification_deliveries_notification_id_foreign');
+        }
         Schema::table('notification_deliveries', function (Blueprint $table): void {
             $table->foreign('notification_id', 'notification_deliveries_notification_id_foreign')
                 ->references('id')
@@ -91,7 +99,9 @@ return new class extends Migration
         );
 
         $name = "{$table}_application_id_foreign";
-        DB::statement("ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}");
+        }
         Schema::table($table, function (Blueprint $blueprint) use ($name): void {
             $blueprint->foreign('application_id', $name)
                 ->references('id')

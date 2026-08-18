@@ -15,7 +15,9 @@ return new class extends Migration
                 throw new RuntimeException('No se pueden convertir movimientos legacy sin inventar snapshots históricos. IDs: '.$legacyIds->implode(', '));
             }
 
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
+        }
             Schema::table('credit_line_movements', function (Blueprint $table): void {
                 $table->dropColumn(['balance_before', 'balance_after', 'updated_at']);
                 $table->dropConstrainedForeignId('created_by');
@@ -36,8 +38,12 @@ return new class extends Migration
             });
         }
 
-        DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
-        DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_line_movements DROP CONSTRAINT IF EXISTS credit_line_movements_balances_check');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
+        }
         DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
     }
 
@@ -71,6 +77,8 @@ return new class extends Migration
             $table->timestampTz('updated_at')->nullable();
         });
 
-        DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (balance_before >= 0 AND balance_after >= 0)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (balance_before >= 0 AND balance_after >= 0)');
+        }
     }
 };

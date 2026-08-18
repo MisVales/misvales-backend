@@ -25,8 +25,12 @@ return new class extends Migration
             });
         }
 
-        DB::statement('ALTER TABLE distributor_applications DROP CONSTRAINT IF EXISTS distributor_applications_status_check');
-        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_status_check CHECK (status IN ('DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'AUTHORIZED_PENDING_ACTIVATION', 'ACTIVE'))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE distributor_applications DROP CONSTRAINT IF EXISTS distributor_applications_status_check');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_status_check CHECK (status IN ('DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'AUTHORIZED_PENDING_ACTIVATION', 'ACTIVE'))");
+        }
 
         if (Schema::hasTable('distributor_applications_m5')) {
             $sinCanonica = DB::table('distributor_applications_m5 as legacy')
@@ -35,7 +39,11 @@ return new class extends Migration
             $this->abortarSiHay($sinCanonica, 'Solicitudes legacy sin raíz canónica');
 
             $payloads = DB::table('distributor_applications_m5')
-                ->whereRaw("applicant_data::jsonb <> '{}'::jsonb")
+                ->when(DB::getDriverName() === 'sqlite', function ($q) {
+                    $q->whereRaw("applicant_data <> '{}'");
+                }, function ($q) {
+                    $q->whereRaw("applicant_data::jsonb <> '{}'::jsonb");
+                })
                 ->limit(20)->pluck('id');
             $this->abortarSiHay($payloads, 'Solicitudes legacy con applicant_data que requiere migración explícita a tablas estructuradas');
 
@@ -61,11 +69,17 @@ return new class extends Migration
                 ->whereNull('canonical.id')->limit(20)->pluck('child.application_id');
             $this->abortarSiHay($huerfanos, "{$tabla} contiene application_id sin raíz canónica");
 
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$tabla}_application_id_foreign");
-            DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$tabla}_application_id_foreign FOREIGN KEY (application_id) REFERENCES distributor_applications(id) ON DELETE RESTRICT");
+        }
+            if (DB::getDriverName() !== 'sqlite') {
+                DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$tabla}_application_id_foreign FOREIGN KEY (application_id) REFERENCES distributor_applications(id) ON DELETE RESTRICT");
+            }
         }
 
-        DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+        }
         DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
     }

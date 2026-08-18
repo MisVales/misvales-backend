@@ -24,7 +24,9 @@ return new class extends Migration
             $table->index('application_id');
         });
 
-        DB::statement('ALTER TABLE application_employments ADD CONSTRAINT application_employments_dates_check CHECK (ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_employments ADD CONSTRAINT application_employments_dates_check CHECK (ended_at IS NULL OR started_at IS NULL OR ended_at >= started_at)');
+        }
     }
 
     public function down(): void

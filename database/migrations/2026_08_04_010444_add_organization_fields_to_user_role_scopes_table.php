@@ -38,7 +38,9 @@ return new class extends Migration
             $table->index(['scope_type', 'status']);
         });
 
-        DB::statement(<<<'SQL'
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement(<<<'SQL'
             CREATE UNIQUE INDEX user_role_scopes_active_global_unique
             ON user_role_scopes (user_id, role_id, scope_type)
             WHERE status = 'ACTIVE'
@@ -67,32 +69,50 @@ return new class extends Migration
             (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
         );");
 
-        DB::statement(<<<'SQL'
-            CREATE OR REPLACE FUNCTION prevent_urs_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'No se deben eliminar físicamente asignaciones anteriores.';
-            END;
-            $$ LANGUAGE plpgsql;
-        SQL);
-        DB::statement('
-            CREATE TRIGGER trg_prevent_urs_deletion
-            BEFORE DELETE ON user_role_scopes
-            FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
-        ');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement(<<<'SQL'
+                CREATE OR REPLACE FUNCTION prevent_urs_deletion()
+                RETURNS trigger AS $$
+                BEGIN
+                    RAISE EXCEPTION 'No se deben eliminar físicamente asignaciones anteriores.';
+                END;
+                $$ LANGUAGE plpgsql;
+            SQL);
+            DB::statement('
+                CREATE TRIGGER trg_prevent_urs_deletion
+                BEFORE DELETE ON user_role_scopes
+                FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
+            ');
+        }
+        }
+        }
     }
 
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
+        }
+        }
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
+        }
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;');
+        }
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;');
+        }
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;');
+        }
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;');
+        }
 
             DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_global_unique;');
             DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_branch_unique;');

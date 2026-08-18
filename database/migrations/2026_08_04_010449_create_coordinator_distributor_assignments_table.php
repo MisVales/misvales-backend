@@ -64,20 +64,25 @@ return new class extends Migration
             (status IN ('ENDED', 'REASSIGNED') AND valid_to IS NOT NULL)
         );");
 
-        // Trigger para evitar eliminación física
-        DB::statement("
-            CREATE OR REPLACE FUNCTION prevent_cda_deletion()
-            RETURNS trigger AS $$
-            BEGIN
-                RAISE EXCEPTION 'Las asignaciones anteriores no se eliminan físicamente.';
-            END;
-            $$ LANGUAGE plpgsql;
-        ");
-        DB::statement('
-            CREATE TRIGGER trg_prevent_cda_deletion
-            BEFORE DELETE ON coordinator_distributor_assignments
-            FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
-        ');
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("
+                CREATE OR REPLACE FUNCTION prevent_cda_deletion()
+                RETURNS trigger AS $$
+                BEGIN
+                    RAISE EXCEPTION 'Las asignaciones anteriores no se eliminan físicamente.';
+                END;
+                $$ LANGUAGE plpgsql;
+            ");
+            DB::statement('
+                CREATE TRIGGER trg_prevent_cda_deletion
+                BEFORE DELETE ON coordinator_distributor_assignments
+                FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
+            ');
+        }
+        }
+        }
     }
 
     /**
@@ -85,8 +90,12 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
+        }
+        }
 
         Schema::dropIfExists('coordinator_distributor_assignments');
     }

@@ -22,7 +22,9 @@ return new class extends Migration
             $table->index('application_id');
         });
 
-        DB::statement('ALTER TABLE application_commercial_credits ADD CONSTRAINT application_commercial_credits_limit_check CHECK (credit_limit >= 0)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_commercial_credits ADD CONSTRAINT application_commercial_credits_limit_check CHECK (credit_limit >= 0)');
+        }
     }
 
     public function down(): void

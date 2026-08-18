@@ -32,7 +32,9 @@ return new class extends Migration
             $table->index(['voucher_id', 'status']);
         });
         DB::statement("ALTER TABLE voucher_modification_requests ADD CONSTRAINT voucher_modification_status_check CHECK (status IN ('REQUESTED', 'AUTHORIZED', 'REJECTED', 'APPLIED', 'EXPIRED'))");
-        DB::statement('ALTER TABLE voucher_modification_requests ADD CONSTRAINT voucher_modification_lock_check CHECK (lock_version >= 1)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE voucher_modification_requests ADD CONSTRAINT voucher_modification_lock_check CHECK (lock_version >= 1)');
+        }
         DB::statement("ALTER TABLE voucher_modification_requests ADD CONSTRAINT voucher_modification_token_check CHECK ((status = 'AUTHORIZED' AND token_hash IS NOT NULL AND token_expires_at IS NOT NULL AND token_used_at IS NULL) OR status <> 'AUTHORIZED')");
 
         Schema::create('voucher_cash_transactions', function (Blueprint $table): void {

@@ -52,7 +52,9 @@ return new class extends Migration
             $t->timestampTz('delivered_at')->nullable();
             $t->timestampsTz();
         });
-        DB::statement('ALTER TABLE point_accounts ADD CONSTRAINT point_accounts_balance_check CHECK (balance >= 0 AND reserved >= 0 AND reserved <= balance)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE point_accounts ADD CONSTRAINT point_accounts_balance_check CHECK (balance >= 0 AND reserved >= 0 AND reserved <= balance)');
+        }
         DB::statement("ALTER TABLE point_movements ADD CONSTRAINT point_movements_type_check CHECK (type IN ('EARLY_GENERATION','LATE_DISCOUNT','REDEMPTION'))");
         DB::statement("ALTER TABLE point_redemption_requests ADD CONSTRAINT point_redemptions_status_check CHECK (status IN ('REQUESTED','AUTHORIZED','REJECTED','DELIVERED'))");
     }

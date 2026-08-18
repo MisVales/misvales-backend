@@ -23,7 +23,9 @@ return new class extends Migration
             $table->index('application_id');
         });
 
-        DB::statement('ALTER TABLE application_vehicles ADD CONSTRAINT application_vehicles_model_year_check CHECK (model_year IS NULL OR model_year BETWEEN 1886 AND 2200)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_vehicles ADD CONSTRAINT application_vehicles_model_year_check CHECK (model_year IS NULL OR model_year BETWEEN 1886 AND 2200)');
+        }
     }
 
     public function down(): void

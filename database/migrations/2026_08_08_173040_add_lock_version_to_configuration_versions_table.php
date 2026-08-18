@@ -24,7 +24,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('ALTER TABLE configuration_versions DROP CONSTRAINT chk_cv_lock_version;');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE configuration_versions DROP CONSTRAINT chk_cv_lock_version;');
+        }
         Schema::table('configuration_versions', function (Blueprint $table) {
             $table->dropColumn('lock_version');
         });

@@ -49,7 +49,9 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_status_check CHECK (status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED','COMPLETED','REJECTED_BY_RECEIVER','ORIGIN_REJECTED'))");
-        DB::statement('ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_distinct_distributors_check CHECK (origin_distributor_id <> destination_distributor_id)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_distinct_distributors_check CHECK (origin_distributor_id <> destination_distributor_id)');
+        }
         DB::statement("CREATE UNIQUE INDEX client_transfer_active_client_unique ON client_transfer_requests (client_id) WHERE status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED')");
         DB::statement("ALTER TABLE organizational_change_events ADD CONSTRAINT organizational_change_type_check CHECK (type IN ('CLIENT_ADMIN_REASSIGNMENT','DISTRIBUTOR_BRANCH_CHANGE','COORDINATOR_CHANGE'))");
     }

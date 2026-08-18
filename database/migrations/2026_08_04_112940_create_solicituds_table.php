@@ -6,7 +6,9 @@ use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration {
     public function up(): void {
-        DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_application_number_seq START WITH 1 INCREMENT BY 1');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_application_number_seq START WITH 1 INCREMENT BY 1');
+        }
 
         Schema::create('distributor_applications', function (Blueprint $table) {
             $table->uuid('id')->primary();
@@ -14,7 +16,11 @@ return new class extends Migration {
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->foreignUuid('coordinator_id')->constrained('users')->restrictOnDelete();
             $table->string('status', 40)->default('DRAFT');
-            $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
+            if (DB::getDriverName() === 'sqlite') {
+                $table->jsonb('section_declarations')->default('{}');
+            } else {
+                $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
+            }
             $table->jsonb('pending_sections')->nullable();
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->foreignUuid('submitted_by')->nullable()->constrained('users')->restrictOnDelete();
@@ -29,12 +35,21 @@ return new class extends Migration {
         });
 
         DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_status_check CHECK (status IN ('DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'AUTHORIZED_PENDING_ACTIVATION', 'ACTIVE'))");
-        DB::statement('ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_lock_version_check CHECK (lock_version >= 1)');
-        DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
-        DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_lock_version_check CHECK (lock_version >= 1)');
+        }
+        
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
+        }
+            DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
+        }
     }
     public function down(): void {
         Schema::dropIfExists('distributor_applications');
-        DB::statement('DROP SEQUENCE IF EXISTS distributor_application_number_seq');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP SEQUENCE IF EXISTS distributor_application_number_seq');
+        }
     }
 };

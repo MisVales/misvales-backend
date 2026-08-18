@@ -7,7 +7,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql') {
+        if (DB::connection()->getDriverName() !== 'pgsql' && DB::connection()->getDriverName() !== 'sqlite') {
             throw new RuntimeException('La alineación de esquema requiere PostgreSQL.');
         }
 
@@ -56,7 +56,9 @@ return new class extends Migration
         $this->recrearFk('coordinator_distributor_assignments', 'distributor_id', 'distributors');
         $this->recrearFk('redemption_periods', 'point_value_configuration_version_id', 'configuration_versions');
 
-        DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+        }
         DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
 
@@ -88,14 +90,22 @@ return new class extends Migration
             "{$tabla}.{$columna} contiene referencias huérfanas",
         );
         $nombre = "{$tabla}_{$columna}_foreign";
-        DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$nombre}");
-        DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$nombre} FOREIGN KEY ({$columna}) REFERENCES {$referenciada}(id) ON DELETE RESTRICT");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$nombre}");
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$nombre} FOREIGN KEY ({$columna}) REFERENCES {$referenciada}(id) ON DELETE RESTRICT");
+        }
     }
 
     private function recrearCheck(string $tabla, string $nombre, string $expresion): void
     {
-        DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$nombre}");
-        DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$nombre} CHECK ({$expresion})");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$nombre}");
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$nombre} CHECK ({$expresion})");
+        }
     }
 
     private function abortarSiConsultaDevuelveIds(string $sql, string $mensaje): void

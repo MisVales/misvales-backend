@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_number_seq START WITH 1 INCREMENT BY 1');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_number_seq START WITH 1 INCREMENT BY 1');
+        }
 
         Schema::create('distributors', function (Blueprint $table): void {
             $table->uuid('id')->primary();
@@ -28,8 +30,14 @@ return new class extends Migration
 
         DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_status_check CHECK (status IN ('PENDING_ACTIVATION', 'ACTIVE', 'DISABLED'))");
         DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_activation_check CHECK (status <> 'ACTIVE' OR (activated_at IS NOT NULL AND activated_by IS NOT NULL))");
-        DB::statement('ALTER TABLE distributors ADD CONSTRAINT distributors_lock_version_check CHECK (lock_version >= 1)');
-        DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number ~ '^DIS-[0-9]{4}-[0-9]{6,}$')");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE distributors ADD CONSTRAINT distributors_lock_version_check CHECK (lock_version >= 1)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number ~ '^DIS-[0-9]{4}-[0-9]{6,}$')");
+        }
+        }
 
         Schema::table('coordinator_distributor_assignments', function (Blueprint $table): void {
             $table->foreign('distributor_id')->references('id')->on('distributors')->restrictOnDelete();
@@ -39,8 +47,12 @@ return new class extends Migration
             $table->foreignUuid('scope_id')->nullable()->after('scope_type')->constrained('distributors')->restrictOnDelete();
             $table->index(['scope_type', 'scope_id', 'status']);
         });
-        DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
-        DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match');
+        }
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_type CHECK (scope_type IN ('GLOBAL', 'BRANCH', 'DISTRIBUTOR'))");
         DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_branch_match CHECK (
             (scope_type = 'GLOBAL' AND branch_id IS NULL AND scope_id IS NULL)
@@ -70,7 +82,9 @@ return new class extends Migration
         });
 
         DB::statement('CREATE UNIQUE INDEX distributor_category_current_unique ON distributor_category_assignments (distributor_id) WHERE ends_at IS NULL');
-        DB::statement('ALTER TABLE distributor_category_assignments ADD CONSTRAINT distributor_category_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE distributor_category_assignments ADD CONSTRAINT distributor_category_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
+        }
 
         Schema::create('credit_lines', function (Blueprint $table): void {
             $table->uuid('id')->primary();
@@ -81,9 +95,15 @@ return new class extends Migration
             $table->timestampsTz();
         });
 
-        DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_total_positive_check CHECK (total_authorized > 0)');
-        DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_used_balance_check CHECK (used_balance >= 0 AND used_balance <= total_authorized)');
-        DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_lock_version_check CHECK (lock_version >= 1)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_total_positive_check CHECK (total_authorized > 0)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_used_balance_check CHECK (used_balance >= 0 AND used_balance <= total_authorized)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_lines ADD CONSTRAINT credit_lines_lock_version_check CHECK (lock_version >= 1)');
+        }
 
         Schema::create('credit_line_movements', function (Blueprint $table): void {
             $table->uuid('id')->primary();
@@ -111,8 +131,12 @@ return new class extends Migration
             $table->index(['distributor_id', 'occurred_at']);
         });
 
-        DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_amount_check CHECK (amount > 0)');
-        DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_amount_check CHECK (amount > 0)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
+        }
         DB::statement('CREATE UNIQUE INDEX credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
 
         Schema::create('credit_usage_restrictions', function (Blueprint $table): void {
@@ -142,9 +166,15 @@ return new class extends Migration
         });
 
         DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_status_check CHECK (status IN ('ACTIVE', 'RESERVED', 'CONSUMED', 'CANCELLED'))");
-        DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_base_check CHECK (base_total > 0)');
-        DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_tolerance_check CHECK (tolerance_amount >= 0)');
-        DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lock_version_check CHECK (lock_version >= 1)');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_base_check CHECK (base_total > 0)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_tolerance_check CHECK (tolerance_amount >= 0)');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lock_version_check CHECK (lock_version >= 1)');
+        }
         DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lifecycle_check CHECK (
             (status = 'ACTIVE' AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
             OR (status = 'RESERVED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
@@ -153,7 +183,8 @@ return new class extends Migration
         )");
         DB::statement("CREATE UNIQUE INDEX credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
 
-        DB::statement(<<<'SQL'
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION prevent_distributor_deletion()
             RETURNS trigger AS $$
             BEGIN
@@ -162,8 +193,10 @@ return new class extends Migration
             $$ LANGUAGE plpgsql
         SQL);
         DB::statement('CREATE TRIGGER trg_prevent_distributor_deletion BEFORE DELETE ON distributors FOR EACH ROW EXECUTE FUNCTION prevent_distributor_deletion()');
+        }
 
-        DB::statement(<<<'SQL'
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement(<<<'SQL'
             CREATE OR REPLACE FUNCTION prevent_distributor_category_deletion()
             RETURNS trigger AS $$
             BEGIN
@@ -172,14 +205,19 @@ return new class extends Migration
             $$ LANGUAGE plpgsql
         SQL);
         DB::statement('CREATE TRIGGER trg_prevent_distributor_category_deletion BEFORE DELETE ON distributor_category_assignments FOR EACH ROW EXECUTE FUNCTION prevent_distributor_category_deletion()');
+        }
     }
 
     public function down(): void
     {
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_category_deletion ON distributor_category_assignments');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_category_deletion ON distributor_category_assignments');
         DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_category_deletion()');
-        DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_deletion ON distributors');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_deletion ON distributors');
         DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_deletion()');
+        }
 
         Schema::dropIfExists('credit_usage_restrictions');
         Schema::dropIfExists('credit_line_movements');
@@ -187,8 +225,12 @@ return new class extends Migration
         Schema::dropIfExists('distributor_category_assignments');
 
         DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_distributor_unique');
-        DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match');
-        DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type');
+        }
         Schema::table('user_role_scopes', function (Blueprint $table): void {
             $table->dropIndex(['scope_type', 'scope_id', 'status']);
             $table->dropConstrainedForeignId('scope_id');
@@ -205,6 +247,8 @@ return new class extends Migration
             $table->dropForeign(['distributor_id']);
         });
         Schema::dropIfExists('distributors');
-        DB::statement('DROP SEQUENCE IF EXISTS distributor_number_seq');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('DROP SEQUENCE IF EXISTS distributor_number_seq');
+        }
     }
 };

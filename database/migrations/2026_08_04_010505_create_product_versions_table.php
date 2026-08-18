@@ -41,7 +41,9 @@ return new class extends Migration
 
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount CHECK (amount > 0);');
-        DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0);');
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_amount_mod CHECK (mod(amount, 100.0000) = 0);');
+        }
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_commission CHECK (loan_commission_rate >= 0 AND loan_commission_rate <= 1);');
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_interest CHECK (interest_rate_per_fortnight >= 0 AND interest_rate_per_fortnight <= 1);');
         DB::statement('ALTER TABLE product_versions ADD CONSTRAINT chk_pv_insurance CHECK (insurance_amount >= 0);');

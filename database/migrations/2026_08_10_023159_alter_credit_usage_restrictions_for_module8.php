@@ -15,8 +15,12 @@ return new class extends Migration
                 throw new RuntimeException('No se pueden inventar configuración, procedencia y tolerancia para restricciones legacy. IDs: '.$legacyIds->implode(', '));
             }
 
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
+        }
+            if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
+        }
             Schema::table('credit_usage_restrictions', function (Blueprint $table): void {
                 $table->dropUnique('credit_usage_restrictions_credit_line_id_type_unique');
                 $table->dropColumn('voucher_id');
@@ -36,16 +40,26 @@ return new class extends Migration
             });
         }
 
-        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
-        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
-        DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_lifecycle_check');
-        DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_status_check CHECK (status IN ('ACTIVE', 'RESERVED', 'CONSUMED', 'CANCELLED'))");
-        DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lifecycle_check CHECK (
-            (status = 'ACTIVE' AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
-            OR (status = 'RESERVED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
-            OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
-            OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
-        )");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_status_check');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_consumption_check');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement('ALTER TABLE credit_usage_restrictions DROP CONSTRAINT IF EXISTS credit_usage_restrictions_lifecycle_check');
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_status_check CHECK (status IN ('ACTIVE', 'RESERVED', 'CONSUMED', 'CANCELLED'))");
+        }
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE credit_usage_restrictions ADD CONSTRAINT credit_usage_restrictions_lifecycle_check CHECK (
+                (status = 'ACTIVE' AND reserved_voucher_id IS NULL AND reserved_at IS NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
+                OR (status = 'RESERVED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NULL AND cancelled_at IS NULL)
+                OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
+                OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
+            )");
+        }
         DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
     }
 
