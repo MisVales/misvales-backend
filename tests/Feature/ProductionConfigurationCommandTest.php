@@ -31,6 +31,16 @@ final class ProductionConfigurationCommandTest extends TestCase
             ->assertSuccessful();
     }
 
+    public function test_release_validator_rejects_disabled_rate_limiting(): void
+    {
+        $this->configureSafeProductionBaseline();
+        config()->set('ratelimit.enabled', false);
+
+        $this->artisan('app:validate-production')
+            ->expectsOutputToContain('RATE_LIMIT_DISABLED')
+            ->assertFailed();
+    }
+
     public function test_repository_does_not_ship_the_fixed_credential_bootstrap(): void
     {
         self::assertFileDoesNotExist(base_path('create_coordinator.php'));
@@ -49,7 +59,6 @@ final class ProductionConfigurationCommandTest extends TestCase
         config()->set('cors.supports_credentials', true);
         config()->set('cors.allowed_origins', ['https://app.misvales.example']);
         config()->set('cors.allowed_origins_patterns', []);
-        config()->set('ratelimit.enabled', true);
         config()->set('filesystems.disks.private', [
             'driver' => 'local',
             'root' => storage_path('app/private'),
