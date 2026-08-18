@@ -17,8 +17,8 @@ class ServicioConsultaDistribuidora
         $consulta
             ->when($filtros['search'] ?? null, function (Builder $query, string $search): void {
                 $query->where(function (Builder $subconsulta) use ($search): void {
-                    $subconsulta->where('distributor_number', 'ilike', "%{$search}%")
-                        ->orWhereHas('usuario', fn (Builder $usuarios) => $usuarios->where('name', 'ilike', "%{$search}%"));
+                    $subconsulta->where('distributor_number', 'like', "%{$search}%")
+                        ->orWhereHas('usuario', fn (Builder $usuarios) => $usuarios->where('name', 'like', "%{$search}%"));
                 });
             })
             ->when($filtros['branch_id'] ?? null, fn (Builder $query, string $id) => $query->where('branch_id', $id))

@@ -9,10 +9,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('application_residences', function (Blueprint $table) {
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::create('application_residences', function (Blueprint $table) use ($isMysql) {
             $table->uuid('id')->primary();
             $table->foreignUuid('application_id')->constrained('distributor_applications');
             $table->boolean('is_current')->default(true);
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_application_unique')->nullable()->storedAs('IF(is_current = 1, 1, NULL)');
+                $table->unique(['application_id', 'current_application_unique'], 'app_residences_current_unique');
+            } else {
+                $table->uuid('current_application_unique')->nullable()->virtualAs('IF(is_current = 1, application_id, NULL)')->unique();
+            }
             $table->string('street');
             $table->string('exterior_number', 32);
             $table->string('interior_number', 32)->nullable();
@@ -27,13 +35,12 @@ return new class extends Migration
             $table->decimal('width_meters', 10, 2)->nullable();
             $table->decimal('length_meters', 10, 2)->nullable();
             $table->decimal('built_area_square_meters', 12, 2)->nullable();
-            $table->jsonb('details_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');
         });
 
-        DB::statement('CREATE UNIQUE INDEX application_residences_one_current ON application_residences (application_id) WHERE is_current = true');
         DB::statement("ALTER TABLE application_residences ADD CONSTRAINT application_residences_tenure_check CHECK (housing_tenure IN ('OWNED', 'RENTED', 'BORROWED', 'OTHER'))");
         DB::statement("ALTER TABLE application_residences ADD CONSTRAINT application_residences_financing_check CHECK (financing_status IS NULL OR financing_status IN ('PAID', 'MORTGAGE', 'LOAN', 'INFONAVIT', 'OTHER', 'NOT_APPLICABLE'))");
         DB::statement('ALTER TABLE application_residences ADD CONSTRAINT application_residences_dimensions_check CHECK ((width_meters IS NULL OR width_meters > 0) AND (length_meters IS NULL OR length_meters > 0) AND (built_area_square_meters IS NULL OR built_area_square_meters > 0))');

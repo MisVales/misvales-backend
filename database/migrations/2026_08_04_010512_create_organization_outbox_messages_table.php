@@ -14,7 +14,7 @@ return new class extends Migration
             $table->string('event_type');
             $table->string('aggregate_type');
             $table->string('aggregate_id');
-            $table->jsonb('payload');
+            $table->json('payload');
             $table->timestampTz('occurred_at');
             $table->timestampTz('available_at');
             $table->timestampTz('published_at')->nullable();

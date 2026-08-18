@@ -16,8 +16,8 @@ return new class extends Migration
             $table->string('entity_type')->index();
             $table->uuid('entity_id')->nullable()->index();
             $table->string('version')->nullable();
-            $table->jsonb('previous_value')->nullable();
-            $table->jsonb('new_value')->nullable();
+            $table->json('previous_value')->nullable();
+            $table->json('new_value')->nullable();
             $table->timestampTz('effective_from')->nullable();
             $table->timestampTz('effective_to')->nullable();
             $table->text('reason')->nullable();

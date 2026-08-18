@@ -7,6 +7,7 @@ use App\Http\Middleware\RequireActiveUser;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\TraceRequest;
+use App\Http\Middleware\TrustConfiguredProxies;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\SolicitudDistribuidora;
 use App\Models\UserRoleScope;
@@ -55,6 +56,7 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->prepend(TrustConfiguredProxies::class);
         $middleware->statefulApi();
         $middleware->redirectGuestsTo(
             fn (Request $request): ?string => $request->is('api/*') ? null : route('login'),

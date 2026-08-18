@@ -28,7 +28,7 @@ class ActivationInvitationMail extends Mailable
         $this->user = $user;
         $this->rawToken = $rawToken;
 
-        $frontendUrl = env('FRONTEND_URL', 'http://localhost:4200');
+        $frontendUrl = config('production.frontend_url');
         $this->activationUrl = rtrim($frontendUrl, '/').'/activar-cuenta?token='.urlencode($rawToken);
     }
 

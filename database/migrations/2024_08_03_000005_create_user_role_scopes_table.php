@@ -31,6 +31,17 @@ return new class extends Migration
 
     private function crearIndicesUnicosParciales(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('user_role_scopes', function (Blueprint $table) {
+                $table->unsignedTinyInteger('legacy_active_global_marker')->nullable()->storedAs('IF(branch_id IS NULL AND revoked_at IS NULL, 1, NULL)');
+                $table->unsignedTinyInteger('legacy_active_branch_marker')->nullable()->storedAs('IF(branch_id IS NOT NULL AND revoked_at IS NULL, 1, NULL)');
+                $table->unique(['user_id', 'role_id', 'legacy_active_global_marker'], 'user_role_scopes_global_unique');
+                $table->unique(['user_id', 'role_id', 'branch_id', 'legacy_active_branch_marker'], 'user_role_scopes_branch_unique');
+            });
+
+            return;
+        }
+
         DB::statement('
             CREATE UNIQUE INDEX user_role_scopes_global_unique 
             ON user_role_scopes (user_id, role_id) 

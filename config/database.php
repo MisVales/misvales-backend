@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'pgsql'),
+    'default' => env('DB_CONNECTION', 'mysql'),
 
     /*
     |--------------------------------------------------------------------------
@@ -47,57 +47,39 @@ return [
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
+            'read' => [
+                'host' => [env('DB_REPLICA_HOST', env('DB_PRIMARY_HOST', '127.0.0.1'))],
+                'port' => env('DB_REPLICA_PORT', '63306'),
+                'username' => env('DB_REPLICA_USERNAME', env('DB_PRIMARY_USERNAME')),
+                'password' => env('DB_REPLICA_PASSWORD', env('DB_PRIMARY_PASSWORD', '')),
+                'options' => extension_loaded('pdo_mysql') ? array_filter([
+                    Mysql::ATTR_SSL_CA => env('DB_REPLICA_SSL_CA'),
+                    Mysql::ATTR_SSL_CERT => env('DB_REPLICA_SSL_CERT'),
+                    Mysql::ATTR_SSL_KEY => env('DB_REPLICA_SSL_KEY'),
+                    Mysql::ATTR_SSL_VERIFY_SERVER_CERT => filter_var(env('DB_SSL_VERIFY_SERVER_CERT', true), FILTER_VALIDATE_BOOL),
+                ], static fn (mixed $value): bool => $value !== null && $value !== '') : [],
+            ],
+            'write' => [
+                'host' => [env('DB_PRIMARY_HOST', '127.0.0.1')],
+                'port' => env('DB_PRIMARY_PORT', '63306'),
+                'username' => env('DB_PRIMARY_USERNAME'),
+                'password' => env('DB_PRIMARY_PASSWORD', ''),
+                'options' => extension_loaded('pdo_mysql') ? array_filter([
+                    Mysql::ATTR_SSL_CA => env('DB_PRIMARY_SSL_CA'),
+                    Mysql::ATTR_SSL_CERT => env('DB_PRIMARY_SSL_CERT'),
+                    Mysql::ATTR_SSL_KEY => env('DB_PRIMARY_SSL_KEY'),
+                    Mysql::ATTR_SSL_VERIFY_SERVER_CERT => filter_var(env('DB_SSL_VERIFY_SERVER_CERT', true), FILTER_VALIDATE_BOOL),
+                ], static fn (mixed $value): bool => $value !== null && $value !== '') : [],
+            ],
+            'sticky' => true,
             'database' => env('DB_DATABASE', 'misvales'),
-            'username' => env('DB_USERNAME', 'postgres'),
-            'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
             'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
             'prefix' => '',
             'prefix_indexes' => true,
             'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
-
-        'mariadb' => [
-            'driver' => 'mariadb',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
-            'unix_socket' => env('DB_SOCKET', ''),
-            'charset' => env('DB_CHARSET', 'utf8mb4'),
-            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'strict' => true,
-            'engine' => null,
-            'options' => extension_loaded('pdo_mysql') ? array_filter([
-                Mysql::ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
-        ],
-
-        'pgsql' => [
-            'driver' => 'pgsql',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
-            'password' => env('DB_PASSWORD', ''),
-            'charset' => env('DB_CHARSET', 'utf8'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => 'public',
-            'timezone' => env('DB_TIMEZONE', '+00:00'),
-            'sslmode' => env('DB_SSLMODE', 'prefer'),
+            'engine' => 'InnoDB',
         ],
 
         'sqlsrv' => [

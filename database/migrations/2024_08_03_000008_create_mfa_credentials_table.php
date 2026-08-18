@@ -28,7 +28,7 @@ return new class extends Migration
             $table->string('credential_identifier')->nullable();
             $table->text('public_key')->nullable();
             $table->unsignedBigInteger('sign_count')->nullable();
-            $table->jsonb('transports')->nullable();
+            $table->json('transports')->nullable();
             $table->string('aaguid')->nullable();
             $table->string('attestation_format')->nullable();
             $table->string('rp_id')->nullable();
@@ -69,19 +69,27 @@ return new class extends Migration
             )
         ");
 
-        // global unique credential identifier
-        DB::statement('
-            CREATE UNIQUE INDEX mfa_credentials_identifier_unique 
-            ON mfa_credentials (credential_identifier) 
-            WHERE credential_identifier IS NOT NULL
-        ');
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('mfa_credentials', function (Blueprint $table) {
+                $table->unique('credential_identifier', 'mfa_credentials_identifier_unique');
+                $table->unsignedTinyInteger('totp_active_unique')->nullable()->storedAs("IF(type = 'TOTP' AND revoked_at IS NULL, 1, NULL)");
+                $table->unique(['user_id', 'type', 'totp_active_unique'], 'mfa_credentials_totp_active_unique');
+            });
+        } else {
+            // global unique credential identifier
+            DB::statement('
+                CREATE UNIQUE INDEX mfa_credentials_identifier_unique
+                ON mfa_credentials (credential_identifier)
+                WHERE credential_identifier IS NOT NULL
+            ');
 
-        // unique active totp per user
-        DB::statement("
-            CREATE UNIQUE INDEX mfa_credentials_totp_active_unique 
-            ON mfa_credentials (user_id, type) 
-            WHERE type = 'TOTP' AND revoked_at IS NULL
-        ");
+            // unique active totp per user
+            DB::statement("
+                CREATE UNIQUE INDEX mfa_credentials_totp_active_unique
+                ON mfa_credentials (user_id, type)
+                WHERE type = 'TOTP' AND revoked_at IS NULL
+            ");
+        }
     }
 
     public function down(): void

@@ -16,7 +16,7 @@ return new class extends Migration
             $table->decimal('credit_limit', 19, 4);
             $table->boolean('is_current')->default(true);
             $table->uuid('proof_reference')->nullable();
-            $table->jsonb('details_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');

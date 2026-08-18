@@ -29,6 +29,12 @@
 
 /storage/*.key
 /storage/pail
+*.key
+*.pem
+*.p12
+*.pfx
+*.sql
+*.dump
 
 _ide_helper.php
 _ide_helper_models.php

@@ -17,7 +17,7 @@ return new class extends Migration
             $table->string('model')->nullable();
             $table->unsignedSmallInteger('model_year')->nullable();
             $table->string('ownership_status', 32)->nullable();
-            $table->jsonb('details_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');

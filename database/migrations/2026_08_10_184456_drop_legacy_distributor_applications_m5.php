@@ -12,12 +12,11 @@ return new class extends Migration
             return;
         }
 
-        $dependencias = DB::select(<<<'SQL'
-            SELECT conrelid::regclass::text AS tabla, conname
-            FROM pg_constraint
-            WHERE contype = 'f'
-              AND confrelid = 'distributor_applications_m5'::regclass
-        SQL);
+        $dependencias = DB::table('information_schema.KEY_COLUMN_USAGE')
+            ->selectRaw('TABLE_NAME AS tabla, CONSTRAINT_NAME AS conname')
+            ->whereRaw('TABLE_SCHEMA = DATABASE()')
+            ->where('REFERENCED_TABLE_NAME', 'distributor_applications_m5')
+            ->get();
         if ($dependencias !== []) {
             $detalle = collect($dependencias)->map(fn ($fk) => $fk->tabla.'.'.$fk->conname)->implode(', ');
             throw new RuntimeException('No se puede retirar la raíz legacy; conserva FKs funcionales: '.$detalle);

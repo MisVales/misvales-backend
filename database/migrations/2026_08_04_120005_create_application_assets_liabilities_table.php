@@ -18,7 +18,7 @@ return new class extends Migration
             $table->decimal('outstanding_balance', 19, 4)->nullable();
             $table->decimal('monthly_payment', 19, 4)->nullable();
             $table->boolean('is_active')->default(true);
-            $table->jsonb('details_payload')->nullable();
+            $table->json('details_payload')->nullable();
             $table->timestampsTz();
 
             $table->index('application_id');

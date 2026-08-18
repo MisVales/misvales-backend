@@ -54,6 +54,15 @@ return new class extends Migration
 
     private function crearIndiceUnicoParcial(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('account_invitations', function (Blueprint $table) {
+                $table->unsignedTinyInteger('active_unique')->nullable()->storedAs("IF(state IN ('ACTIVE', 'PREPARED'), 1, NULL)");
+                $table->unique(['user_id', 'purpose', 'active_unique'], 'account_invitations_active_unique');
+            });
+
+            return;
+        }
+
         DB::statement("
             CREATE UNIQUE INDEX account_invitations_active_unique 
             ON account_invitations (user_id, purpose) 
