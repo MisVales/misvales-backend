@@ -20,8 +20,6 @@ return new class extends Migration
             if ($isMysql) {
                 $table->unsignedTinyInteger('current_published_definition_id')->nullable()->storedAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, 1, NULL)");
                 $table->unique(['configuration_definition_id', 'current_published_definition_id'], 'cv_current_published_unique');
-            } else {
-                $table->uuid('current_published_definition_id')->nullable()->virtualAs("IF(status = 'PUBLISHED' AND effective_to IS NULL, configuration_definition_id, NULL)")->unique();
             }
             $table->timestampTz('effective_from');
             $table->timestampTz('effective_to')->nullable();
@@ -36,6 +34,10 @@ return new class extends Migration
             $table->index(['configuration_definition_id', 'effective_from', 'effective_to'], 'cv_definition_effective_index');
             $table->index(['status', 'effective_from']);
         });
+
+        if (! $isMysql) {
+            DB::statement("CREATE UNIQUE INDEX cv_current_published_unique ON configuration_versions (configuration_definition_id) WHERE status = 'PUBLISHED' AND effective_to IS NULL");
+        }
 
         DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_version CHECK (version > 0);');
         DB::statement('ALTER TABLE configuration_versions ADD CONSTRAINT chk_cv_effective_dates CHECK (effective_to IS NULL OR effective_to > effective_from);');

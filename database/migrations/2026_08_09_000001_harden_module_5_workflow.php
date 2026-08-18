@@ -9,21 +9,28 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('distributor_applications_m5', function (Blueprint $table): void {
-            $table->jsonb('original_applicant_data')->nullable();
-            $table->uuid('submitted_by')->nullable();
-            $table->foreign('submitted_by')->references('id')->on('users')->restrictOnDelete();
-        });
+        if (Schema::hasTable('distributor_applications_m5')) {
+            Schema::table('distributor_applications_m5', function (Blueprint $table): void {
+                $table->jsonb('original_applicant_data')->nullable();
+                $table->uuid('submitted_by')->nullable();
+                $table->foreign('submitted_by')->references('id')->on('users')->restrictOnDelete();
+            });
 
-        DB::statement('UPDATE distributor_applications_m5 SET original_applicant_data = applicant_data WHERE original_applicant_data IS NULL');
-        DB::statement('ALTER TABLE distributor_applications_m5 ALTER COLUMN original_applicant_data SET NOT NULL');
+            DB::statement('UPDATE distributor_applications_m5 SET original_applicant_data = applicant_data WHERE original_applicant_data IS NULL');
+            DB::statement('ALTER TABLE distributor_applications_m5 ALTER COLUMN original_applicant_data SET NOT NULL');
+        }
 
+        DB::statement('ALTER TABLE verification_visits DROP CONSTRAINT IF EXISTS verification_visits_status_check');
+        DB::statement('ALTER TABLE verification_visits DROP CONSTRAINT IF EXISTS verification_visits_result_check');
+        DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_result_check');
+        DB::statement('ALTER TABLE application_authorizations DROP CONSTRAINT IF EXISTS application_authorizations_decision_check');
         DB::statement("ALTER TABLE verification_visits ADD CONSTRAINT verification_visits_status_check CHECK (status IN ('ASSIGNED', 'IN_PROGRESS', 'COMPLETED'))");
         DB::statement("ALTER TABLE verification_visits ADD CONSTRAINT verification_visits_result_check CHECK (result IS NULL OR result IN ('FAVORABLE', 'UNFAVORABLE'))");
         DB::statement("ALTER TABLE application_evaluations ADD CONSTRAINT application_evaluations_result_check CHECK (result IN ('COMPLIES', 'DOES_NOT_COMPLY'))");
         DB::statement("ALTER TABLE application_authorizations ADD CONSTRAINT application_authorizations_decision_check CHECK (decision IN ('APPROVED', 'REJECTED'))");
-        DB::statement("CREATE UNIQUE INDEX verification_visits_one_open_per_application ON verification_visits (application_id) WHERE status IN ('ASSIGNED', 'IN_PROGRESS')");
-        DB::unprepared(<<<'SQL'
+        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS verification_visits_one_open_per_application ON verification_visits (application_id) WHERE status IN ('ASSIGNED', 'IN_PROGRESS')");
+        if (Schema::hasTable('distributor_applications_m5')) {
+            DB::unprepared(<<<'SQL'
             CREATE OR REPLACE FUNCTION preserve_m5_original_application_data() RETURNS trigger AS $$
             BEGIN
                 IF NEW.original_applicant_data IS DISTINCT FROM OLD.original_applicant_data THEN
@@ -38,6 +45,7 @@ return new class extends Migration
             BEFORE UPDATE ON distributor_applications_m5
             FOR EACH ROW EXECUTE FUNCTION preserve_m5_original_application_data();
             SQL);
+        }
     }
 
     public function down(): void
@@ -50,9 +58,11 @@ return new class extends Migration
         DB::statement('ALTER TABLE verification_visits DROP CONSTRAINT IF EXISTS verification_visits_result_check');
         DB::statement('ALTER TABLE verification_visits DROP CONSTRAINT IF EXISTS verification_visits_status_check');
 
-        Schema::table('distributor_applications_m5', function (Blueprint $table): void {
-            $table->dropForeign(['submitted_by']);
-            $table->dropColumn(['submitted_by', 'original_applicant_data']);
-        });
+        if (Schema::hasTable('distributor_applications_m5')) {
+            Schema::table('distributor_applications_m5', function (Blueprint $table): void {
+                $table->dropForeign(['submitted_by']);
+                $table->dropColumn(['submitted_by', 'original_applicant_data']);
+            });
+        }
     }
 };
