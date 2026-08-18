@@ -55,4 +55,35 @@ class TurnstileVerificationTest extends TestCase
         $response->assertStatus(422)
             ->assertJsonPath('error.code', 'INVALID_TURNSTILE');
     }
+
+    public function test_forgot_password_fails_when_turnstile_secret_configured_but_token_missing()
+    {
+        Config::set('services.turnstile.secret', 'test-secret-key');
+
+        $response = $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => 'usuario@misvales.com',
+        ]);
+
+        $response->assertStatus(422)
+            ->assertJsonPath('error.code', 'TURNSTILE_REQUIRED');
+    }
+
+    public function test_forgot_password_succeeds_when_turnstile_token_valid()
+    {
+        Config::set('services.turnstile.secret', 'test-secret-key');
+
+        Http::fake([
+            'https://challenges.cloudflare.com/turnstile/v0/siteverify' => Http::response([
+                'success' => true,
+            ], 200),
+        ]);
+
+        $response = $this->postJson('/api/v1/auth/password/forgot', [
+            'email' => 'usuario@misvales.com',
+            'turnstile_token' => 'valid-token',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonStructure(['message']);
+    }
 }

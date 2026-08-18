@@ -50,15 +50,20 @@ class TurnstileVerificationService
 
         // Caso B: Validación activa contra Cloudflare
         $verifyUrl = config('services.turnstile.url', 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
+        $verifySsl = (bool) config('services.turnstile.verify_ssl', true);
 
         try {
-            $response = Http::asForm()
-                ->timeout(5)
-                ->post($verifyUrl, [
-                    'secret' => $secret,
-                    'response' => $token,
-                    'remoteip' => $request->ip(),
-                ]);
+            $httpClient = Http::asForm()->timeout(5);
+
+            if (! $verifySsl || app()->environment('local')) {
+                $httpClient = $httpClient->withoutVerifying();
+            }
+
+            $response = $httpClient->post($verifyUrl, [
+                'secret' => $secret,
+                'response' => $token,
+                'remoteip' => $request->ip(),
+            ]);
 
             if (!$response->successful() || !$response->json('success')) {
                 $errorCodes = $response->json('error-codes', []);

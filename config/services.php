@@ -46,6 +46,7 @@ return [
     'turnstile' => [
         'secret' => env('TURNSTILE_SECRET'),
         'url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        'verify_ssl' => env('TURNSTILE_VERIFY_SSL', true),
     ],
 
 

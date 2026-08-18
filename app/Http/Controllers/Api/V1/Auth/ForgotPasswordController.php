@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Mail\Security\PasswordRecoveryMail;
 use App\Models\User;
 use App\Services\Audit\SecurityAuditService;
+use App\Services\Security\TurnstileVerificationService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -17,12 +18,15 @@ class ForgotPasswordController extends Controller
      * POST /api/v1/auth/password/forgot
      * Puntos 27 y 28: Genera token seguro y previene enumeración de cuentas.
      */
-    public function forgotPassword(Request $request)
+    public function forgotPassword(Request $request, TurnstileVerificationService $turnstileService)
     {
         // 1. Validación estricta del formato
         $request->validate([
             'email' => 'required|email',
+            'turnstile_token' => 'nullable|string',
         ]);
+
+        $turnstileService->verify($request, $request->input('turnstile_token'));
 
         $email = trim(strtolower($request->email));
 
