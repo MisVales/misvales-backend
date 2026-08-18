@@ -15,6 +15,7 @@ use App\Services\Auth\ProgressiveLockoutService;
 use App\Services\Auth\SessionPolicyService;
 use App\Services\Auth\SessionTokenIdentifier;
 use App\Services\Auth\WebAuthnService;
+use App\Services\Security\TurnstileVerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Cache;
@@ -32,12 +33,18 @@ class AuthController extends Controller
     /**
      * POST /api/v1/auth/login
      */
-    public function login(Request $request, ProgressiveLockoutService $lockoutService)
-    {
+    public function login(
+        Request $request,
+        ProgressiveLockoutService $lockoutService,
+        TurnstileVerificationService $turnstileService
+    ) {
         $request->validate([
             'email' => 'required|email',
             'password' => 'required|string',
+            'turnstile_token' => 'nullable|string',
         ]);
+
+        $turnstileService->verify($request, $request->input('turnstile_token'));
 
         $localLoginPath = base_path('bootstrap/local/dev-super-session.php');
         $localSuperSessionEmail = mb_strtolower(trim((string) config('bootstrap.local_super_session.email')));

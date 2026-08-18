@@ -43,4 +43,10 @@ return [
         'key' => env('GEOAPIFY_API_KEY'),
     ],
 
+    'turnstile' => [
+        'secret' => env('TURNSTILE_SECRET'),
+        'url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+    ],
+
+
 ];
