@@ -173,20 +173,28 @@ final class ServicioSolicitudDistribuidora
             $rfc = isset($datos['rfc']) && $datos['rfc'] !== '' ? $datos['rfc'] : null;
 
             $registro = DatosPersonalesSolicitud::query()->firstOrNew(['application_id' => $bloqueada->id]);
+            $curp = isset($datos['curp']) && $datos['curp'] !== '' ? $datos['curp'] : null;
+            $birth_place = isset($datos['birth_place']) && $datos['birth_place'] !== '' 
+                ? trim($datos['birth_place']) 
+                : trim($datos['birth_city']) . ', ' . trim($datos['birth_state']) . ', ' . trim($datos['birth_country']);
+
             $registro->forceFill([
                 'first_name' => $this->normalizarNombre($datos['first_name']),
                 'first_last_name' => $this->normalizarNombre($datos['first_last_name']),
                 'second_last_name' => isset($datos['second_last_name']) ? $this->normalizarNombre($datos['second_last_name']) : null,
-                'curp_ciphertext' => $this->protectorDatos->cifrarCurp($datos['curp']),
-                'curp_hmac' => $this->protectorDatos->generarHmacCurp($datos['curp']),
+                'nationality' => $datos['nationality'] ?? 'MEXICAN',
+                'birth_country' => $datos['birth_country'] ?? 'MX',
+                'curp_ciphertext' => $curp === null ? null : $this->protectorDatos->cifrarCurp($curp),
+                'curp_hmac' => $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp),
                 'rfc_ciphertext' => $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc),
                 'rfc_hmac' => $rfc === null ? null : $this->protectorDatos->generarHmacRfc($rfc),
                 'birth_date' => $datos['birth_date'],
-                'birth_place' => trim($datos['birth_place']),
+                'birth_place' => $birth_place,
                 'birth_state' => trim($datos['birth_state']),
                 'birth_city' => trim($datos['birth_city']),
                 'email' => mb_strtolower(trim($datos['email'])),
                 'phone_number' => $datos['phone_number'],
+                'identification_country' => $datos['identification_country'] ?? 'MX',
                 'official_id_type' => $datos['official_id_type'],
                 'official_id_number_ciphertext' => $this->protectorDatos->cifrarIdentificacion($datos['official_id_number']),
                 'official_id_number_hmac' => $this->protectorDatos->generarHmacIdentificacion($datos['official_id_number']),

@@ -14,8 +14,8 @@ class DatosPersonalesSolicitud extends Model
 
     protected $fillable = [
         'application_id', 'first_name', 'first_last_name', 'second_last_name',
-        'birth_date', 'birth_place', 'birth_state', 'birth_city', 'email',
-        'phone_number', 'official_id_type',
+        'nationality', 'birth_country', 'birth_date', 'birth_place', 'birth_state', 'birth_city', 
+        'email', 'phone_number', 'identification_country', 'official_id_type',
     ];
 
     protected $hidden = [

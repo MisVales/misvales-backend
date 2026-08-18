@@ -31,7 +31,7 @@ final class ServicioArchivosPrivados
         'xlsx' => ['application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip'],
     ];
 
-    private const OWNERS = ['verification_visit', 'client', 'payment_clarification', 'surplus_refund_request', 'bank_file_import', 'distributor_relation'];
+    private const OWNERS = ['verification_visit', 'client', 'payment_clarification', 'surplus_refund_request', 'bank_file_import', 'distributor_relation', 'distributor_application'];
 
     public function guardar(UploadedFile $file, string $ownerType, string $ownerId, string $purpose, User $actor): MediaFile
     {
@@ -91,6 +91,7 @@ final class ServicioArchivosPrivados
             'surplus_refund_request' => ['surplus_refund_requests', 'branch_id'],
             'bank_file_import' => ['bank_file_imports', 'branch_id'],
             'distributor_relation' => ['distributor_relations', 'branch_id'],
+            'distributor_application' => ['distributor_applications', 'branch_id'],
             default => [null, null],
         };
         if (! $table) {

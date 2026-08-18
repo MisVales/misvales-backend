@@ -114,7 +114,7 @@ final class ValidadorExpedienteSolicitud
     private function seccionTieneDatos(SolicitudDistribuidora $solicitud, string $seccion): bool
     {
         return match ($seccion) {
-            'personal_data' => $solicitud->datosPersonales()->exists(),
+            'personal_data' => $this->datosPersonalesCompletos($solicitud),
             'residence' => $solicitud->domicilios()->where('is_current', true)->exists(),
             'partner' => $solicitud->familiares()->whereIn('relationship', ['SPOUSE', 'PARTNER'])->exists(),
             'children' => $solicitud->familiares()->where('relationship', 'CHILD')->exists(),
@@ -126,5 +126,18 @@ final class ValidadorExpedienteSolicitud
             'commercial_credits' => $solicitud->creditosComerciales()->exists(),
             default => false,
         };
+    }
+
+    private function datosPersonalesCompletos(SolicitudDistribuidora $solicitud): bool
+    {
+        if (! $solicitud->datosPersonales()->exists()) {
+            return false;
+        }
+
+        return \App\Models\MediaFileBinding::query()
+            ->where('owner_type', 'distributor_application')
+            ->where('owner_id', $solicitud->id)
+            ->where('purpose', 'IDENTIFICATION')
+            ->exists();
     }
 }
