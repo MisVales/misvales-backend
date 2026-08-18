@@ -1,23 +1,26 @@
 <?php
+
 namespace Tests\Feature\VerificacionDistribuidora;
 
-use Tests\TestCase;
-use App\Models\User;
 use App\Models\AuthSession;
 use App\Models\Branch;
-use Illuminate\Support\Facades\Hash;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Tests\TestCase;
 
-abstract class Modulo5TestCase extends TestCase {
+abstract class Modulo5TestCase extends TestCase
+{
     use RefreshDatabase;
 
-    protected function setUp(): void {
+    protected function setUp(): void
+    {
         parent::setUp();
         // Seed roles and permissions for tests
         $this->artisan('db:seed', ['--class' => 'RolesAndPermissionsSeeder']);
     }
 
-    protected function actingAsMfaUser(User $user, array $roles = [], ?string $branchId = null) {
+    protected function actingAsMfaUser(User $user, array $roles = [], ?string $branchId = null)
+    {
         if ($branchId !== null && ! Branch::query()->whereKey($branchId)->exists()) {
             Branch::factory()->create(['id' => $branchId]);
         }
@@ -26,7 +29,7 @@ abstract class Modulo5TestCase extends TestCase {
                 $user->assignRole($role, $branchId);
             }
         }
-        
+
         $token = $user->createToken('test-token');
         $tokenHash = hash('sha256', $token->plainTextToken);
 
@@ -38,11 +41,11 @@ abstract class Modulo5TestCase extends TestCase {
             'user_agent' => 'PHPUnit',
             'expires_at' => now()->addMinutes(60),
             'mfa_verified_at' => now(), // Bypasses MFA check
-            'last_activity_at' => now()
+            'last_activity_at' => now(),
         ]);
 
         return $this->withHeaders([
-            'Authorization' => 'Bearer ' . $token->plainTextToken
+            'Authorization' => 'Bearer '.$token->plainTextToken,
         ]);
     }
 }

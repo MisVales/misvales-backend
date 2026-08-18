@@ -3,9 +3,9 @@
 namespace App\Services\Credito;
 
 use App\Enums\EstadoSolicitudIncremento;
+use App\Exceptions\ExcepcionCredito;
 use App\Models\SolicitudIncrementoLinea;
 use App\Models\User;
-use App\Exceptions\ExcepcionCredito;
 
 class ServicioEstadoIncremento
 {
@@ -20,7 +20,7 @@ class ServicioEstadoIncremento
         $this->validarTransicion($estadoAnterior, $nuevoEstado);
 
         $solicitud->status = $nuevoEstado;
-        
+
         if (in_array($nuevoEstado, [EstadoSolicitudIncremento::PREAUTHORIZED, EstadoSolicitudIncremento::REJECTED_BY_COORDINATOR])) {
             $solicitud->coordinator_decided_by = $actor->id;
             $solicitud->coordinator_decided_at = now();
@@ -32,7 +32,7 @@ class ServicioEstadoIncremento
             $solicitud->manager_decided_at = now();
             $solicitud->manager_reason = $motivo;
         }
-        
+
         if ($nuevoEstado === EstadoSolicitudIncremento::COMPLETED) {
             $solicitud->completed_at = now();
         }
@@ -70,7 +70,7 @@ class ServicioEstadoIncremento
 
         $validasDesdeAnterior = $transicionesValidas[$estadoAnterior->value] ?? [];
 
-        if (!in_array($nuevoEstado, $validasDesdeAnterior)) {
+        if (! in_array($nuevoEstado, $validasDesdeAnterior)) {
             throw new ExcepcionCredito(
                 'CREDIT_INCREASE_REQUEST_STATUS_INVALID',
                 "Transición de estado no permitida: {$estadoAnterior->value} a {$nuevoEstado->value}.",

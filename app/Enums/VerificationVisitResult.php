@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Enums;
 
-enum VerificationVisitResult: string {
+enum VerificationVisitResult: string
+{
     case FAVORABLE = 'FAVORABLE';
     case UNFAVORABLE = 'UNFAVORABLE';
 }

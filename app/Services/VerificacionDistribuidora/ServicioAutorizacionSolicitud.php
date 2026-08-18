@@ -50,9 +50,9 @@ class ServicioAutorizacionSolicitud
             $isBranchManager = method_exists($manager, 'hasRole') ? $manager->hasRole('branch_manager') : true;
 
             $creator = User::find($application->created_by);
-            $creatorIsBranchManager = $creator && method_exists($creator, 'hasRole') && $creator->hasRole('branch_manager') && !$creator->hasRole('general_manager');
+            $creatorIsBranchManager = $creator && method_exists($creator, 'hasRole') && $creator->hasRole('branch_manager') && ! $creator->hasRole('general_manager');
 
-            if ($creatorIsBranchManager && !$isGeneralManager) {
+            if ($creatorIsBranchManager && ! $isGeneralManager) {
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $managerId, $application->branch_id, null, null, 'Intento de autorización de solicitud creada por gerente', 'DENIED');
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'Solo el gerente general puede autorizar una solicitud creada por un gerente de sucursal.', 403);
             }

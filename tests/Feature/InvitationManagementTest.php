@@ -3,7 +3,6 @@
 namespace Tests\Feature;
 
 use App\Models\AccountInvitation;
-use App\Models\AuditLog;
 use App\Models\Role;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -76,7 +75,7 @@ class InvitationManagementTest extends TestCase
         ]);
 
         $this->actingAs($this->admin);
-        
+
         // Simular MFA reciente en sesión
         session(['last_mfa_verification' => now()->timestamp]);
 
@@ -85,7 +84,7 @@ class InvitationManagementTest extends TestCase
         ]);
 
         $response->assertStatus(200);
-        
+
         $invitation->refresh();
         $this->assertEquals('REVOKED', $invitation->state);
         $this->assertEquals('Duplicate', $invitation->revocation_reason);

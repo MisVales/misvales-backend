@@ -36,7 +36,7 @@ class RestriccionUsoCredito extends Model
     protected function casts(): array
     {
         return [
-            'status' => \App\Enums\EstadoRestriccionUsoCredito::class,
+            'status' => EstadoRestriccionUsoCredito::class,
             'base_total' => 'decimal:4',
             'tolerance_amount' => 'decimal:4',
             'activated_at' => 'immutable_datetime',

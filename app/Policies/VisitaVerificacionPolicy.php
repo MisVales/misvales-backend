@@ -4,7 +4,6 @@ namespace App\Policies;
 
 use App\Models\User;
 use App\Models\VisitaVerificacion;
-use Illuminate\Auth\Access\Response;
 
 class VisitaVerificacionPolicy
 {

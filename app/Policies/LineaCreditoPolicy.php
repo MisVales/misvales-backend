@@ -2,9 +2,10 @@
 
 namespace App\Policies;
 
+use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\User;
-use App\Models\CoordinatorDistributorAssignment;
 use App\Models\UserRoleScope;
 
 class LineaCreditoPolicy
@@ -37,7 +38,7 @@ class LineaCreditoPolicy
         }
 
         if ($user->hasPermissionTo('credit_lines.view_own')) {
-            $distribuidora = \App\Models\Distribuidora::where('user_id', $user->id)->first();
+            $distribuidora = Distribuidora::where('user_id', $user->id)->first();
             if ($distribuidora && $distribuidora->id === $lineaCredito->distributor_id) {
                 return true;
             }
@@ -70,7 +71,7 @@ class LineaCreditoPolicy
         }
 
         if ($user->hasPermissionTo('credit_line_movements.view_own')) {
-            $distribuidora = \App\Models\Distribuidora::where('user_id', $user->id)->first();
+            $distribuidora = Distribuidora::where('user_id', $user->id)->first();
             if ($distribuidora && $distribuidora->id === $lineaCredito->distributor_id) {
                 return true;
             }

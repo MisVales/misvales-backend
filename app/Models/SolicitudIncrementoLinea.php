@@ -4,14 +4,14 @@ namespace App\Models;
 
 use App\Enums\DecisionGerencialIncremento;
 use App\Enums\EstadoSolicitudIncremento;
-use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 class SolicitudIncrementoLinea extends Model
 {
-    use HasUuids, HasFactory;
+    use HasFactory, HasUuids;
 
     protected $table = 'credit_increase_requests';
 

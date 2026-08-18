@@ -1,9 +1,9 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
@@ -27,7 +27,7 @@ return new class extends Migration
         });
 
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_percentage CHECK (profit_percentage >= 0 AND profit_percentage <= 1)");
+            DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_percentage CHECK (profit_percentage >= 0 AND profit_percentage <= 1)');
         }
     }
 
@@ -50,8 +50,7 @@ return new class extends Migration
         });
 
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_rate CHECK (profit_rate >= 0 AND profit_rate <= 1)");
+            DB::statement('ALTER TABLE category_versions ADD CONSTRAINT chk_catv_profit_rate CHECK (profit_rate >= 0 AND profit_rate <= 1)');
         }
     }
 };
-

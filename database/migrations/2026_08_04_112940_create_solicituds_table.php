@@ -1,11 +1,14 @@
-﻿<?php
+<?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('CREATE SEQUENCE IF NOT EXISTS distributor_application_number_seq START WITH 1 INCREMENT BY 1');
         }
@@ -38,19 +41,20 @@ return new class extends Migration {
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_lock_version_check CHECK (lock_version >= 1)');
         }
-        
+
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
-        }
+                DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
+            }
             DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
         }
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::dropIfExists('distributor_applications');
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP SEQUENCE IF EXISTS distributor_application_number_seq');
         }
     }
 };
-

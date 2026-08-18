@@ -12,7 +12,7 @@ class EvaluadorRestriccion50PorcientoTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->evaluador = new EvaluadorRestriccion50Porciento();
+        $this->evaluador = new EvaluadorRestriccion50Porciento;
     }
 
     public function test_rango_nominal_con_saldo_suficiente()

@@ -21,7 +21,7 @@ class AuditorIncrementos
         ?string $versionConfiguracion = null
     ): void {
         $rol = null;
-        
+
         if ($actor) {
             $rol = $actor->roleScopes()
                 ->select('roles.code')

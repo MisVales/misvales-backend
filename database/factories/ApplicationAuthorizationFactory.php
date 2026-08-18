@@ -1,15 +1,20 @@
 <?php
+
 namespace Database\Factories;
+
+use App\Enums\ApplicationAuthorizationDecision;
 use App\Models\ApplicationAuthorization;
 use App\Models\DistributorApplication;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 use Illuminate\Support\Str;
-use App\Enums\ApplicationAuthorizationDecision;
 
-class ApplicationAuthorizationFactory extends Factory {
+class ApplicationAuthorizationFactory extends Factory
+{
     protected $model = ApplicationAuthorization::class;
-    public function definition() {
+
+    public function definition()
+    {
         return [
             'id' => Str::uuid(),
             'application_id' => DistributorApplication::factory(),

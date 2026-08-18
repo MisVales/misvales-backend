@@ -1,7 +1,9 @@
 <?php
+
 namespace App\Enums;
 
-enum MediaFileType: string {
+enum MediaFileType: string
+{
     case RESIDENCE_EXTERIOR = 'RESIDENCE_EXTERIOR';
     case RESIDENCE_INTERIOR = 'RESIDENCE_INTERIOR';
     case IDENTIFICATION_EVIDENCE = 'IDENTIFICATION_EVIDENCE';

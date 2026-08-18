@@ -2,7 +2,6 @@
 
 namespace App\Policies;
 
-use App\Models\CoordinatorDistributorAssignment;
 use App\Models\User;
 
 class CoordinatorAssignmentPolicy
@@ -21,7 +20,7 @@ class CoordinatorAssignmentPolicy
 
     public function manage(User $user, string $branchId): bool
     {
-        if (!$user->hasPermissionTo('assignments.manage')) {
+        if (! $user->hasPermissionTo('assignments.manage')) {
             return false;
         }
 

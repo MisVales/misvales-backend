@@ -1,11 +1,14 @@
-﻿<?php
+<?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::create('verification_visits', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('application_id');
@@ -34,8 +37,9 @@ return new class extends Migration {
         DB::statement("ALTER TABLE verification_visits ADD CONSTRAINT verification_visits_state_check CHECK ((status = 'COMPLETED' AND result IS NOT NULL AND completed_at IS NOT NULL) OR (status <> 'COMPLETED' AND result IS NULL AND completed_at IS NULL))");
         Schema::table('verification_visits', fn (Blueprint $table) => $table->index(['application_id', 'assigned_at']));
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::dropIfExists('verification_visits');
     }
 };
-

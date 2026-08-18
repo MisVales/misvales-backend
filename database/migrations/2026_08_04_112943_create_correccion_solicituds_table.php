@@ -1,10 +1,13 @@
 <?php
+
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 
-return new class extends Migration {
-    public function up(): void {
+return new class extends Migration
+{
+    public function up(): void
+    {
         Schema::create('application_corrections', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->uuid('application_id');
@@ -24,7 +27,9 @@ return new class extends Migration {
         });
         Schema::table('application_corrections', fn (Blueprint $table) => $table->index(['application_id', 'corrected_at']));
     }
-    public function down(): void {
+
+    public function down(): void
+    {
         Schema::dropIfExists('application_corrections');
     }
 };

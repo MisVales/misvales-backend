@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 class GeoapifyService
 {
     protected string $apiKey;
+
     protected string $baseUrl = 'https://api.geoapify.com/v1';
 
     public function __construct()
@@ -21,7 +22,7 @@ class GeoapifyService
     {
         // Add Mexico filter. We can refine the text query.
         $query = [
-            'text' => $text . ' ' . $postcode . ' ' . $city . ' ' . $state,
+            'text' => $text.' '.$postcode.' '.$city.' '.$state,
             'filter' => 'countrycode:mx',
             'apiKey' => $this->apiKey,
             'limit' => 5,

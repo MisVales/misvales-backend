@@ -2,9 +2,11 @@
 
 namespace App\Modules\Organization\Presentation\Http\Requests;
 
+use App\Http\Requests\Traits\ValidaDireccionEstructurada;
+
 final class UpdateBranchRequest extends OrganizationFormRequest
 {
-    use \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+    use ValidaDireccionEstructurada;
 
     protected function prepareForValidation(): void
     {

@@ -2,10 +2,10 @@
 
 namespace Database\Factories;
 
-use App\Models\LineaCredito;
-use App\Models\RestriccionUsoCredito;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
+use App\Models\LineaCredito;
+use App\Models\RestriccionUsoCredito;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Factories\Factory;
 

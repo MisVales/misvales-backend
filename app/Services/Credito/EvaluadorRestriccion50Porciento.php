@@ -7,14 +7,14 @@ class EvaluadorRestriccion50Porciento
     public function evaluar(string $baseTotal, string $disponibleReal, string $tolerancia): array
     {
         $referencia = bcdiv($baseTotal, '2', 4);
-        
+
         $limiteInferior = bcsub($referencia, $tolerancia, 4);
         $limiteSuperiorNominal = bcadd($referencia, $tolerancia, 4);
-        
-        $limiteSuperiorReal = bccomp($limiteSuperiorNominal, $disponibleReal, 4) > 0 
-            ? $disponibleReal 
+
+        $limiteSuperiorReal = bccomp($limiteSuperiorNominal, $disponibleReal, 4) > 0
+            ? $disponibleReal
             : $limiteSuperiorNominal;
-            
+
         $admisible = bccomp($limiteSuperiorReal, $limiteInferior, 4) >= 0;
 
         return [

@@ -54,6 +54,6 @@ return new class extends Migration
     {
         // A deployed draft may contain NULLs by design. Restoring NOT NULL
         // constraints would either lose that draft or make a rollback fail.
-        throw new \LogicException('La migración de borradores parciales es irreversible; aplica una corrección hacia adelante.');
+        throw new LogicException('La migración de borradores parciales es irreversible; aplica una corrección hacia adelante.');
     }
 };

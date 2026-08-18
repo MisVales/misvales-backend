@@ -4,8 +4,9 @@ namespace App\Services\Credito;
 
 use App\Models\LineaCredito;
 use App\Models\MovimientoLineaCredito;
-use Illuminate\Support\Facades\DB;
 use Exception;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ServicioRegistroMovimientoCredito
 {
@@ -15,8 +16,8 @@ class ServicioRegistroMovimientoCredito
             // Recargar línea de crédito con bloqueo pesimista
             $lineaBloqueada = LineaCredito::where('id', $linea->id)->lockForUpdate()->first();
 
-            if (!$lineaBloqueada) {
-                throw new Exception("Línea de crédito no encontrada durante el registro del movimiento.");
+            if (! $lineaBloqueada) {
+                throw new Exception('Línea de crédito no encontrada durante el registro del movimiento.');
             }
 
             $saldoAnterior = (string) $lineaBloqueada->used_balance;
@@ -43,7 +44,7 @@ class ServicioRegistroMovimientoCredito
             // Invariantes obligatorios:
             // 0 <= used_balance <= total_authorized
             if (bccomp($lineaBloqueada->used_balance, '0.00', 2) < 0) {
-                throw new Exception("Violación de Invariante: El saldo utilizado no puede ser negativo.");
+                throw new Exception('Violación de Invariante: El saldo utilizado no puede ser negativo.');
             }
             if (bccomp($lineaBloqueada->used_balance, $lineaBloqueada->total_authorized, 2) > 0) {
                 throw new Exception("Violación de Invariante: El saldo utilizado ({$lineaBloqueada->used_balance}) no puede ser mayor que el autorizado ({$lineaBloqueada->total_authorized}).");
@@ -66,7 +67,7 @@ class ServicioRegistroMovimientoCredito
                 'used_balance_before' => $saldoAnterior,
                 'used_balance_after' => $saldoNuevo,
                 'source_type' => $referenciaTipo ?? 'Manual',
-                'source_id' => $referenciaId ?? \Illuminate\Support\Str::uuid()->toString(),
+                'source_id' => $referenciaId ?? Str::uuid()->toString(),
                 'reason' => $motivo,
                 'performed_by' => auth()->id(),
                 'authorized_by' => auth()->id(),

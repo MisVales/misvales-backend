@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -40,7 +40,7 @@ return new class extends Migration
 
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement(<<<'SQL'
+                DB::statement(<<<'SQL'
             CREATE UNIQUE INDEX user_role_scopes_active_global_unique
             ON user_role_scopes (user_id, role_id, scope_type)
             WHERE status = 'ACTIVE'
@@ -48,7 +48,7 @@ return new class extends Migration
               AND scope_type = 'GLOBAL';
         SQL);
 
-        DB::statement(<<<'SQL'
+                DB::statement(<<<'SQL'
             CREATE UNIQUE INDEX user_role_scopes_active_branch_unique
             ON user_role_scopes (user_id, role_id, branch_id, scope_type)
             WHERE status = 'ACTIVE'
@@ -56,21 +56,21 @@ return new class extends Migration
               AND branch_id IS NOT NULL
         SQL);
 
-        // 10. Checks requeridos
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_type CHECK (scope_type IN ('GLOBAL', 'BRANCH'));");
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_urs_status CHECK (status IN ('ACTIVE', 'ENDED', 'REVOKED'));");
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_branch_match CHECK (
+                // 10. Checks requeridos
+                DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_type CHECK (scope_type IN ('GLOBAL', 'BRANCH'));");
+                DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_urs_status CHECK (status IN ('ACTIVE', 'ENDED', 'REVOKED'));");
+                DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_scope_branch_match CHECK (
             (scope_type = 'GLOBAL') OR 
             (scope_type = 'BRANCH' AND branch_id IS NOT NULL)
         );");
-        DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (revoked_at IS NULL OR revoked_at > assigned_at);');
-        DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
+                DB::statement('ALTER TABLE user_role_scopes ADD CONSTRAINT chk_valid_dates CHECK (revoked_at IS NULL OR revoked_at > assigned_at);');
+                DB::statement("ALTER TABLE user_role_scopes ADD CONSTRAINT chk_status_consistency CHECK (
             (status = 'ACTIVE' AND revoked_at IS NULL AND revoked_by_user_id IS NULL) OR 
             (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
         );");
 
-        if (DB::getDriverName() !== 'sqlite') {
-            DB::statement(<<<'SQL'
+                if (DB::getDriverName() !== 'sqlite') {
+                    DB::statement(<<<'SQL'
                 CREATE OR REPLACE FUNCTION prevent_urs_deletion()
                 RETURNS trigger AS $$
                 BEGIN
@@ -78,13 +78,13 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             SQL);
-            DB::statement('
+                    DB::statement('
                 CREATE TRIGGER trg_prevent_urs_deletion
                 BEFORE DELETE ON user_role_scopes
                 FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
             ');
-        }
-        }
+                }
+            }
         }
     }
 
@@ -92,27 +92,27 @@ return new class extends Migration
     {
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
-            DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
-        }
+                DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
+                DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
+            }
         }
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
-        }
+                DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;');
-        }
+                DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;');
-        }
+                DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;');
-        }
+                DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;');
+            }
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;');
-        }
+                DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;');
+            }
 
             DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_global_unique;');
             DB::statement('DROP INDEX IF EXISTS user_role_scopes_active_branch_unique;');
@@ -140,4 +140,3 @@ return new class extends Migration
         DB::statement('CREATE UNIQUE INDEX user_role_scopes_branch_unique ON user_role_scopes (user_id, role_id, branch_id) WHERE branch_id IS NOT NULL AND revoked_at IS NULL');
     }
 };
-

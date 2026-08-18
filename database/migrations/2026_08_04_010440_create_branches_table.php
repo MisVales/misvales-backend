@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -38,8 +38,8 @@ return new class extends Migration
             // Triggers para proteger la sucursal matriz
             // 1. No puede eliminarse fÃ­sicamente
             if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("
+                if (DB::getDriverName() !== 'sqlite') {
+                    DB::statement("
                 CREATE OR REPLACE FUNCTION prevent_headquarters_deletion()
                 RETURNS trigger AS $$
                 BEGIN
@@ -50,18 +50,18 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             ");
-            DB::statement('
+                    DB::statement('
                 CREATE TRIGGER check_headquarters_deletion
                 BEFORE DELETE ON branches
                 FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deletion();
             ');
-        }
-        }
+                }
+            }
 
             // 2. No puede desactivarse
             if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("
+                if (DB::getDriverName() !== 'sqlite') {
+                    DB::statement("
                 CREATE OR REPLACE FUNCTION prevent_headquarters_deactivation()
                 RETURNS trigger AS $$
                 BEGIN
@@ -72,13 +72,13 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             ");
-            DB::statement('
+                    DB::statement('
                 CREATE TRIGGER check_headquarters_deactivation
                 BEFORE UPDATE ON branches
                 FOR EACH ROW EXECUTE FUNCTION prevent_headquarters_deactivation();
             ');
-        }
-        }
+                }
+            }
         }
     }
 
@@ -89,17 +89,16 @@ return new class extends Migration
     {
         if (DB::connection()->getDriverName() === 'pgsql') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');
-            DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();');
-        }
+                DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');
+                DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deactivation();');
+            }
 
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;');
-            DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deletion();');
-        }
+                DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion ON branches;');
+                DB::statement('DROP FUNCTION IF EXISTS prevent_headquarters_deletion();');
+            }
         }
 
         Schema::dropIfExists('branches');
     }
 };
-

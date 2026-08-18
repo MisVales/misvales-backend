@@ -1,12 +1,12 @@
 <?php
+
 namespace Tests\Feature;
 
-use App\Models\MfaCredential;
 use App\Models\MfaRecoveryCode;
 use App\Models\User;
-use App\Services\Audit\SecurityAuditService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class SecurityControllerRecoveryCodeTest extends TestCase
@@ -33,7 +33,7 @@ class SecurityControllerRecoveryCodeTest extends TestCase
         $response->assertStatus(200);
         $response->assertJsonStructure([
             'message',
-            'recovery_codes'
+            'recovery_codes',
         ]);
 
         // Verificar que se guardaron 10 codigos
@@ -41,22 +41,22 @@ class SecurityControllerRecoveryCodeTest extends TestCase
 
         // Simulamos un c?digo antiguo
         MfaRecoveryCode::insert([
-            'id' => \Illuminate\Support\Str::uuid(),
+            'id' => Str::uuid(),
             'user_id' => $user->id,
-            'batch_id' => \Illuminate\Support\Str::uuid(),
+            'batch_id' => Str::uuid(),
             'code_hash' => hash('sha256', 'old_code_123'),
             'position' => 99,
             'generated_at' => now(),
         ]);
-        
+
         $this->postJson('/api/v1/me/security/recovery-codes', [
             'current_password' => 'Password123!',
         ]);
-        
+
         // Debe haber solo 10 (los nuevos)
         $this->assertCount(10, MfaRecoveryCode::where('user_id', $user->id)->get());
         $this->assertDatabaseMissing('mfa_recovery_codes', [
-            'code_hash' => hash('sha256', 'old_code_123')
+            'code_hash' => hash('sha256', 'old_code_123'),
         ]);
     }
 }

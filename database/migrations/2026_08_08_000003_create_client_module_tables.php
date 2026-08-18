@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -126,8 +126,8 @@ return new class extends Migration
         }
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number ~ '^CLI-[0-9]{4}-[0-9]{6,}$')");
-        }
+                DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number ~ '^CLI-[0-9]{4}-[0-9]{6,}$')");
+            }
         }
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE client_addresses ADD CONSTRAINT client_addresses_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
@@ -162,9 +162,9 @@ return new class extends Migration
     {
         foreach (['client_portfolio_entries', 'client_distributor_assignments', 'client_bank_accounts', 'client_addresses', 'clients'] as $table) {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion ON {$table}");
-            DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_deletion()");
-        }
+                DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion ON {$table}");
+                DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_deletion()");
+            }
         }
 
         Schema::dropIfExists('client_portfolio_entries');
@@ -181,7 +181,7 @@ return new class extends Migration
     {
         foreach (['clients', 'client_addresses', 'client_bank_accounts', 'client_distributor_assignments', 'client_portfolio_entries'] as $table) {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement(<<<SQL
+                DB::statement(<<<SQL
                 CREATE OR REPLACE FUNCTION prevent_{$table}_deletion()
                 RETURNS trigger AS \$\$
                 BEGIN
@@ -189,9 +189,8 @@ return new class extends Migration
                 END;
                 \$\$ LANGUAGE plpgsql
             SQL);
-            DB::statement("CREATE TRIGGER trg_prevent_{$table}_deletion BEFORE DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_deletion()");
-        }
+                DB::statement("CREATE TRIGGER trg_prevent_{$table}_deletion BEFORE DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_deletion()");
+            }
         }
     }
 };
-

@@ -29,14 +29,14 @@ final class LocalTestingUsersSeeder extends Seeder
 
         DB::transaction(function (): void {
             $branch = BranchRecord::query()->where('code', 'MATRIZ')->firstOrFail();
-            
+
             $managerEmail = trim((string) config('bootstrap.initial_general_manager.email'));
             $managerName = trim((string) config('bootstrap.initial_general_manager.name'));
-            
+
             if ($managerEmail === '' || $managerName === '') {
                 throw new RuntimeException('Configure INITIAL_GENERAL_MANAGER_EMAIL e INITIAL_GENERAL_MANAGER_NAME para el local testing seeder.');
             }
-            
+
             $manager = $this->upsertUser($managerEmail, $managerName);
             $totpSecret = (string) config('bootstrap.local_testing_totp_secret');
 

@@ -2,15 +2,15 @@
 
 namespace App\Models;
 
+use App\Enums\VersionStatus;
+use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-use App\Models\Concerns\HasOptimisticLocking;
-
 class CategoryVersion extends Model
 {
-    use HasFactory, HasUuids, HasOptimisticLocking;
+    use HasFactory, HasOptimisticLocking, HasUuids;
 
     protected $fillable = [
         'category_id',
@@ -33,7 +33,7 @@ class CategoryVersion extends Model
         'effective_from' => 'datetime',
         'effective_to' => 'datetime',
         'published_at' => 'datetime',
-        'status' => \App\Enums\VersionStatus::class,
+        'status' => VersionStatus::class,
     ];
 
     public function category()

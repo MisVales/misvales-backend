@@ -4,7 +4,6 @@ namespace App\Notifications;
 
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Notifications\Messages\MailMessage;
 use Illuminate\Notifications\Notification;
 
 class CriticalConfigurationChanged extends Notification implements ShouldQueue
@@ -12,6 +11,7 @@ class CriticalConfigurationChanged extends Notification implements ShouldQueue
     use Queueable;
 
     private string $key;
+
     private string $value;
 
     public function __construct(string $key, string $value)

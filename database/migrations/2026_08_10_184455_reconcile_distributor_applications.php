@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -70,8 +70,8 @@ return new class extends Migration
             $this->abortarSiHay($huerfanos, "{$tabla} contiene application_id sin raÃ­z canÃ³nica");
 
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$tabla}_application_id_foreign");
-        }
+                DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$tabla}_application_id_foreign");
+            }
             if (DB::getDriverName() !== 'sqlite') {
                 DB::statement("ALTER TABLE {$tabla} ADD CONSTRAINT {$tabla}_application_id_foreign FOREIGN KEY (application_id) REFERENCES distributor_applications(id) ON DELETE RESTRICT");
             }
@@ -96,4 +96,3 @@ return new class extends Migration
         }
     }
 };
-

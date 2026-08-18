@@ -40,6 +40,6 @@ final class LectorXlsxBancario
             }$rows[] = $values;
         }
 
-return $rows;
+        return $rows;
     }
 }

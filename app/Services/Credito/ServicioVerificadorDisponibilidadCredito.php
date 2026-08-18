@@ -10,6 +10,7 @@ use App\Models\RestriccionUsoCredito;
 class ServicioVerificadorDisponibilidadCredito implements VerificadorDisponibilidadCredito
 {
     protected CalculadorSaldoCredito $calculadorSaldo;
+
     protected EvaluadorReglaCincuenta $evaluadorRegla;
 
     public function __construct(
@@ -40,16 +41,16 @@ class ServicioVerificadorDisponibilidadCredito implements VerificadorDisponibili
 
         // 4. Buscar restricción del 50% activa (o reservada para este mismo vale)
         $restriccion = null;
-        
+
         $query = RestriccionUsoCredito::where('credit_line_id', $linea->id);
-        
+
         if ($valeId) {
             $query->where(function ($q) use ($valeId) {
                 $q->where('status', 'ACTIVE')
-                  ->orWhere(function ($q2) use ($valeId) {
-                      $q2->where('status', 'RESERVED')
-                         ->where('reserved_voucher_id', $valeId);
-                  });
+                    ->orWhere(function ($q2) use ($valeId) {
+                        $q2->where('status', 'RESERVED')
+                            ->where('reserved_voucher_id', $valeId);
+                    });
             });
         } else {
             $query->where('status', 'ACTIVE');

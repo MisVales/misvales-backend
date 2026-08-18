@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -35,8 +35,8 @@ return new class extends Migration
         }
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number ~ '^DIS-[0-9]{4}-[0-9]{6,}$')");
-        }
+                DB::statement("ALTER TABLE distributors ADD CONSTRAINT distributors_number_check CHECK (distributor_number ~ '^DIS-[0-9]{4}-[0-9]{6,}$')");
+            }
         }
 
         Schema::table('coordinator_distributor_assignments', function (Blueprint $table): void {
@@ -192,7 +192,7 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql
         SQL);
-        DB::statement('CREATE TRIGGER trg_prevent_distributor_deletion BEFORE DELETE ON distributors FOR EACH ROW EXECUTE FUNCTION prevent_distributor_deletion()');
+            DB::statement('CREATE TRIGGER trg_prevent_distributor_deletion BEFORE DELETE ON distributors FOR EACH ROW EXECUTE FUNCTION prevent_distributor_deletion()');
         }
 
         if (DB::getDriverName() !== 'sqlite') {
@@ -204,7 +204,7 @@ return new class extends Migration
             END;
             $$ LANGUAGE plpgsql
         SQL);
-        DB::statement('CREATE TRIGGER trg_prevent_distributor_category_deletion BEFORE DELETE ON distributor_category_assignments FOR EACH ROW EXECUTE FUNCTION prevent_distributor_category_deletion()');
+            DB::statement('CREATE TRIGGER trg_prevent_distributor_category_deletion BEFORE DELETE ON distributor_category_assignments FOR EACH ROW EXECUTE FUNCTION prevent_distributor_category_deletion()');
         }
     }
 
@@ -212,11 +212,11 @@ return new class extends Migration
     {
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_category_deletion ON distributor_category_assignments');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_category_deletion()');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_category_deletion()');
         }
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_distributor_deletion ON distributors');
-        DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_deletion()');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_distributor_deletion()');
         }
 
         Schema::dropIfExists('credit_usage_restrictions');
@@ -252,4 +252,3 @@ return new class extends Migration
         }
     }
 };
-

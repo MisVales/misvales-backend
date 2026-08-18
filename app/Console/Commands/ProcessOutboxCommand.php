@@ -2,13 +2,14 @@
 
 namespace App\Console\Commands;
 
-use Illuminate\Console\Command;
-use App\Models\OutboxEvent;
 use App\Jobs\DispatchOutboxEventJob;
+use App\Models\OutboxEvent;
+use Illuminate\Console\Command;
 
 class ProcessOutboxCommand extends Command
 {
     protected $signature = 'outbox:process';
+
     protected $description = 'Barrer eventos pendientes del Outbox y encolarlos';
 
     public function handle()
