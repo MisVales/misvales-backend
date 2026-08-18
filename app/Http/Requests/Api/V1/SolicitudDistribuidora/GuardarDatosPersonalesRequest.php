@@ -2,14 +2,13 @@
 
 namespace App\Http\Requests\Api\V1\SolicitudDistribuidora;
 
+use App\Http\Requests\AllowsPartialDrafts;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 
-use App\Http\Requests\AllowsPartialDrafts;
-
 final class GuardarDatosPersonalesRequest extends FormRequest
 {
-    use RechazaPropiedadesDesconocidas, AllowsPartialDrafts;
+    use AllowsPartialDrafts, RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
     {
@@ -29,6 +28,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'rfc' => ['nullable', 'string', 'regex:/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/i'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before:today'],
             'birth_country' => ['required', 'string', 'max:2'],
+            'birth_place' => ['nullable', 'string', 'max:150'],
             'birth_state' => ['required', 'string', 'max:100'],
             'birth_city' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email:rfc', 'max:254'],

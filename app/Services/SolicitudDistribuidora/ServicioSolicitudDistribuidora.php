@@ -170,34 +170,38 @@ final class ServicioSolicitudDistribuidora
     {
         return DB::transaction(function () use ($actor, $solicitud, $datos): DatosPersonalesSolicitud {
             $bloqueada = $this->bloquearBorradorEditable($actor, $solicitud->id, (int) $datos['lock_version']);
-            $rfc = isset($datos['rfc']) && $datos['rfc'] !== '' ? $datos['rfc'] : null;
+            $rfc = $this->limpiarTexto($datos['rfc'] ?? null);
 
             $registro = DatosPersonalesSolicitud::query()->firstOrNew(['application_id' => $bloqueada->id]);
-            $curp = isset($datos['curp']) && $datos['curp'] !== '' ? $datos['curp'] : null;
-            $birth_place = isset($datos['birth_place']) && $datos['birth_place'] !== ''
-                ? trim($datos['birth_place'])
-                : trim($datos['birth_city']).', '.trim($datos['birth_state']).', '.trim($datos['birth_country']);
+            $curp = $this->limpiarTexto($datos['curp'] ?? null);
+            $birthCity = $this->limpiarTexto($datos['birth_city'] ?? null);
+            $birthState = $this->limpiarTexto($datos['birth_state'] ?? null);
+            $birthCountry = $this->limpiarTexto($datos['birth_country'] ?? null);
+            $birthPlace = $this->limpiarTexto($datos['birth_place'] ?? null)
+                ?? $this->formatearLugarNacimiento($birthCity, $birthState, $birthCountry);
+            $email = $this->limpiarTexto($datos['email'] ?? null);
+            $officialIdNumber = $this->limpiarTexto($datos['official_id_number'] ?? null);
 
             $registro->forceFill([
-                'first_name' => $this->normalizarNombre($datos['first_name']),
-                'first_last_name' => $this->normalizarNombre($datos['first_last_name']),
-                'second_last_name' => isset($datos['second_last_name']) ? $this->normalizarNombre($datos['second_last_name']) : null,
-                'nationality' => $datos['nationality'],
-                'birth_country' => $datos['birth_country'],
+                'first_name' => $this->normalizarNombre($datos['first_name'] ?? null),
+                'first_last_name' => $this->normalizarNombre($datos['first_last_name'] ?? null),
+                'second_last_name' => $this->normalizarNombre($datos['second_last_name'] ?? null),
+                'nationality' => $datos['nationality'] ?? null,
+                'birth_country' => $birthCountry,
                 'curp_ciphertext' => $curp === null ? null : $this->protectorDatos->cifrarCurp($curp),
                 'curp_hmac' => $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp),
                 'rfc_ciphertext' => $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc),
                 'rfc_hmac' => $rfc === null ? null : $this->protectorDatos->generarHmacRfc($rfc),
-                'birth_date' => $datos['birth_date'],
-                'birth_place' => $birth_place,
-                'birth_state' => trim($datos['birth_state']),
-                'birth_city' => trim($datos['birth_city']),
-                'email' => mb_strtolower(trim($datos['email'])),
-                'phone_number' => $datos['phone_number'],
+                'birth_date' => $datos['birth_date'] ?? null,
+                'birth_place' => $birthPlace,
+                'birth_state' => $birthState,
+                'birth_city' => $birthCity,
+                'email' => $email === null ? null : mb_strtolower($email),
+                'phone_number' => $this->limpiarTexto($datos['phone_number'] ?? null),
                 'identification_country' => $datos['identification_country'] ?? null,
-                'official_id_type' => $datos['official_id_type'],
-                'official_id_number_ciphertext' => $this->protectorDatos->cifrarIdentificacion($datos['official_id_number']),
-                'official_id_number_hmac' => $this->protectorDatos->generarHmacIdentificacion($datos['official_id_number']),
+                'official_id_type' => $datos['official_id_type'] ?? null,
+                'official_id_number_ciphertext' => $officialIdNumber === null ? null : $this->protectorDatos->cifrarIdentificacion($officialIdNumber),
+                'official_id_number_hmac' => $officialIdNumber === null ? null : $this->protectorDatos->generarHmacIdentificacion($officialIdNumber),
             ])->save();
 
             $this->incrementarVersion($bloqueada);
@@ -460,11 +464,29 @@ final class ServicioSolicitudDistribuidora
         $solicitud->forceFill(['lock_version' => $solicitud->lock_version + 1])->save();
     }
 
-    private function normalizarNombre(string $nombre): string
+    private function normalizarNombre(?string $nombre): ?string
     {
-        $normalizado = (string) preg_replace('/\s+/', ' ', trim($nombre));
+        $normalizado = $this->limpiarTexto($nombre);
 
-        return mb_convert_case($normalizado, MB_CASE_TITLE, 'UTF-8');
+        return $normalizado === null ? null : mb_convert_case($normalizado, MB_CASE_TITLE, 'UTF-8');
+    }
+
+    private function limpiarTexto(?string $texto): ?string
+    {
+        if ($texto === null) {
+            return null;
+        }
+
+        $normalizado = (string) preg_replace('/\s+/', ' ', trim($texto));
+
+        return $normalizado === '' ? null : $normalizado;
+    }
+
+    private function formatearLugarNacimiento(?string ...$partes): ?string
+    {
+        $partesPresentes = array_values(array_filter($partes, fn (?string $parte) => $parte !== null));
+
+        return $partesPresentes === [] ? null : implode(', ', $partesPresentes);
     }
 
     private function eventoRegistro(Model $registro, string $accion): string

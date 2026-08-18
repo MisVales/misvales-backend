@@ -208,12 +208,14 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
             'lock_version' => 1,
+            'nationality' => 'MEXICAN',
             'first_name' => '  maría   fernanda ',
             'first_last_name' => 'pérez',
             'second_last_name' => 'lópez',
             'curp' => 'GODE561231HDFXXX09',
             'rfc' => 'GODE561231GR8',
             'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
             'birth_place' => 'Torreón',
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
@@ -222,7 +224,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'official_id_type' => 'INE',
             'official_id_number' => 'ABC123456789',
         ])
-            ->assertOk()
+            ->assertCreated()
             ->assertJsonPath('data.first_name', 'María Fernanda')
             ->assertJsonPath('data.curp_masked', 'GODE********FXXX09')
             ->assertJsonPath('data.application_lock_version', 2)
@@ -258,6 +260,30 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             ->assertJsonMissingPath('data.personal_data.curp')
             ->assertJsonMissingPath('data.personal_data.rfc')
             ->assertJsonMissingPath('data.personal_data.official_id_number');
+    }
+
+    public function test_autoguardado_de_datos_personales_acepta_un_borrador_incompleto(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-01');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100010');
+        Sanctum::actingAs($general);
+
+        $this->withHeaders(['X-Autosave' => 'true'])
+            ->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+                'lock_version' => 1,
+                'first_name' => '  ana   maría ',
+            ])
+            ->assertCreated()
+            ->assertJsonPath('data.first_name', 'Ana María')
+            ->assertJsonPath('data.application_lock_version', 2);
+
+        $this->assertDatabaseHas('application_personal_data', [
+            'application_id' => $solicitud->id,
+            'first_name' => 'Ana María',
+            'first_last_name' => null,
+        ]);
     }
 
     public function test_administra_domicilios_y_rechaza_dos_domicilios_actuales(): void
