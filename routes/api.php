@@ -27,7 +27,6 @@ use App\Http\Controllers\Api\V1\ExcedenteController;
 use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
-use App\Http\Controllers\Api\V1\PeriodoCanjeController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProductoController;
 use App\Http\Controllers\Api\V1\PuntosController;
@@ -229,14 +228,6 @@ Route::prefix('v1')->group(function () {
         Route::patch('product-versions/{id}', [ProductoController::class, 'updateVersion']);
         Route::post('product-versions/{id}/publish', [ProductoController::class, 'publishVersion']);
         Route::post('products/{id}/deactivate', [ProductoController::class, 'deactivateProduct']);
-
-        // Periodos de canje
-        Route::get('redemption-periods', [PeriodoCanjeController::class, 'index']);
-        Route::post('redemption-periods', [PeriodoCanjeController::class, 'store']);
-        Route::get('redemption-periods/{id}', [PeriodoCanjeController::class, 'show']);
-        Route::patch('redemption-periods/{id}', [PeriodoCanjeController::class, 'update']);
-        Route::post('redemption-periods/{id}/publish', [PeriodoCanjeController::class, 'publish']);
-        Route::post('redemption-periods/{id}/cancel', [PeriodoCanjeController::class, 'cancel']);
 
         // Módulo 5 - verificación, corrección, evaluación y dictamen
         Route::post('distributor-applications/{application}/return-to-draft', [VerificacionDistribuidoraController::class, 'devolverACaptura']);

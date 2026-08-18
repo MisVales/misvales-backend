@@ -12,7 +12,6 @@ use App\Models\CoordinatorDistributorAssignment;
 use App\Models\Distribuidora;
 use App\Models\Product;
 use App\Models\ProductVersion;
-use App\Models\RedemptionPeriod;
 use App\Models\SolicitudDistribuidora;
 use App\Models\Vale;
 use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
@@ -101,7 +100,6 @@ class AppServiceProvider extends ServiceProvider
         CategoryVersion::observe(VersionObserver::class);
         Product::observe(VersionObserver::class);
         ProductVersion::observe(VersionObserver::class);
-        RedemptionPeriod::observe(VersionObserver::class);
 
         // Interceptor global de Autorización (Punto 8)
         Gate::before(function ($user, string $ability) {
