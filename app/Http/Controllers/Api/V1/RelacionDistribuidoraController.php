@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\CoordinatorDistributorAssignment;
 use App\Models\RelacionDistribuidora;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -50,6 +51,15 @@ final class RelacionDistribuidoraController extends Controller
         }
         if ($user->hasPermissionTo('relations.view_branch')) {
             $query->whereIn('branch_id', $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->select('branch_id'));
+
+            return;
+        }
+        if ($user->hasPermissionTo('relations.view_assigned')) {
+            $query->whereIn('distributor_id', CoordinatorDistributorAssignment::query()
+                ->where('coordinator_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('valid_to')
+                ->select('distributor_id'));
 
             return;
         }

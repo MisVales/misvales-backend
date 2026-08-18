@@ -103,6 +103,7 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'voucher_modifications', 'action' => 'authorize_branch', 'code' => 'voucher_modifications.authorize_branch', 'description' => 'Autorizar correcciones de sucursal'],
             ['module' => 'voucher_modifications', 'action' => 'authorize_global', 'code' => 'voucher_modifications.authorize_global', 'description' => 'Autorizar correcciones globalmente'],
             ['module' => 'relations', 'action' => 'view_own', 'code' => 'relations.view_own', 'description' => 'Consultar relaciones propias'],
+            ['module' => 'relations', 'action' => 'view_assigned', 'code' => 'relations.view_assigned', 'description' => 'Consultar relaciones de distribuidoras asignadas'],
             ['module' => 'relations', 'action' => 'view_branch', 'code' => 'relations.view_branch', 'description' => 'Consultar relaciones de sucursal'],
             ['module' => 'relations', 'action' => 'view_global', 'code' => 'relations.view_global', 'description' => 'Consultar relaciones globalmente'],
             ['module' => 'relations', 'action' => 'download_own', 'code' => 'relations.download_own', 'description' => 'Descargar relaciones propias'],
@@ -272,8 +273,7 @@ class RolesAndPermissionsSeeder extends Seeder
             if ($roleData['code'] === 'admin') {
                 $this->assignPerms($role, [
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
-                    'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
-                    'clients.view_bank_accounts', 'clients.view_portfolio',
+                    'distributors.view_initial_credit',
                     'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                     'vouchers.view_global',
                     'relations.view_global',
@@ -289,12 +289,12 @@ class RolesAndPermissionsSeeder extends Seeder
             if ($roleData['code'] === 'coordinator') {
                 $this->assignPerms($role, [
                     'distributors.view_any', 'distributors.view', 'distributors.view_category_history',
-                    'distributors.view_initial_credit', 'clients.view', 'clients.view_assignment_history',
-                    'clients.view_bank_accounts', 'clients.view_portfolio',
+                    'distributors.view_initial_credit',
                     'credit_lines.view_assigned', 'credit_line_movements.view_assigned',
                     'credit_increase_requests.view_assigned', 'credit_increase_requests.preauthorize_assigned',
                     'credit_increase_requests.reject_assigned',
                     'vouchers.view_assigned',
+                    'relations.view_assigned',
                     'voucher_modifications.authorize_branch',
                     'bank_movements.view_branch',
                     'manual_reconciliation.authorize_branch',

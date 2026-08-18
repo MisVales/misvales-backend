@@ -2,13 +2,14 @@
 
 namespace App\Services\Auth;
 
+use App\Models\Branch;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
-use Illuminate\Database\Eloquent\Collection;
 use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
 use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
+use Illuminate\Database\Eloquent\Collection;
 
 class RoleAssignmentPolicyService
 {
@@ -38,6 +39,13 @@ class RoleAssignmentPolicyService
         // 1. Estado del usuario receptor
         if (! in_array($targetUser->state, ['ACTIVE', 'INVITED', 'PENDING_ACTIVATION'])) {
             return 'El usuario receptor no está en un estado válido para recibir asignaciones.';
+        }
+
+        if ($branchId !== null) {
+            $branch = Branch::query()->find($branchId);
+            if ($branch === null || $branch->status !== 'ACTIVE') {
+                return 'La sucursal seleccionada no está activa o ya no existe.';
+            }
         }
 
         // 2. Alcance permitido por la matriz organizacional autoritativa.
@@ -71,7 +79,7 @@ class RoleAssignmentPolicyService
 
         // 6. Branch Manager Invariants
         if ($roleToAssign->code === 'branch_manager' && $branchId !== null) {
-            $branch = \App\Models\Branch::find($branchId);
+            $branch = Branch::find($branchId);
             if ($branch && $branch->is_headquarters) {
                 return 'La sucursal matriz no puede tener gerente de sucursal.';
             }

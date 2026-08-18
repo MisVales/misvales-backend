@@ -174,16 +174,16 @@ final class ServicioSolicitudDistribuidora
 
             $registro = DatosPersonalesSolicitud::query()->firstOrNew(['application_id' => $bloqueada->id]);
             $curp = isset($datos['curp']) && $datos['curp'] !== '' ? $datos['curp'] : null;
-            $birth_place = isset($datos['birth_place']) && $datos['birth_place'] !== '' 
-                ? trim($datos['birth_place']) 
-                : trim($datos['birth_city']) . ', ' . trim($datos['birth_state']) . ', ' . trim($datos['birth_country']);
+            $birth_place = isset($datos['birth_place']) && $datos['birth_place'] !== ''
+                ? trim($datos['birth_place'])
+                : trim($datos['birth_city']).', '.trim($datos['birth_state']).', '.trim($datos['birth_country']);
 
             $registro->forceFill([
                 'first_name' => $this->normalizarNombre($datos['first_name']),
                 'first_last_name' => $this->normalizarNombre($datos['first_last_name']),
                 'second_last_name' => isset($datos['second_last_name']) ? $this->normalizarNombre($datos['second_last_name']) : null,
-                'nationality' => $datos['nationality'] ?? 'MEXICAN',
-                'birth_country' => $datos['birth_country'] ?? 'MX',
+                'nationality' => $datos['nationality'],
+                'birth_country' => $datos['birth_country'],
                 'curp_ciphertext' => $curp === null ? null : $this->protectorDatos->cifrarCurp($curp),
                 'curp_hmac' => $curp === null ? null : $this->protectorDatos->generarHmacCurp($curp),
                 'rfc_ciphertext' => $rfc === null ? null : $this->protectorDatos->cifrarRfc($rfc),
@@ -194,7 +194,7 @@ final class ServicioSolicitudDistribuidora
                 'birth_city' => trim($datos['birth_city']),
                 'email' => mb_strtolower(trim($datos['email'])),
                 'phone_number' => $datos['phone_number'],
-                'identification_country' => $datos['identification_country'] ?? 'MX',
+                'identification_country' => $datos['identification_country'] ?? null,
                 'official_id_type' => $datos['official_id_type'],
                 'official_id_number_ciphertext' => $this->protectorDatos->cifrarIdentificacion($datos['official_id_number']),
                 'official_id_number_hmac' => $this->protectorDatos->generarHmacIdentificacion($datos['official_id_number']),
@@ -292,9 +292,9 @@ final class ServicioSolicitudDistribuidora
             }
         }
 
-        if (!$registro?->exists && $solicitud->familiares()->count() >= 2) {
+        if (! $registro?->exists && $solicitud->familiares()->count() >= 2) {
             throw ValidationException::withMessages([
-                'relationship' => ['No se pueden agregar más de 2 familiares.']
+                'relationship' => ['No se pueden agregar más de 2 familiares.'],
             ]);
         }
 
@@ -549,10 +549,10 @@ final class ServicioSolicitudDistribuidora
             'empleos' => $app->empleos()->exists(),
             'creditos_comerciales' => $app->creditosComerciales()->exists(),
         ];
-        
+
         $completed = count(array_filter($sections));
         $total = count($sections);
-        
+
         return [
             'completed_sections' => $completed,
             'total_sections' => $total,
