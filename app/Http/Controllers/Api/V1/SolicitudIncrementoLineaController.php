@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Credito\CrearSolicitudIncrementoRequest;
 use App\Http\Requests\Api\V1\Credito\DecidirIncrementoGerenteRequest;
@@ -97,7 +98,7 @@ class SolicitudIncrementoLineaController extends Controller
 
         // El gerente no puede autorizar una solicitud que él haya creado como distribuidora.
         if ($solicitud->requested_by === $user->id || $solicitud->distributor_id === $user->id) {
-            abort(403, 'No puedes emitir una decisión sobre tu propia solicitud.');
+            throw new ApiException('AUTH_SCOPE_DENIED', 'No puedes emitir una decisión sobre tu propia solicitud.', 403);
         }
 
         $solicitudActualizada = $this->servicioDecision->decidir(

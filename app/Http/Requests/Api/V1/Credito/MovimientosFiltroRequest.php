@@ -21,7 +21,7 @@ class MovimientosFiltroRequest extends FormRequest
             'sort' => ['sometimes', 'string', Rule::in([
                 'sequence', '-sequence',
                 'occurred_at', '-occurred_at',
-                'amount', '-amount'
+                'amount', '-amount',
             ])],
             'page' => ['sometimes', 'integer', 'min:1'],
             'per_page' => ['sometimes', 'integer', 'min:1', 'max:100'],

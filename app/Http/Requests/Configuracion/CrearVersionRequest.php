@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\Configuracion;
 
+use App\Models\ConfigurationDefinition;
 use Illuminate\Foundation\Http\FormRequest;
 
 class CrearVersionRequest extends FormRequest
@@ -16,8 +17,8 @@ class CrearVersionRequest extends FormRequest
     public function rules(): array
     {
         $key = $this->route('key');
-        $configuracion = \App\Models\ConfigurationDefinition::where('key', $key)->first();
-        
+        $configuracion = ConfigurationDefinition::where('key', $key)->first();
+
         $rules = [
             'reason' => ['required', 'string'],
             'effective_from' => ['required', 'date', 'after_or_equal:today'],

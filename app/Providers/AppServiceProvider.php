@@ -2,8 +2,8 @@
 
 namespace App\Providers;
 
-use App\Models\VerificationVisit;
-use Illuminate\Database\Eloquent\Relations\Relation;
+use App\Contracts\Credito\VerificadorDisponibilidadCredito;
+use App\Exceptions\ApiException;
 use App\Models\Category;
 use App\Models\CategoryVersion;
 use App\Models\ConfigurationDefinition;
@@ -14,6 +14,7 @@ use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\SolicitudDistribuidora;
 use App\Models\Vale;
+use App\Models\VerificationVisit;
 use App\Modules\Organization\Application\Assignments\Identity\OrganizationIdentityAccess;
 use App\Modules\Organization\Application\Assignments\Repositories\AssignmentReadRepository;
 use App\Modules\Organization\Application\Branches\AddressValidator;
@@ -41,8 +42,12 @@ use App\Policies\CoordinatorAssignmentPolicy;
 use App\Policies\DistribuidoraPolicy;
 use App\Policies\SolicitudDistribuidoraPolicy;
 use App\Policies\ValePolicy;
+use App\Services\Credito\GeneradorFolioIncremento;
+use App\Services\Credito\ServicioEstadoIncremento;
+use App\Services\Credito\ServicioVerificadorDisponibilidadCredito;
 use App\Services\Distribuidora\AuditorDistribuidora;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\RateLimiter;
@@ -55,17 +60,17 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        $this->app->singleton(\App\Services\Credito\GeneradorFolioIncremento::class, function ($app) {
-            return new \App\Services\Credito\GeneradorFolioIncremento();
+        $this->app->singleton(GeneradorFolioIncremento::class, function ($app) {
+            return new GeneradorFolioIncremento;
         });
 
-        $this->app->singleton(\App\Services\Credito\ServicioEstadoIncremento::class, function ($app) {
-            return new \App\Services\Credito\ServicioEstadoIncremento();
+        $this->app->singleton(ServicioEstadoIncremento::class, function ($app) {
+            return new ServicioEstadoIncremento;
         });
 
         $this->app->bind(
-            \App\Contracts\Credito\VerificadorDisponibilidadCredito::class,
-            \App\Services\Credito\ServicioVerificadorDisponibilidadCredito::class
+            VerificadorDisponibilidadCredito::class,
+            ServicioVerificadorDisponibilidadCredito::class
         );
 
         $this->app->bind(AssignmentReadRepository::class, EloquentAssignmentReadRepository::class);
@@ -157,13 +162,7 @@ class AppServiceProvider extends ServiceProvider
                     );
                 }
 
-                return response()->json(['error' => [
-                    'code' => 'DISTRIBUTOR_INVITATION_RATE_LIMITED',
-                    'message' => 'Se alcanzó el límite de reenvíos de invitación.',
-                    'fields' => (object) [],
-                    'details' => (object) [],
-                    'request_id' => $request->attributes->get('request_id'),
-                ]], 429);
+                throw new ApiException('DISTRIBUTOR_INVITATION_RATE_LIMITED', 'Se alcanzó el límite de reenvíos de invitación.', 429);
             }));
         });
     }

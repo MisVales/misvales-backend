@@ -19,9 +19,9 @@ class LineaCreditoController extends Controller
     public function me(Request $request)
     {
         $usuario = $request->user();
-        
+
         $datos = $this->consultaLinea->consultarPorDistribuidora($usuario);
-        
+
         return new LineaCreditoResource($datos);
     }
 }

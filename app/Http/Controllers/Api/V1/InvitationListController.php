@@ -3,13 +3,14 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Traits\ReauthenticatesMfa;
 use App\Models\AccountInvitation;
 use App\Models\User;
+use App\Models\UserRoleScope;
 use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
-use App\Http\Traits\ReauthenticatesMfa;
 
 class InvitationListController extends Controller
 {
@@ -29,7 +30,7 @@ class InvitationListController extends Controller
             },
             'createdBy' => function ($q) {
                 $q->select('id', 'name');
-            }
+            },
         ]);
 
         if ($request->has('state')) {
@@ -95,7 +96,7 @@ class InvitationListController extends Controller
             'reason' => ['required', 'string', 'max:1000'],
         ]);
 
-        DB::transaction(function() use ($invitation, $request, $validated) {
+        DB::transaction(function () use ($invitation, $request, $validated) {
             // Bloquea fila
             $lockedInvitation = AccountInvitation::where('id', $invitation->id)->lockForUpdate()->firstOrFail();
 
@@ -111,19 +112,19 @@ class InvitationListController extends Controller
                 'token_hash' => null,
                 'exchange_token_hash' => null,
             ]);
-            
+
             // Libera sucursal de gerente
-            $activeScopes = \App\Models\UserRoleScope::where('user_id', $lockedInvitation->user_id)
+            $activeScopes = UserRoleScope::where('user_id', $lockedInvitation->user_id)
                 ->where('status', 'ACTIVE')
                 ->whereNull('revoked_at')
                 ->get();
-                
+
             foreach ($activeScopes as $scope) {
                 $scope->update([
                     'status' => 'REVOKED',
                     'revoked_at' => now(),
                     'revoked_by_user_id' => $request->user()->id,
-                    'revocation_reason' => 'INVITACION_REVOCADA: ' . $validated['reason'],
+                    'revocation_reason' => 'INVITACION_REVOCADA: '.$validated['reason'],
                 ]);
             }
 
@@ -136,8 +137,8 @@ class InvitationListController extends Controller
                 'user_id' => $lockedInvitation->user_id,
                 'metadata' => [
                     'reason' => $validated['reason'],
-                    'revoked_by' => $request->user()->id
-                ]
+                    'revoked_by' => $request->user()->id,
+                ],
             ]);
         });
 

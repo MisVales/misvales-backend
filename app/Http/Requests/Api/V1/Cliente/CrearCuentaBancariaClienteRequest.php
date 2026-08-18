@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests\Api\V1\Cliente;
 
+use App\Exceptions\ApiException;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Exceptions\HttpResponseException;
 
 class CrearCuentaBancariaClienteRequest extends FormRequest
 {
@@ -27,12 +27,6 @@ class CrearCuentaBancariaClienteRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new HttpResponseException(response()->json(['error' => [
-            'code' => 'CLIENT_BANK_ACCOUNT_INVALID',
-            'message' => 'Los datos de la cuenta bancaria no son válidos.',
-            'fields' => $validator->errors(),
-            'details' => (object) [],
-            'request_id' => $this->attributes->get('request_id'),
-        ]], 422));
+        throw new ApiException('CLIENT_BANK_ACCOUNT_INVALID', 'Los datos de la cuenta bancaria no son vÃ¡lidos.', 422, $validator->errors()->toArray(), []);
     }
 }

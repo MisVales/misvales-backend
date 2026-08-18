@@ -17,7 +17,7 @@ class SecurityEventController extends Controller
     {
         $query = SecurityEvent::query();
 
-        if (!Gate::allows('viewAudit', SecurityEvent::class)) {
+        if (! Gate::allows('viewAudit', SecurityEvent::class)) {
             // Un usuario normal solo puede ver sus propios eventos
             $query->where('user_id', $request->user()->id);
         } else {

@@ -2,8 +2,9 @@
 
 namespace App\Http\Requests\Configuracion;
 
+use App\Enums\ConfigurationValueType;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Validation\Rule;
+use Illuminate\Validation\Rules\Enum;
 
 class CrearConfiguracionRequest extends FormRequest
 {
@@ -20,7 +21,7 @@ class CrearConfiguracionRequest extends FormRequest
             'key' => ['required', 'string', 'max:255', 'unique:configuration_definitions,key'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
-            'value_type' => ['required', new \Illuminate\Validation\Rules\Enum(\App\Enums\ConfigurationValueType::class)],
+            'value_type' => ['required', new Enum(ConfigurationValueType::class)],
             'unit' => ['nullable', 'string', 'max:50'],
             'is_required' => ['boolean'],
             'is_sensitive' => ['boolean'],

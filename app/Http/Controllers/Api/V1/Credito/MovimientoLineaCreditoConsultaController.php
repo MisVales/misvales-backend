@@ -6,9 +6,12 @@ use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Credito\MovimientosFiltroRequest;
 use App\Http\Resources\Api\V1\Credito\MovimientoLineaCreditoResource;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\MovimientoLineaCredito;
 use App\Models\UserRoleScope;
+use App\Services\Credito\AuditorIncrementos;
+use Illuminate\Support\Facades\Gate;
 
 class MovimientoLineaCreditoConsultaController extends Controller
 {
@@ -20,7 +23,7 @@ class MovimientoLineaCreditoConsultaController extends Controller
         $queryLinea = LineaCredito::where('distributor_id', $distributorId);
 
         if ($user->hasPermissionTo('credit_line_movements.view_own')) {
-            $distribuidora = \App\Models\Distribuidora::where('user_id', $user->id)->first();
+            $distribuidora = Distribuidora::where('user_id', $user->id)->first();
             if ($distribuidora) {
                 $queryLinea->where('distributor_id', $distribuidora->id);
             } else {
@@ -31,9 +34,9 @@ class MovimientoLineaCreditoConsultaController extends Controller
                 ->where('distributor_id', $distributorId)
                 ->where('status', 'ACTIVE')
                 ->exists();
-                
-            if (!$hasAssignment) {
-                $queryLinea->where('id', 'invalid-uuid'); 
+
+            if (! $hasAssignment) {
+                $queryLinea->where('id', 'invalid-uuid');
             }
         } elseif ($user->hasPermissionTo('credit_line_movements.view_branch')) {
             $managerScope = UserRoleScope::where('user_id', $user->id)
@@ -46,18 +49,18 @@ class MovimientoLineaCreditoConsultaController extends Controller
                 ->where('scope_type', 'BRANCH')
                 ->first();
 
-            if (!$managerScope || !$distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
+            if (! $managerScope || ! $distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
                 $queryLinea->where('id', 'invalid-uuid');
             }
-        } elseif (!$user->hasPermissionTo('credit_line_movements.view_global')) {
+        } elseif (! $user->hasPermissionTo('credit_line_movements.view_global')) {
             $queryLinea->where('id', 'invalid-uuid');
         }
 
         $linea = $queryLinea->firstOrFail();
-        
-        \Illuminate\Support\Facades\Gate::authorize('viewMovements', $linea);
 
-        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+        Gate::authorize('viewMovements', $linea);
+
+        app(AuditorIncrementos::class)->registrar(
             'EV-READ-MOVEMENTS',
             'credit_lines',
             $linea->id,
@@ -81,11 +84,11 @@ class MovimientoLineaCreditoConsultaController extends Controller
         }
 
         if (isset($filtros['occurred_from'])) {
-            $queryMovimientos->where('occurred_at', '>=', $filtros['occurred_from'] . ' 00:00:00');
+            $queryMovimientos->where('occurred_at', '>=', $filtros['occurred_from'].' 00:00:00');
         }
 
         if (isset($filtros['occurred_to'])) {
-            $queryMovimientos->where('occurred_at', '<=', $filtros['occurred_to'] . ' 23:59:59');
+            $queryMovimientos->where('occurred_at', '<=', $filtros['occurred_to'].' 23:59:59');
         }
 
         if (isset($filtros['sort'])) {
@@ -98,7 +101,7 @@ class MovimientoLineaCreditoConsultaController extends Controller
         }
 
         $perPage = $filtros['per_page'] ?? 15;
-        
+
         $paginator = $queryMovimientos->paginate($perPage);
 
         return MovimientoLineaCreditoResource::collection($paginator);

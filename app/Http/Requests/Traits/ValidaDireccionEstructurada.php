@@ -5,13 +5,12 @@ namespace App\Http\Requests\Traits;
 trait ValidaDireccionEstructurada
 {
     /**
-     * @param string $prefix
-     * @param string $presencia
      * @return array<string, array>
      */
     protected function reglasDireccionEstructurada(string $prefix = '', string $presencia = 'required'): array
     {
         $p = $prefix ? "{$prefix}." : '';
+
         return [
             "{$p}country" => ['sometimes', 'string', 'size:2'],
             "{$p}state" => [$presencia, 'string', 'max:120'],
@@ -26,13 +25,12 @@ trait ValidaDireccionEstructurada
     }
 
     /**
-     * @param string $prefix
-     * @param string $presencia
      * @return array<string, array>
      */
     protected function reglasCodigoPostalMexicano(string $prefix = '', string $presencia = 'required'): array
     {
         $p = $prefix ? "{$prefix}." : '';
+
         return [
             "{$p}postal_code" => [$presencia, 'regex:/^\d{5}$/'],
         ];

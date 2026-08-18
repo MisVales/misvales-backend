@@ -2,14 +2,15 @@
 
 namespace App\Http\Requests\Api\V1\Cliente;
 
+use App\Exceptions\ApiException;
+use App\Http\Requests\Traits\ValidaDireccionEstructurada;
 use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
-use Illuminate\Http\Exceptions\HttpResponseException;
 use Illuminate\Validation\Rule;
 
 class CrearClienteRequest extends FormRequest
 {
-    use \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+    use ValidaDireccionEstructurada;
 
     protected function prepareForValidation(): void
     {
@@ -32,7 +33,7 @@ class CrearClienteRequest extends FormRequest
             'first_last_name' => ['required', 'string', 'max:120'],
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
-            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zñÑ&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
+            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zÃ±Ã‘&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
             'birth_place' => ['required', 'string', 'max:160'],
             'birth_state' => ['required', 'string', 'max:120'],
@@ -61,20 +62,14 @@ class CrearClienteRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'curp.regex' => 'La CURP no tiene un formato válido.',
-            'bank_account.clabe.regex' => 'La CLABE debe contener exactamente 18 dígitos.',
-            'address.postal_code.regex' => 'El código postal debe contener 5 dígitos.',
+            'curp.regex' => 'La CURP no tiene un formato vÃ¡lido.',
+            'bank_account.clabe.regex' => 'La CLABE debe contener exactamente 18 dÃ­gitos.',
+            'address.postal_code.regex' => 'El cÃ³digo postal debe contener 5 dÃ­gitos.',
         ];
     }
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new HttpResponseException(response()->json(['error' => [
-            'code' => 'CLIENT_VALIDATION_FAILED',
-            'message' => 'Los datos enviados no cumplen las reglas del registro de cliente.',
-            'fields' => $validator->errors(),
-            'details' => (object) [],
-            'request_id' => $this->attributes->get('request_id'),
-        ]], 422));
+        throw new ApiException('CLIENT_VALIDATION_FAILED', 'Los datos enviados no cumplen las reglas del registro de cliente.', 422, $validator->errors()->toArray(), []);
     }
 }

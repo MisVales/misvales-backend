@@ -20,9 +20,9 @@ class PreautorizarIncrementoRequest extends FormRequest
                 'regex:/^\d+(\.\d{1,4})?$/',
                 function ($attribute, $value, $fail) {
                     if (bccomp($value, '0.0000', 4) <= 0) {
-                        $fail("El importe recomendado debe ser mayor que cero.");
+                        $fail('El importe recomendado debe ser mayor que cero.');
                     }
-                }
+                },
             ],
             'reason' => ['required', 'string', 'max:255'],
             'lock_version' => ['required', 'integer', 'min:1'],

@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Api\V1\Credito;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\Api\V1\Credito\LineaCreditoResource;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\UserRoleScope;
+use App\Services\Credito\AuditorIncrementos;
 use Illuminate\Http\Request;
 
 class LineaCreditoConsultaController extends Controller
@@ -22,12 +24,12 @@ class LineaCreditoConsultaController extends Controller
             },
             'movimientos' => function ($q) {
                 $q->orderBy('sequence', 'desc')->take(1);
-            }
+            },
         ])->where('distributor_id', $distributorId);
 
         // Aplicar el alcance antes de buscar el registro
         if ($user->hasPermissionTo('credit_lines.view_own')) {
-            $distribuidora = \App\Models\Distribuidora::where('user_id', $user->id)->first();
+            $distribuidora = Distribuidora::where('user_id', $user->id)->first();
             if ($distribuidora) {
                 $query->where('distributor_id', $distribuidora->id);
             } else {
@@ -38,10 +40,10 @@ class LineaCreditoConsultaController extends Controller
                 ->where('distributor_id', $distributorId)
                 ->where('status', 'ACTIVE')
                 ->exists();
-                
-            if (!$hasAssignment) {
+
+            if (! $hasAssignment) {
                 // Forzar fallo si no tiene asignación
-                $query->where('id', 'invalid-uuid'); 
+                $query->where('id', 'invalid-uuid');
             }
         } elseif ($user->hasPermissionTo('credit_lines.view_branch')) {
             $managerScope = UserRoleScope::where('user_id', $user->id)
@@ -54,18 +56,18 @@ class LineaCreditoConsultaController extends Controller
                 ->where('scope_type', 'BRANCH')
                 ->first();
 
-            if (!$managerScope || !$distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
+            if (! $managerScope || ! $distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
                 // Forzar fallo si no son de la misma sucursal
                 $query->where('id', 'invalid-uuid');
             }
-        } elseif (!$user->hasPermissionTo('credit_lines.view_global')) {
+        } elseif (! $user->hasPermissionTo('credit_lines.view_global')) {
             // Roles sin acceso a ninguna
             $query->where('id', 'invalid-uuid');
         }
 
         $linea = $query->firstOrFail();
 
-        app(\App\Services\Credito\AuditorIncrementos::class)->registrar(
+        app(AuditorIncrementos::class)->registrar(
             'EV-READ-LINE',
             'credit_lines',
             $linea->id,

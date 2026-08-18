@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReauthenticatesMfa;
 use App\Mail\ActivationInvitationMail;
@@ -133,7 +134,7 @@ class UserController extends Controller
                 );
 
                 if ($validationResult !== true) {
-                    abort(403, 'Error al asignar rol: '.$validationResult);
+                    throw new ApiException('AUTH_SCOPE_DENIED', 'Error al asignar rol: '.$validationResult, 403);
                 }
 
                 $assignment = UserRoleScope::create([

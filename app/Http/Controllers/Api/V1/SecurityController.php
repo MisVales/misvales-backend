@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ApiException;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReauthenticatesMfa;
 use App\Mail\Security\SecurityAlertMail;
@@ -348,7 +349,7 @@ class SecurityController extends Controller
         $cachedOptions = Cache::get($cacheKey);
 
         if (! $cachedOptions) {
-            return response()->json(['error' => 'EXPIRED_PASSKEY_SESSION', 'message' => 'Sesión expirada.'], 400);
+            throw new ApiException('EXPIRED_PASSKEY_SESSION', 'Sesión expirada.', 400);
         }
 
         $options = unserialize($cachedOptions);
@@ -374,7 +375,7 @@ class SecurityController extends Controller
 
             return response()->json(['message' => 'Passkey registrado correctamente.']);
         } catch (\Exception $e) {
-            return response()->json(['error' => 'PASSKEY_REGISTRATION_FAILED', 'message' => 'Error al registrar el Passkey: '.$e->getMessage()], 400);
+            throw new ApiException('PASSKEY_REGISTRATION_FAILED', 'Error al registrar el Passkey: '.$e->getMessage(), 400);
         }
     }
 
@@ -396,7 +397,7 @@ class SecurityController extends Controller
             ->count();
 
         if ($totalMfa <= 1) {
-            return response()->json(['error' => 'LAST_MFA_METHOD', 'message' => 'No puedes eliminar esta llave de acceso porque es tu único método de autenticación.'], 400);
+            throw new ApiException('LAST_MFA_METHOD', 'No puedes eliminar esta llave de acceso porque es tu único método de autenticación.', 400);
         }
 
         $passkey->delete();
