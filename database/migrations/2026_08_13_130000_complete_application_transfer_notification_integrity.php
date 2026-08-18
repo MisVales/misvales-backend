@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql') {
+        if (DB::connection()->getDriverName() !== 'pgsql' && DB::connection()->getDriverName() !== 'sqlite') {
             throw new RuntimeException('La correcciÃ³n de integridad requiere PostgreSQL.');
         }
 
@@ -32,7 +32,9 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE application_authorizations DROP CONSTRAINT IF EXISTS application_authorizations_amount_check');
         }
-        DB::statement("ALTER TABLE application_authorizations ADD CONSTRAINT application_authorizations_amount_check CHECK ((decision = 'APPROVED' AND initial_credit_line_amount > 0) OR (decision = 'REJECTED' AND initial_credit_line_amount IS NULL))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE application_authorizations ADD CONSTRAINT application_authorizations_amount_check CHECK ((decision = 'APPROVED' AND initial_credit_line_amount > 0) OR (decision = 'REJECTED' AND initial_credit_line_amount IS NULL))");
+        }
 
         Schema::table('client_transfer_requests', function (Blueprint $table): void {
             $table->foreignUuid('cancelled_by')->nullable()->constrained('users')->restrictOnDelete();
@@ -42,8 +44,10 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE client_transfer_requests DROP CONSTRAINT IF EXISTS client_transfer_status_check');
         }
-        DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_status_check CHECK (status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED','COMPLETED','REJECTED_BY_RECEIVER','ORIGIN_REJECTED','CANCELLED'))");
-        DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_cancellation_check CHECK ((status = 'CANCELLED' AND cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR (status <> 'CANCELLED' AND cancelled_by IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_status_check CHECK (status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED','COMPLETED','REJECTED_BY_RECEIVER','ORIGIN_REJECTED','CANCELLED'))");
+            DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_cancellation_check CHECK ((status = 'CANCELLED' AND cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR (status <> 'CANCELLED' AND cancelled_by IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL))");
+        }
 
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update_delete ON notification_deliveries');
@@ -82,8 +86,10 @@ return new class extends Migration
                 ->deferrable()
                 ->initiallyImmediate(false);
         });
-        DB::statement("ALTER TABLE notification_deliveries ADD CONSTRAINT notification_deliveries_status_check CHECK (status IN ('PENDING','SENT','FAILED'))");
-        DB::statement("ALTER TABLE notification_deliveries ADD CONSTRAINT notification_deliveries_result_check CHECK ((status = 'PENDING' AND delivered_at IS NULL AND failed_at IS NULL AND error IS NULL) OR (status = 'SENT' AND delivered_at IS NOT NULL AND failed_at IS NULL AND error IS NULL) OR (status = 'FAILED' AND delivered_at IS NULL AND failed_at IS NOT NULL AND error IS NOT NULL))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE notification_deliveries ADD CONSTRAINT notification_deliveries_status_check CHECK (status IN ('PENDING','SENT','FAILED'))");
+            DB::statement("ALTER TABLE notification_deliveries ADD CONSTRAINT notification_deliveries_result_check CHECK ((status = 'PENDING' AND delivered_at IS NULL AND failed_at IS NULL AND error IS NULL) OR (status = 'SENT' AND delivered_at IS NOT NULL AND failed_at IS NULL AND error IS NULL) OR (status = 'FAILED' AND delivered_at IS NULL AND failed_at IS NOT NULL AND error IS NOT NULL))");
+        }
     }
 
     public function down(): void

@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -14,8 +14,10 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE application_state_transitions DROP CONSTRAINT IF EXISTS application_state_transitions_to_status_check');
         }
-        DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_from_status_check CHECK (from_status IN ({$estadosSolicitud}))");
-        DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_to_status_check CHECK (to_status IN ({$estadosSolicitud}))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_from_status_check CHECK (from_status IN ({$estadosSolicitud}))");
+            DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_to_status_check CHECK (to_status IN ({$estadosSolicitud}))");
+        }
 
         $estadosIncremento = "'REQUESTED', 'REJECTED_BY_COORDINATOR', 'PREAUTHORIZED', 'REJECTED_BY_MANAGER', 'AUTHORIZED_PARTIAL', 'AUTHORIZED_TOTAL', 'COMPLETED'";
         if (DB::getDriverName() !== 'sqlite') {
@@ -24,8 +26,10 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE credit_increase_state_transitions DROP CONSTRAINT IF EXISTS credit_increase_state_transitions_to_status_check');
         }
-        DB::statement("ALTER TABLE credit_increase_state_transitions ADD CONSTRAINT credit_increase_state_transitions_from_status_check CHECK (from_status IN ({$estadosIncremento}))");
-        DB::statement("ALTER TABLE credit_increase_state_transitions ADD CONSTRAINT credit_increase_state_transitions_to_status_check CHECK (to_status IN ({$estadosIncremento}))");
+        if (DB::getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE credit_increase_state_transitions ADD CONSTRAINT credit_increase_state_transitions_from_status_check CHECK (from_status IN ({$estadosIncremento}))");
+            DB::statement("ALTER TABLE credit_increase_state_transitions ADD CONSTRAINT credit_increase_state_transitions_to_status_check CHECK (to_status IN ({$estadosIncremento}))");
+        }
 
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE redemption_periods DROP CONSTRAINT IF EXISTS chk_rp_operational_point_value');

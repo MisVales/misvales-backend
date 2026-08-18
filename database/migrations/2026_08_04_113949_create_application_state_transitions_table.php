@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -23,8 +23,10 @@ return new class extends Migration
         });
 
         $estados = "'DRAFT', 'COORDINATOR_REVIEW', 'VERIFIER_ASSIGNED', 'PHYSICAL_VERIFICATION', 'COORDINATOR_CORRECTION', 'COORDINATOR_EVALUATION', 'MANAGER_AUTHORIZATION', 'TERMINATED_UNFAVORABLE', 'REJECTED', 'AUTHORIZED_PENDING_ACTIVATION', 'ACTIVE'";
-        DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_from_status_check CHECK (from_status IN ({$estados}))");
-        DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_to_status_check CHECK (to_status IN ({$estados}))");
+        if (DB::connection()->getDriverName() !== 'sqlite') {
+            DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_from_status_check CHECK (from_status IN ({$estados}))");
+            DB::statement("ALTER TABLE application_state_transitions ADD CONSTRAINT application_state_transitions_to_status_check CHECK (to_status IN ({$estados}))");
+        }
     }
 
     public function down(): void
