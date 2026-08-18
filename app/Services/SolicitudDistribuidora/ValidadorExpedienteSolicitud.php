@@ -2,6 +2,7 @@
 
 namespace App\Services\SolicitudDistribuidora;
 
+use App\Models\MediaFileBinding;
 use App\Models\SolicitudDistribuidora;
 use Illuminate\Validation\ValidationException;
 
@@ -74,35 +75,46 @@ final class ValidadorExpedienteSolicitud
 
     public function validarEnvio(SolicitudDistribuidora $solicitud): void
     {
-        $declaraciones = $solicitud->section_declarations ?? [];
-        $faltantes = array_values(array_filter(self::SECCIONES, fn (string $seccion): bool => ! isset($declaraciones[$seccion]) || $declaraciones[$seccion] === 'PENDING'));
+        $declaraciones = $this->declaracionesAutomaticas($solicitud);
+        $faltantes = array_values(array_filter(
+            self::SECCIONES,
+            fn (string $seccion): bool => $declaraciones[$seccion] === 'PENDING',
+        ));
 
         if ($faltantes !== []) {
             throw ValidationException::withMessages(['sections' => $faltantes]);
         }
 
-        $this->validarDeclaraciones($solicitud, $declaraciones);
         $this->validarDatosPersonales($solicitud);
         $this->validarDomicilioActual($solicitud);
+    }
+
+    /** @return array<string, string> */
+    public function declaracionesAutomaticas(SolicitudDistribuidora $solicitud): array
+    {
+        return collect(self::SECCIONES)
+            ->mapWithKeys(function (string $seccion) use ($solicitud): array {
+                if ($this->seccionTieneDatos($solicitud, $seccion)) {
+                    return [$seccion => 'COMPLETED'];
+                }
+
+                if ($this->seccionTieneRegistros($solicitud, $seccion)
+                    || $this->seccionTieneBorradorSinClasificar($solicitud, $seccion)) {
+                    return [$seccion => 'PENDING'];
+                }
+
+                return [$seccion => in_array($seccion, ['personal_data', 'residence'], true)
+                    ? 'PENDING'
+                    : 'NOT_APPLICABLE'];
+            })
+            ->all();
     }
 
     /** @return array{completed_sections: int, total_sections: int, can_submit: bool} */
     public function calcularSeccionesCompletas(SolicitudDistribuidora $solicitud): array
     {
-        $declaraciones = $solicitud->section_declarations ?? [];
-
-        $completadas = 0;
-
-        foreach (self::SECCIONES as $seccion) {
-            $estado = $declaraciones[$seccion] ?? 'PENDING';
-            $tieneDatos = $this->seccionTieneDatos($solicitud, $seccion);
-            $obligatoria = in_array($seccion, ['personal_data', 'residence'], true);
-
-            if (($estado === 'COMPLETED' && $tieneDatos)
-                || ($estado === 'NOT_APPLICABLE' && ! $tieneDatos && ! $obligatoria)) {
-                $completadas++;
-            }
-        }
+        $declaraciones = $this->declaracionesAutomaticas($solicitud);
+        $completadas = count(array_filter($declaraciones, fn (string $estado): bool => $estado !== 'PENDING'));
 
         return [
             'completed_sections' => $completadas,
@@ -115,29 +127,107 @@ final class ValidadorExpedienteSolicitud
     {
         return match ($seccion) {
             'personal_data' => $this->datosPersonalesCompletos($solicitud),
+            'residence' => $this->camposPresentes($solicitud->domicilios()->where('is_current', true), [
+                'street', 'exterior_number', 'neighborhood', 'postal_code', 'municipality', 'city', 'state', 'housing_tenure',
+            ]),
+            'partner' => $this->camposPresentes($solicitud->familiares()->whereIn('relationship', ['SPOUSE', 'PARTNER']), [
+                'relationship', 'first_name', 'first_last_name',
+            ]),
+            'children' => $this->camposPresentes($solicitud->familiares()->where('relationship', 'CHILD'), [
+                'relationship', 'first_name', 'first_last_name',
+            ]),
+            'family_references' => $this->camposPresentes($solicitud->familiares()->where('is_family_reference', true), [
+                'relationship', 'first_name', 'first_last_name',
+            ]),
+            'vehicles' => $this->camposPresentes($solicitud->vehiculos(), ['vehicle_type']),
+            'assets' => $this->camposPresentes($solicitud->patrimonio()->where('entry_type', 'ASSET')->where('is_active', true), ['entry_type', 'name']),
+            'liabilities' => $this->camposPresentes($solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->where('is_active', true), ['entry_type', 'name']),
+            'employment' => $this->camposPresentes($solicitud->empleos(), ['employer_name']),
+            'commercial_credits' => $this->camposPresentes($solicitud->creditosComerciales(), ['company_name', 'credit_limit']),
+            default => false,
+        };
+    }
+
+    private function seccionTieneRegistros(SolicitudDistribuidora $solicitud, string $seccion): bool
+    {
+        return match ($seccion) {
+            'personal_data' => $solicitud->datosPersonales()->exists(),
             'residence' => $solicitud->domicilios()->where('is_current', true)->exists(),
             'partner' => $solicitud->familiares()->whereIn('relationship', ['SPOUSE', 'PARTNER'])->exists(),
             'children' => $solicitud->familiares()->where('relationship', 'CHILD')->exists(),
             'family_references' => $solicitud->familiares()->where('is_family_reference', true)->exists(),
             'vehicles' => $solicitud->vehiculos()->exists(),
-            'assets' => $solicitud->patrimonio()->where('entry_type', 'ASSET')->where('is_active', true)->exists(),
-            'liabilities' => $solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->where('is_active', true)->exists(),
+            'assets' => $solicitud->patrimonio()->where('entry_type', 'ASSET')->exists(),
+            'liabilities' => $solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->exists(),
             'employment' => $solicitud->empleos()->exists(),
             'commercial_credits' => $solicitud->creditosComerciales()->exists(),
             default => false,
         };
     }
 
+    private function seccionTieneBorradorSinClasificar(SolicitudDistribuidora $solicitud, string $seccion): bool
+    {
+        return match ($seccion) {
+            'family_references' => $solicitud->familiares()
+                ->where('is_family_reference', false)
+                ->where(function ($consulta): void {
+                    $consulta
+                        ->whereNull('relationship')
+                        ->orWhere(function ($consulta): void {
+                            $consulta
+                                ->whereNotIn('relationship', ['SPOUSE', 'PARTNER', 'CHILD'])
+                                ->where(function ($consulta): void {
+                                    $consulta
+                                        ->whereNull('first_name')
+                                        ->orWhere('first_name', '')
+                                        ->orWhereNull('first_last_name')
+                                        ->orWhere('first_last_name', '');
+                                });
+                        });
+                })
+                ->exists(),
+            'assets' => $solicitud->patrimonio()->whereNull('entry_type')->exists(),
+            default => false,
+        };
+    }
+
     private function datosPersonalesCompletos(SolicitudDistribuidora $solicitud): bool
     {
-        if (! $solicitud->datosPersonales()->exists()) {
+        $datos = $solicitud->datosPersonales;
+
+        if ($datos === null || ! $this->camposPresentes($solicitud->datosPersonales(), [
+            'nationality', 'first_name', 'first_last_name', 'birth_date', 'birth_country', 'birth_state',
+            'birth_city', 'email', 'phone_number', 'official_id_type', 'official_id_number_ciphertext',
+        ])) {
             return false;
         }
 
-        return \App\Models\MediaFileBinding::query()
+        if ($datos->nationality === 'MEXICAN' && $datos->curp_ciphertext === null) {
+            return false;
+        }
+
+        if ($datos->nationality === 'FOREIGN' && blank($datos->identification_country)) {
+            return false;
+        }
+
+        return MediaFileBinding::query()
             ->where('owner_type', 'distributor_application')
             ->where('owner_id', $solicitud->id)
             ->where('purpose', 'IDENTIFICATION')
             ->exists();
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Relations\Relation<*, *, *> $consulta @param array<int, string> $campos */
+    private function camposPresentes($consulta, array $campos): bool
+    {
+        foreach ($campos as $campo) {
+            $consulta->whereNotNull($campo);
+
+            if (! in_array($campo, ['birth_date', 'credit_limit'], true)) {
+                $consulta->where($campo, '<>', '');
+            }
+        }
+
+        return $consulta->exists();
     }
 }

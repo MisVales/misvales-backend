@@ -8,7 +8,6 @@ use Illuminate\Foundation\Http\FormRequest;
 final class GuardarEmpleoRequest extends FormRequest
 {
     use AllowsPartialDrafts;
-
     use RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
@@ -21,7 +20,7 @@ final class GuardarEmpleoRequest extends FormRequest
     {
         $presencia = $this->isMethod('POST') ? 'required' : 'sometimes';
 
-        return [
+        $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'employer_name' => [$presencia, 'string', 'max:180'],
             'job_title' => ['nullable', 'string', 'max:150'],
@@ -31,5 +30,7 @@ final class GuardarEmpleoRequest extends FormRequest
             'reference_payload' => ['nullable', 'array'],
             'details_payload' => ['nullable', 'array'],
         ];
+
+        return $this->applyDraftRules($rules, ['lock_version']);
     }
 }

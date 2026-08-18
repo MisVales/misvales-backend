@@ -144,22 +144,15 @@ final class ServicioSolicitudDistribuidora
                 throw new AuthorizationException('La reasignación solicitada está fuera del alcance autorizado.');
             }
 
-            $declaraciones = array_merge(
-                $bloqueada->section_declarations ?? [],
-                $datos['section_declarations'] ?? [],
-            );
-            $this->validadorExpediente->validarDeclaraciones($bloqueada, $datos['section_declarations'] ?? []);
-
             $bloqueada->forceFill([
                 'branch_id' => $branchId,
                 'coordinator_id' => $coordinatorId,
-                'section_declarations' => $declaraciones,
                 'lock_version' => $bloqueada->lock_version + 1,
             ])->save();
 
             $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_UPDATED', [
                 'branch_id' => $solicitud->branch_id, 'coordinator_id' => $solicitud->coordinator_id,
-            ], ['branch_id' => $branchId, 'coordinator_id' => $coordinatorId, 'section_declarations' => $datos['section_declarations'] ?? []]);
+            ], ['branch_id' => $branchId, 'coordinator_id' => $coordinatorId]);
 
             return $bloqueada->refresh()->load(['sucursal:id,name', 'coordinador:id,name']);
         });
@@ -294,12 +287,6 @@ final class ServicioSolicitudDistribuidora
             if (isset($datos[$campo])) {
                 $datos[$campo] = $this->normalizarNombre($datos[$campo]);
             }
-        }
-
-        if (! $registro?->exists && $solicitud->familiares()->count() >= 2) {
-            throw ValidationException::withMessages([
-                'relationship' => ['No se pueden agregar más de 2 familiares.'],
-            ]);
         }
 
         /** @var FamiliarSolicitud */
@@ -562,24 +549,6 @@ final class ServicioSolicitudDistribuidora
 
     public function calcularCompletitud(SolicitudDistribuidora $app): array
     {
-        $sections = [
-            'datos_personales' => $app->datosPersonales()->exists(),
-            'familiares' => $app->familiares()->exists(),
-            'domicilios' => $app->domicilios()->exists(),
-            'vehiculos' => $app->vehiculos()->exists(),
-            'patrimonio' => $app->patrimonio()->exists(),
-            'empleos' => $app->empleos()->exists(),
-            'creditos_comerciales' => $app->creditosComerciales()->exists(),
-        ];
-
-        $completed = count(array_filter($sections));
-        $total = count($sections);
-
-        return [
-            'completed_sections' => $completed,
-            'total_sections' => $total,
-            'can_submit' => $completed === $total,
-            'sections' => $sections,
-        ];
+        return $this->validadorExpediente->calcularSeccionesCompletas($app);
     }
 }

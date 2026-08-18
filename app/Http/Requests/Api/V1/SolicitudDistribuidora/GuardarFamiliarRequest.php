@@ -9,7 +9,6 @@ use Illuminate\Validation\Rule;
 final class GuardarFamiliarRequest extends FormRequest
 {
     use AllowsPartialDrafts;
-
     use RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
@@ -22,7 +21,7 @@ final class GuardarFamiliarRequest extends FormRequest
     {
         $presencia = $this->isMethod('POST') ? 'required' : 'sometimes';
 
-        return [
+        $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'relationship' => [$presencia, Rule::in(['SPOUSE', 'PARTNER', 'CHILD', 'FATHER', 'MOTHER', 'SIBLING', 'OTHER'])],
             'first_name' => [$presencia, 'string', 'max:120'],
@@ -34,5 +33,7 @@ final class GuardarFamiliarRequest extends FormRequest
             'is_family_reference' => ['sometimes', 'boolean'],
             'details_payload' => ['nullable', 'array'],
         ];
+
+        return $this->applyDraftRules($rules, ['lock_version']);
     }
 }

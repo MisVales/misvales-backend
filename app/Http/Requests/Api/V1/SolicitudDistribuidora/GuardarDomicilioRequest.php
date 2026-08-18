@@ -8,7 +8,7 @@ use Illuminate\Validation\Rule;
 
 final class GuardarDomicilioRequest extends FormRequest
 {
-    use AllowsPartialDrafts, RechazaPropiedadesDesconocidas, \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+    use AllowsPartialDrafts, \App\Http\Requests\Traits\ValidaDireccionEstructurada, RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
     {
@@ -31,10 +31,10 @@ final class GuardarDomicilioRequest extends FormRequest
             'details_payload' => ['nullable', 'array'],
         ];
 
-        return array_merge(
+        return $this->applyDraftRules(array_merge(
             $rules,
             $this->reglasDireccionEstructurada('', $presencia),
             $this->reglasCodigoPostalMexicano('', $presencia)
-        );
+        ), ['lock_version']);
     }
 }

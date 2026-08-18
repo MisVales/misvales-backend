@@ -4,6 +4,8 @@ namespace Tests\Feature\SolicitudDistribuidora;
 
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\MediaFile;
+use App\Models\MediaFileBinding;
 use App\Models\Role;
 use App\Models\SolicitudDistribuidora;
 use App\Models\User;
@@ -337,10 +339,12 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
 
         $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
             'lock_version' => 1,
+            'nationality' => 'MEXICAN',
             'first_name' => 'María',
             'first_last_name' => 'Pérez',
             'curp' => 'GODE561231HDFXXX09',
             'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
             'birth_place' => 'Torreón',
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
@@ -348,11 +352,31 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'phone_number' => '8711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'ABC123456789',
-        ])->assertOk();
+        ])->assertCreated();
 
         $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 2])
             ->assertUnprocessable()
             ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_INCOMPLETE');
+
+        $archivo = MediaFile::query()->create([
+            'file_type' => 'IDENTIFICATION_EVIDENCE',
+            'disk' => 'private',
+            'path' => "applications/{$solicitud->id}/identificacion.pdf",
+            'original_name' => 'identificacion.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 128,
+            'sha256' => hash('sha256', (string) Str::uuid()),
+            'uploaded_by' => $general->id,
+            'validation_status' => 'VALIDATED',
+            'validated_at' => now(),
+        ]);
+        MediaFileBinding::query()->create([
+            'media_file_id' => $archivo->id,
+            'owner_type' => 'distributor_application',
+            'owner_id' => $solicitud->id,
+            'purpose' => 'IDENTIFICATION',
+            'created_by' => $general->id,
+        ]);
 
         $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/residences", [
             'lock_version' => 2,
@@ -367,28 +391,19 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'housing_tenure' => 'OWNED',
         ])->assertCreated();
 
-        $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", [
-            'lock_version' => 3,
-            'section_declarations' => [
-                'personal_data' => 'COMPLETED',
-                'residence' => 'COMPLETED',
-                'partner' => 'NOT_APPLICABLE',
-                'children' => 'NOT_APPLICABLE',
-                'family_references' => 'NOT_APPLICABLE',
-                'vehicles' => 'NOT_APPLICABLE',
-                'assets' => 'NOT_APPLICABLE',
-                'liabilities' => 'NOT_APPLICABLE',
-                'employment' => 'NOT_APPLICABLE',
-                'commercial_credits' => 'NOT_APPLICABLE',
-            ],
-        ])->assertOk()->assertJsonPath('data.completion.can_submit', true);
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.section_declarations.personal_data', 'COMPLETED')
+            ->assertJsonPath('data.section_declarations.residence', 'COMPLETED')
+            ->assertJsonPath('data.section_declarations.vehicles', 'NOT_APPLICABLE')
+            ->assertJsonPath('data.completion.can_submit', true);
 
         $usuariosAntes = User::query()->count();
         $invitacionesAntes = DB::table('account_invitations')->count();
-        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 4])
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 3])
             ->assertOk()
             ->assertJsonPath('data.status', 'COORDINATOR_REVIEW')
-            ->assertJsonPath('data.lock_version', 5);
+            ->assertJsonPath('data.lock_version', 4);
 
         $this->assertDatabaseHas('distributor_applications', [
             'id' => $solicitud->id,
@@ -404,16 +419,16 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'outcome' => 'SUCCESS',
         ]);
 
-        $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", ['lock_version' => 5])
+        $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", ['lock_version' => 4])
             ->assertConflict()
             ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_NOT_EDITABLE');
 
-        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 5])
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/submit", ['lock_version' => 4])
             ->assertConflict()
             ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_ALREADY_SUBMITTED');
 
         $domicilio = $solicitud->domicilios()->firstOrFail();
-        $this->deleteJson("/api/v1/distributor-applications/{$solicitud->id}/residences/{$domicilio->id}", ['lock_version' => 5])
+        $this->deleteJson("/api/v1/distributor-applications/{$solicitud->id}/residences/{$domicilio->id}", ['lock_version' => 4])
             ->assertConflict()
             ->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_NOT_EDITABLE');
 
@@ -506,7 +521,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         ])->assertForbidden();
     }
 
-    public function test_declaraciones_no_contradicen_los_registros_de_colecciones(): void
+    public function test_el_resumen_calcula_las_secciones_y_no_acepta_estados_manuales(): void
     {
         $general = $this->usuarioConRol('general_manager');
         $sucursal = $this->sucursal($general, 'TRC-01');
@@ -522,31 +537,64 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", [
             'lock_version' => 2,
             'section_declarations' => ['vehicles' => 'NOT_APPLICABLE'],
-        ])->assertUnprocessable()->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_SECTION_NOT_APPLICABLE');
-
-        $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", [
-            'lock_version' => 2,
-            'section_declarations' => ['vehicles' => 'COMPLETED'],
-        ])->assertOk();
+        ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['section_declarations']]]);
 
         $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
             ->assertOk()
             ->assertJsonPath('data.section_declarations.vehicles', 'COMPLETED');
 
-        $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", [
-            'lock_version' => 3,
-            'section_declarations' => ['children' => 'COMPLETED'],
-        ])->assertUnprocessable()->assertJsonPath('error.code', 'DISTRIBUTOR_APPLICATION_SECTION_INCOMPLETE');
-
         $vehiculo = $solicitud->vehiculos()->firstOrFail();
         $this->deleteJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles/{$vehiculo->id}", [
-            'lock_version' => 3,
+            'lock_version' => 2,
         ])->assertNoContent();
 
         $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
             ->assertOk()
-            ->assertJsonPath('data.section_declarations.vehicles', 'COMPLETED')
+            ->assertJsonPath('data.section_declarations.vehicles', 'NOT_APPLICABLE')
             ->assertJsonPath('data.completion.can_submit', false);
+    }
+
+    public function test_autoguardado_de_colecciones_acepta_borradores_parciales_con_versionado(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-01');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100016');
+        Sanctum::actingAs($general);
+
+        $borradores = [
+            ['family-members', ['first_name' => 'Ana']],
+            ['residences', ['is_current' => false, 'street' => 'Av. Reforma']],
+            ['vehicles', ['brand' => 'Honda']],
+            ['assets-liabilities', ['name' => 'Casa familiar']],
+            ['employments', ['job_title' => 'Supervisora']],
+            ['commercial-credits', ['proof_reference' => (string) Str::uuid()]],
+        ];
+
+        foreach ($borradores as $indice => [$ruta, $datos]) {
+            $this->withHeader('X-Autosave', 'true')
+                ->postJson("/api/v1/distributor-applications/{$solicitud->id}/{$ruta}", [
+                    'lock_version' => $indice + 1,
+                    ...$datos,
+                ])
+                ->assertCreated()
+                ->assertJsonPath('data.application_lock_version', $indice + 2);
+        }
+
+        $this->assertDatabaseHas('application_family_members', ['application_id' => $solicitud->id, 'first_name' => 'Ana', 'relationship' => null]);
+        $this->assertDatabaseHas('application_residences', ['application_id' => $solicitud->id, 'street' => 'Av. Reforma', 'housing_tenure' => null]);
+        $this->assertDatabaseHas('application_vehicles', ['application_id' => $solicitud->id, 'brand' => 'Honda', 'vehicle_type' => null]);
+        $this->assertDatabaseHas('application_assets_liabilities', ['application_id' => $solicitud->id, 'name' => 'Casa familiar', 'entry_type' => null]);
+        $this->assertDatabaseHas('application_employments', ['application_id' => $solicitud->id, 'job_title' => 'Supervisora', 'employer_name' => null]);
+        $this->assertDatabaseHas('application_commercial_credits', ['application_id' => $solicitud->id, 'proof_reference' => $borradores[5][1]['proof_reference'], 'company_name' => null]);
+
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.section_declarations.family_references', 'PENDING')
+            ->assertJsonPath('data.section_declarations.vehicles', 'PENDING')
+            ->assertJsonPath('data.section_declarations.assets', 'PENDING')
+            ->assertJsonPath('data.section_declarations.employment', 'PENDING')
+            ->assertJsonPath('data.section_declarations.commercial_credits', 'PENDING');
     }
 
     public function test_registra_pareja_multiples_hijos_y_valida_fechas_laborales_en_patch(): void

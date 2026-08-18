@@ -12,7 +12,8 @@ class SolicitudDistribuidoraResource extends JsonResource
     /** @return array<string, mixed> */
     public function toArray(Request $request): array
     {
-        $avance = app(ValidadorExpedienteSolicitud::class)->calcularSeccionesCompletas($this->resource);
+        $validador = app(ValidadorExpedienteSolicitud::class);
+        $avance = $validador->calcularSeccionesCompletas($this->resource);
         $nombre = $this->datosPersonales === null
             ? null
             : trim(implode(' ', array_filter([
@@ -44,6 +45,7 @@ class SolicitudDistribuidoraResource extends JsonResource
                 'curp_masked' => $curpEnmascarada,
             ],
             'completion' => $avance,
+            'section_declarations' => $validador->declaracionesAutomaticas($this->resource),
             'lock_version' => $this->lock_version,
             'created_at' => $this->created_at?->toISOString(),
             'updated_at' => $this->updated_at?->toISOString(),

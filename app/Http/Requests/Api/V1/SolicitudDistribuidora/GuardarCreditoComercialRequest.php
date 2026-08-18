@@ -8,7 +8,6 @@ use Illuminate\Foundation\Http\FormRequest;
 final class GuardarCreditoComercialRequest extends FormRequest
 {
     use AllowsPartialDrafts;
-
     use RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
@@ -21,7 +20,7 @@ final class GuardarCreditoComercialRequest extends FormRequest
     {
         $presencia = $this->isMethod('POST') ? 'required' : 'sometimes';
 
-        return [
+        $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'company_name' => [$presencia, 'string', 'max:180'],
             'credit_limit' => [$presencia, 'string', 'regex:/^\d{1,15}(\.\d{1,4})?$/'],
@@ -29,5 +28,7 @@ final class GuardarCreditoComercialRequest extends FormRequest
             'proof_reference' => ['nullable', 'uuid'],
             'details_payload' => ['nullable', 'array'],
         ];
+
+        return $this->applyDraftRules($rules, ['lock_version']);
     }
 }

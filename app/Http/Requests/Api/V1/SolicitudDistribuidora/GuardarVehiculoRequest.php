@@ -8,7 +8,6 @@ use Illuminate\Foundation\Http\FormRequest;
 final class GuardarVehiculoRequest extends FormRequest
 {
     use AllowsPartialDrafts;
-
     use RechazaPropiedadesDesconocidas;
 
     public function authorize(): bool
@@ -21,7 +20,7 @@ final class GuardarVehiculoRequest extends FormRequest
     {
         $presencia = $this->isMethod('POST') ? 'required' : 'sometimes';
 
-        return [
+        $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'vehicle_type' => [$presencia, 'string', 'max:64'],
             'brand' => ['nullable', 'string', 'max:120'],
@@ -30,5 +29,7 @@ final class GuardarVehiculoRequest extends FormRequest
             'ownership_status' => ['nullable', 'string', 'max:32'],
             'details_payload' => ['nullable', 'array'],
         ];
+
+        return $this->applyDraftRules($rules, ['lock_version']);
     }
 }
