@@ -20,7 +20,6 @@ class ApplicationAuthorizationFactory extends Factory
             'application_id' => DistributorApplication::factory(),
             'decision' => ApplicationAuthorizationDecision::APPROVED,
             'reason' => 'Approved by manager',
-            'initial_credit_line_amount' => 15000.00,
             'authorized_by' => User::factory(),
             'authorized_at' => now(),
         ];

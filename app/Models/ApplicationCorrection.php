@@ -22,8 +22,8 @@ class ApplicationCorrection extends Model
 
     protected $casts = [
         'section' => ApplicationCorrectionSection::class,
-        'previous_value_payload' => 'encrypted',
-        'new_value_payload' => 'encrypted',
+        'previous_value_payload' => 'encrypted:json',
+        'new_value_payload' => 'encrypted:json',
         'corrected_at' => 'datetime',
     ];
 
