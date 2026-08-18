@@ -54,10 +54,9 @@ trait ValidatesConfigurationValues
             } else {
                 $specific = match ($key) {
                     'CUT_DAY_OF_MONTH' => ['between:1,28'], // Punto 23
-                    'PAYMENT_DAYS_AFTER_CUT', 'POINTS_MULTIPLIER' => ['min:1'], // Punto 24 y 26
+                    'PAYMENT_DAYS_AFTER_CUT' => ['min:1'], // Punto 24
                     'MODIFICATION_TOKEN_TTL' => ['min:1', 'max:1440'], // Punto 26
-                    'CREDIT_TOLERANCE_AMOUNT', 'LATE_FEE_AMOUNT', 'POINTS_DIVISOR_AMOUNT', 'POINT_VALUE_AMOUNT' => ['min:0', 'max:99999999.9999'], // Punto 26
-                    'LATE_POINTS_REDUCTION_RATE' => ['min:0', 'max:1'], // Punto 26
+                    'CREDIT_TOLERANCE_AMOUNT', 'LATE_FEE_AMOUNT' => ['min:0', 'max:99999999.9999'], // Punto 26
                     default => [],
                 };
 

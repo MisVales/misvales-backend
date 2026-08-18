@@ -70,10 +70,6 @@ final class InitialConfigurationVersionsSeeder extends Seeder
             'POST_DUE_EVALUATION_TIME' => '08:30',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
             'LATE_FEE_AMOUNT' => '300.0000',
-            'POINTS_DIVISOR_AMOUNT' => '1200.0000',
-            'POINTS_MULTIPLIER' => 3,
-            'POINT_VALUE_AMOUNT' => '2.0000',
-            'LATE_POINTS_REDUCTION_RATE' => '0.2000',
             'MODIFICATION_TOKEN_TTL' => 5,
         ];
     }

@@ -125,7 +125,6 @@ final readonly class ProyectorNotificaciones
             str_contains(strtolower($event), 'voucher') => 'voucher',
             str_contains(strtolower($event), 'relation') => 'relation',
             str_contains(strtolower($event), 'credit') => 'credit',
-            str_contains(strtolower($event), 'point') => 'points',
             str_contains(strtolower($event), 'transfer') => 'client_transfer',
             default => 'operation',
         };
@@ -137,7 +136,6 @@ final readonly class ProyectorNotificaciones
             str_contains(strtolower($event), 'voucher') => '/vales',
             str_contains(strtolower($event), 'relation') => '/relaciones',
             str_contains(strtolower($event), 'credit') => '/distribuidoras/lineas-credito',
-            str_contains(strtolower($event), 'point') => '/puntos',
             str_contains(strtolower($event), 'risk'), str_contains(strtolower($event), 'delinquency') => '/riesgo',
             str_contains(strtolower($event), 'transfer'), str_contains(strtolower($event), 'reassignment'), str_contains(strtolower($event), 'coordinator') => '/transferencias',
             default => '/dashboard',

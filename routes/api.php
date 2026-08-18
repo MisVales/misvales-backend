@@ -29,7 +29,6 @@ use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProductoController;
-use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
@@ -330,13 +329,6 @@ Route::prefix('v1')->group(function () {
         Route::get('refund-requests', [ExcedenteController::class, 'refunds']);
         Route::post('refund-requests/{solicitud}/decision', [ExcedenteController::class, 'decide'])->middleware('idempotency');
         Route::post('refund-requests/{solicitud}/execute', [ExcedenteController::class, 'execute'])->middleware('idempotency');
-
-        // Módulo 15 - Puntos y canjes
-        Route::get('me/points', [PuntosController::class, 'account']);
-        Route::post('point-redemption-requests', [PuntosController::class, 'request'])->middleware('idempotency');
-        Route::get('point-redemption-requests', [PuntosController::class, 'requests']);
-        Route::post('point-redemption-requests/{solicitud}/decision', [PuntosController::class, 'decide'])->middleware('idempotency');
-        Route::post('point-redemption-requests/{solicitud}/deliver', [PuntosController::class, 'deliver'])->middleware('idempotency');
 
         // Módulo 16 - Riesgo y morosidad exclusiva de distribuidora
         Route::get('risk-alerts', [RiesgoDistribuidoraController::class, 'alerts']);

@@ -8,6 +8,7 @@ use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\Testing\LocalTestingUsersSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -25,8 +26,8 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(6, $firstCounts['user_role_scopes']);
         self::assertSame(6, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(16, $firstCounts['configuration_definitions']);
-        self::assertSame(14, $firstCounts['configuration_versions']);
+        self::assertSame(12, $firstCounts['configuration_definitions']);
+        self::assertSame(10, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
         self::assertGreaterThan(0, $firstCounts['codigos_postales']);
@@ -101,9 +102,20 @@ final class DatabaseSeedersTest extends TestCase
             self::assertSame($expectedValue, json_decode((string) $storedValue, true), $key);
         }
 
-        foreach (['categories', 'category_versions', 'products', 'product_versions', 'redemption_periods', 'distributors', 'clients', 'vouchers'] as $table) {
+        foreach (['categories', 'category_versions', 'products', 'product_versions', 'distributors', 'clients', 'vouchers'] as $table) {
             self::assertSame(0, DB::table($table)->count(), $table);
         }
+
+        foreach (['point_accounts', 'point_movements', 'point_redemption_requests', 'redemption_periods'] as $table) {
+            self::assertFalse(Schema::hasTable($table), $table);
+        }
+        self::assertSame(0, DB::table('permissions')->where('module', 'points')->orWhere('code', 'like', 'points.%')->count());
+        self::assertSame(0, DB::table('configuration_definitions')->whereIn('key', [
+            'POINTS_DIVISOR_AMOUNT',
+            'POINTS_MULTIPLIER',
+            'POINT_VALUE_AMOUNT',
+            'LATE_POINTS_REDUCTION_RATE',
+        ])->count());
 
         self::assertSame(0, DB::table('municipios as municipality')
             ->leftJoin('estados as state', 'state.id', '=', 'municipality.estado_id')
@@ -163,10 +175,6 @@ final class DatabaseSeedersTest extends TestCase
             'POST_DUE_EVALUATION_TIME' => '08:30',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
             'LATE_FEE_AMOUNT' => '300.0000',
-            'POINTS_DIVISOR_AMOUNT' => '1200.0000',
-            'POINTS_MULTIPLIER' => 3,
-            'POINT_VALUE_AMOUNT' => '2.0000',
-            'LATE_POINTS_REDUCTION_RATE' => '0.2000',
             'MODIFICATION_TOKEN_TTL' => 5,
         ];
     }

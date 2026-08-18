@@ -8,7 +8,6 @@ use App\Models\MovimientoBancario;
 use App\Models\MovimientoLineaCredito;
 use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
-use App\Services\Puntos\ServicioPuntos;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,8 +15,6 @@ use RuntimeException;
 
 final class ServicioAplicacionPago
 {
-    public function __construct(private ServicioPuntos $points) {}
-
     public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation): PagoRelacion
     {
         return $this->distribuir($movement, $relation, 'BANK_MOVEMENT', $movement->id);
@@ -81,7 +78,6 @@ final class ServicioAplicacionPago
                 $relation->financial_status = 'PARTIALLY_PAID';
             }$relation->save();
             if ($relation->financial_status === 'SETTLED') {
-                $this->points->clasificar($relation);
             }
             $payment->update(['surcharge_applied' => $totals['SURCHARGE'], 'interest_applied' => $totals['INTEREST'], 'insurance_applied' => $totals['INSURANCE'], 'commission_applied' => $totals['LOAN_COMMISSION'], 'capital_applied' => $totals['CAPITAL'], 'line_recovered' => $recovered]);
             $surplus = bcsub($movement->amount, $applied, 4);

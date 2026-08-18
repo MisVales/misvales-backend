@@ -14,7 +14,7 @@ final class ServicioReportes
         'distributors', 'credit-lines', 'vouchers', 'relations', 'relation-balances',
         'payment-behavior', 'delinquent-distributors', 'risk-alerts', 'client-portfolio',
         'reconciled-payments', 'unreconciled-payments', 'manual-reconciliations',
-        'surpluses', 'credit-balances', 'refunds', 'points', 'point-movements',
+        'surpluses', 'credit-balances', 'refunds',
         'distributor-applications', 'credit-increases', 'transfers', 'client-reassignments',
         'organizational-changes',
     ];
@@ -66,8 +66,6 @@ final class ServicioReportes
             'manual-reconciliations' => [DB::table('manual_reconciliation_requests as m')->select('m.id', 'm.branch_id', 'm.bank_movement_id', 'm.relation_id', 'm.status', 'm.reason', 'm.created_at', 'm.authorized_at', 'm.executed_at'), 'm.created_at', 'm.branch_id', null, 'm.status'],
             'surpluses', 'credit-balances' => [DB::table('distributor_surpluses as s')->join('distributors as d', 'd.id', '=', 's.distributor_id')->select('s.id', 's.distributor_id', 'd.branch_id', 's.original_amount', 's.available_amount', 's.reserved_amount', 's.status', 's.created_at'), 's.created_at', 'd.branch_id', 's.distributor_id', 's.status'],
             'refunds' => [DB::table('surplus_refund_requests as r')->join('distributor_surpluses as s', 's.id', '=', 'r.surplus_id')->select('r.id', 's.distributor_id', 'r.branch_id', 'r.amount', 'r.status', 'r.decision_reason', 'r.created_at', 'r.executed_at'), 'r.created_at', 'r.branch_id', 's.distributor_id', 'r.status'],
-            'points' => [DB::table('point_accounts as p')->join('distributors as d', 'd.id', '=', 'p.distributor_id')->select('p.id', 'p.distributor_id', 'd.branch_id', 'p.balance', 'p.reserved', 'p.updated_at'), 'p.updated_at', 'd.branch_id', 'p.distributor_id', null],
-            'point-movements' => [DB::table('point_movements as p')->join('point_accounts as pa', 'pa.id', '=', 'p.point_account_id')->join('distributors as d', 'd.id', '=', 'pa.distributor_id')->select('p.id', 'pa.distributor_id', 'd.branch_id', 'p.type', 'p.generated', 'p.discounted', 'p.redeemed', 'p.balance_before', 'p.balance_after', 'p.reason', 'p.occurred_at'), 'p.occurred_at', 'd.branch_id', 'pa.distributor_id', 'p.type'],
             'distributor-applications' => [DB::table('distributor_applications as a')->select('a.id', 'a.application_number', 'a.branch_id', 'a.status', 'a.created_at', 'a.submitted_at'), 'a.created_at', 'a.branch_id', null, 'a.status'],
             'credit-increases' => [DB::table('credit_increase_requests as c')->join('distributors as d', 'd.id', '=', 'c.distributor_id')->select('c.id', 'c.distributor_id', 'd.branch_id', 'c.status', 'c.requested_amount', 'c.authorized_amount', 'c.requested_at', 'c.decided_at'), 'c.requested_at', 'd.branch_id', 'c.distributor_id', 'c.status'],
             'transfers' => [DB::table('client_transfer_requests as t')->select('t.id', 't.client_id', 't.origin_distributor_id', 't.destination_distributor_id', 't.origin_branch_id', 't.destination_branch_id', 't.status', 't.created_at', 't.completed_at'), 't.created_at', 't.origin_branch_id', 't.origin_distributor_id', 't.status'],

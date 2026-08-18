@@ -184,17 +184,14 @@ class EvolucionEsquemaTest extends TestCase
         $this->assertFalse($checks->contains(fn ($check) => preg_match('/(?<!reserved_)voucher_id/', $check->definition) === 1));
     }
 
-    public function test_redemption_period_no_tiene_default_y_version_de_configuracion_tiene_fk(): void
+    public function test_modulo_de_puntos_no_existe_en_el_esquema_final(): void
     {
-        $columna = DB::selectOne("SELECT column_default FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'redemption_periods' AND column_name = 'point_value'");
-        $this->assertNull($columna->column_default);
-
-        $fk = DB::selectOne("SELECT confrelid::regclass::text AS destino, confdeltype FROM pg_constraint WHERE conname = 'redemption_periods_point_value_configuration_version_id_foreign'");
-        $this->assertSame('configuration_versions', $fk->destino);
-        $this->assertSame('r', $fk->confdeltype);
+        foreach (['point_accounts', 'point_movements', 'point_redemption_requests', 'redemption_periods'] as $table) {
+            $this->assertFalse(Schema::hasTable($table), $table);
+        }
     }
 
-    public function test_historiales_rechazan_estados_desconocidos_y_periodos_no_operativos_admiten_valor_nulo(): void
+    public function test_historiales_rechazan_estados_desconocidos(): void
     {
         $actor = User::factory()->create(['state' => 'ACTIVE']);
         $solicitud = DistributorApplication::factory()->create();
@@ -236,33 +233,6 @@ class EvolucionEsquemaTest extends TestCase
             'created_at' => now(),
         ]));
 
-        $periodoBase = [
-            'name' => 'Periodo de prueba',
-            'starts_at' => now()->addDay(),
-            'ends_at' => now()->addDays(2),
-            'reason' => 'Validación de integridad',
-            'created_by' => $actor->id,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ];
-        foreach (['DRAFT', 'CANCELLED'] as $estado) {
-            DB::table('redemption_periods')->insert(array_merge($periodoBase, [
-                'id' => (string) str()->uuid(),
-                'code' => "RP-{$estado}",
-                'status' => $estado,
-                'point_value' => null,
-                'point_value_configuration_version_id' => null,
-            ]));
-        }
-        foreach (['SCHEDULED', 'OPEN', 'CLOSED'] as $estado) {
-            $this->esperarViolacion(fn () => DB::table('redemption_periods')->insert(array_merge($periodoBase, [
-                'id' => (string) str()->uuid(),
-                'code' => "RP-{$estado}",
-                'status' => $estado,
-                'point_value' => null,
-                'point_value_configuration_version_id' => null,
-            ])));
-        }
     }
 
     public function test_upgrade_legacy_vacio_converge_y_payload_ambiguo_aborta(): void
