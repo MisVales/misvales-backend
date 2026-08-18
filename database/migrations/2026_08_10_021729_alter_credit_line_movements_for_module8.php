@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -12,7 +12,7 @@ return new class extends Migration
         if (Schema::hasColumn('credit_line_movements', 'balance_before')) {
             $legacyIds = DB::table('credit_line_movements')->limit(20)->pluck('id');
             if ($legacyIds->isNotEmpty()) {
-                throw new RuntimeException('No se pueden convertir movimientos legacy sin inventar snapshots históricos. IDs: '.$legacyIds->implode(', '));
+                throw new RuntimeException('No se pueden convertir movimientos legacy sin inventar snapshots histÃ³ricos. IDs: '.$legacyIds->implode(', '));
             }
 
             if (DB::getDriverName() !== 'sqlite') {
@@ -82,3 +82,4 @@ return new class extends Migration
         }
     }
 };
+

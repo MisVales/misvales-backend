@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -185,7 +185,7 @@ return new class extends Migration
                 CREATE OR REPLACE FUNCTION prevent_{$table}_deletion()
                 RETURNS trigger AS \$\$
                 BEGIN
-                    RAISE EXCEPTION 'Los registros del módulo de clientes no se eliminan físicamente.';
+                    RAISE EXCEPTION 'Los registros del mÃ³dulo de clientes no se eliminan fÃ­sicamente.';
                 END;
                 \$\$ LANGUAGE plpgsql
             SQL);
@@ -194,3 +194,4 @@ return new class extends Migration
         }
     }
 };
+

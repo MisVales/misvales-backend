@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
@@ -8,12 +8,12 @@ return new class extends Migration
     public function up(): void
     {
         if (DB::connection()->getDriverName() !== 'pgsql' && DB::connection()->getDriverName() !== 'sqlite') {
-            throw new RuntimeException('La alineación de esquema requiere PostgreSQL.');
+            throw new RuntimeException('La alineaciÃ³n de esquema requiere PostgreSQL.');
         }
 
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM distributors WHERE status = 'ACTIVE' AND (activated_at IS NULL OR activated_by IS NULL) LIMIT 20",
-            'Distribuidoras ACTIVE sin evidencia de activación',
+            'Distribuidoras ACTIVE sin evidencia de activaciÃ³n',
         );
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM verification_visits WHERE status NOT IN ('ASSIGNED','IN_PROGRESS','COMPLETED') OR (result IS NOT NULL AND result NOT IN ('FAVORABLE','UNFAVORABLE')) OR (status = 'COMPLETED' AND (result IS NULL OR completed_at IS NULL)) OR (status <> 'COMPLETED' AND (result IS NOT NULL OR completed_at IS NOT NULL)) LIMIT 20",
@@ -25,11 +25,11 @@ return new class extends Migration
         );
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM application_authorizations WHERE decision NOT IN ('APPROVED','REJECTED') OR (decision = 'APPROVED' AND (initial_credit_line_amount IS NULL OR initial_credit_line_amount <= 0)) OR (decision = 'REJECTED' AND initial_credit_line_amount IS NOT NULL) LIMIT 20",
-            'Autorizaciones con decisión/importe incompatible',
+            'Autorizaciones con decisiÃ³n/importe incompatible',
         );
         $this->abortarSiConsultaDevuelveIds(
             'SELECT id FROM credit_line_movements WHERE amount <= 0 OR total_authorized_before <= 0 OR total_authorized_after <= 0 OR used_balance_before < 0 OR used_balance_before > total_authorized_before OR used_balance_after < 0 OR used_balance_after > total_authorized_after LIMIT 20',
-            'Movimientos de línea con snapshots imposibles',
+            'Movimientos de lÃ­nea con snapshots imposibles',
         );
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM credit_usage_restrictions WHERE status NOT IN ('ACTIVE','RESERVED','CONSUMED','CANCELLED') OR NOT (
@@ -38,7 +38,7 @@ return new class extends Migration
                 OR (status = 'CONSUMED' AND reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL AND consumed_at IS NOT NULL AND cancelled_at IS NULL)
                 OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
             ) LIMIT 20",
-            'Restricciones de crédito con ciclo incompatible',
+            'Restricciones de crÃ©dito con ciclo incompatible',
         );
         $this->abortarSiConsultaDevuelveIds(
             'SELECT id FROM credit_increase_requests WHERE requested_amount <= 0 OR recommended_amount <= 0 OR authorized_amount <= 0 OR authorized_amount > requested_amount OR line_total_at_request <= 0 OR used_balance_at_request < 0 OR used_balance_at_request > line_total_at_request OR available_balance_at_request < 0 OR available_balance_at_request <> line_total_at_request - used_balance_at_request LIMIT 20',
@@ -46,7 +46,7 @@ return new class extends Migration
         );
         $this->abortarSiConsultaDevuelveIds(
             "SELECT distributor_id AS id FROM coordinator_distributor_assignments WHERE status = 'ACTIVE' AND valid_to IS NULL GROUP BY distributor_id HAVING COUNT(*) > 1 LIMIT 20",
-            'Distribuidoras con más de una asignación vigente',
+            'Distribuidoras con mÃ¡s de una asignaciÃ³n vigente',
         );
 
         $this->recrearFk('verification_visits', 'application_id', 'distributor_applications');
@@ -80,14 +80,14 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new RuntimeException('Las garantías de integridad agregadas son forward-only.');
+        throw new RuntimeException('Las garantÃ­as de integridad agregadas son forward-only.');
     }
 
     private function recrearFk(string $tabla, string $columna, string $referenciada): void
     {
         $this->abortarSiConsultaDevuelveIds(
             "SELECT child.{$columna} AS id FROM {$tabla} child LEFT JOIN {$referenciada} parent ON parent.id = child.{$columna} WHERE child.{$columna} IS NOT NULL AND parent.id IS NULL LIMIT 20",
-            "{$tabla}.{$columna} contiene referencias huérfanas",
+            "{$tabla}.{$columna} contiene referencias huÃ©rfanas",
         );
         $nombre = "{$tabla}_{$columna}_foreign";
         if (DB::getDriverName() !== 'sqlite') {
@@ -116,3 +116,4 @@ return new class extends Migration
         }
     }
 };
+

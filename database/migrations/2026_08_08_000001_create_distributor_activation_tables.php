@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -150,7 +150,7 @@ return new class extends Migration
             $table->foreignUuid('configuration_version_id')->constrained('configuration_versions')->restrictOnDelete();
             $table->string('source_type', 64);
             $table->uuid('source_id');
-            // La FK se agregará cuando exista la tabla canónica de vales.
+            // La FK se agregarÃ¡ cuando exista la tabla canÃ³nica de vales.
             $table->uuid('reserved_voucher_id')->nullable();
             $table->timestampTz('activated_at');
             $table->timestampTz('reserved_at')->nullable();
@@ -188,7 +188,7 @@ return new class extends Migration
             CREATE OR REPLACE FUNCTION prevent_distributor_deletion()
             RETURNS trigger AS $$
             BEGIN
-                RAISE EXCEPTION 'Las distribuidoras no se eliminan físicamente.';
+                RAISE EXCEPTION 'Las distribuidoras no se eliminan fÃ­sicamente.';
             END;
             $$ LANGUAGE plpgsql
         SQL);
@@ -200,7 +200,7 @@ return new class extends Migration
             CREATE OR REPLACE FUNCTION prevent_distributor_category_deletion()
             RETURNS trigger AS $$
             BEGIN
-                RAISE EXCEPTION 'El historial de categorías no se elimina físicamente.';
+                RAISE EXCEPTION 'El historial de categorÃ­as no se elimina fÃ­sicamente.';
             END;
             $$ LANGUAGE plpgsql
         SQL);
@@ -252,3 +252,4 @@ return new class extends Migration
         }
     }
 };
+

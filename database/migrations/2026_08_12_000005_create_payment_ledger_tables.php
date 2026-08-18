@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -46,3 +46,4 @@ return new class extends Migration
         Schema::table('distributor_relations', fn (Blueprint $t) => $t->dropColumn(['settled_at', 'temporal_classification']));
     }
 };
+

@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -10,12 +10,12 @@ return new class extends Migration
     public function up(): void
     {
         if (DB::connection()->getDriverName() !== 'pgsql') {
-            throw new RuntimeException('La corrección de integridad requiere PostgreSQL.');
+            throw new RuntimeException('La correcciÃ³n de integridad requiere PostgreSQL.');
         }
 
         $this->assertNoRows(
             "SELECT id FROM application_authorizations WHERE decision = 'APPROVED' AND (initial_credit_line_amount IS NULL OR initial_credit_line_amount <= 0) OR decision = 'REJECTED' AND initial_credit_line_amount IS NOT NULL LIMIT 20",
-            'Existen autorizaciones con decisión e importe incompatibles',
+            'Existen autorizaciones con decisiÃ³n e importe incompatibles',
         );
 
         foreach ([
@@ -69,7 +69,7 @@ return new class extends Migration
         });
         $this->assertNoRows(
             'SELECT d.id FROM notification_deliveries d LEFT JOIN notifications n ON n.id = d.notification_id WHERE n.id IS NULL LIMIT 20',
-            'Existen entregas sin notificación',
+            'Existen entregas sin notificaciÃ³n',
         );
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE notification_deliveries DROP CONSTRAINT IF EXISTS notification_deliveries_notification_id_foreign');
@@ -95,7 +95,7 @@ return new class extends Migration
     {
         $this->assertNoRows(
             "SELECT child.application_id AS id FROM {$table} child LEFT JOIN distributor_applications parent ON parent.id = child.application_id WHERE parent.id IS NULL LIMIT 20",
-            "{$table}.application_id contiene referencias huérfanas",
+            "{$table}.application_id contiene referencias huÃ©rfanas",
         );
 
         $name = "{$table}_application_id_foreign";
@@ -118,3 +118,4 @@ return new class extends Migration
         }
     }
 };
+

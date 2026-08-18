@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -12,7 +12,7 @@ return new class extends Migration
         if (Schema::hasColumn('credit_usage_restrictions', 'voucher_id')) {
             $legacyIds = DB::table('credit_usage_restrictions')->limit(20)->pluck('id');
             if ($legacyIds->isNotEmpty()) {
-                throw new RuntimeException('No se pueden inventar configuración, procedencia y tolerancia para restricciones legacy. IDs: '.$legacyIds->implode(', '));
+                throw new RuntimeException('No se pueden inventar configuraciÃ³n, procedencia y tolerancia para restricciones legacy. IDs: '.$legacyIds->implode(', '));
             }
 
             if (DB::getDriverName() !== 'sqlite') {
@@ -88,3 +88,4 @@ return new class extends Migration
         });
     }
 };
+

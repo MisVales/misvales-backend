@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -116,7 +116,7 @@ return new class extends Migration
         });
         if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
-            DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan físicamente.'; END; $$ LANGUAGE plpgsql");
+            DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan fÃ­sicamente.'; END; $$ LANGUAGE plpgsql");
         DB::statement('CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW EXECUTE FUNCTION prevent_voucher_deletion()');
         }
         }
@@ -142,3 +142,4 @@ return new class extends Migration
         }
     }
 };
+

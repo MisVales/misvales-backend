@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -33,14 +33,14 @@ return new class extends Migration
             $table->unsignedInteger('lock_version')->default(0);
             $table->timestampsTz();
 
-            // Índices de consulta
+            // Ãndices de consulta
             $table->index(['coordinator_id', 'status']);
             $table->index(['branch_id', 'status']);
             $table->index(['distributor_id', 'status']);
             $table->index(['valid_from', 'valid_to']);
         });
 
-        // 6.6 Índices
+        // 6.6 Ãndices
         // Una distribuidora solo puede tener un coordinador activo:
         DB::statement("
             CREATE UNIQUE INDEX coordinator_distributor_active_distributor_unique
@@ -71,7 +71,7 @@ return new class extends Migration
                 CREATE OR REPLACE FUNCTION prevent_cda_deletion()
                 RETURNS trigger AS $$
                 BEGIN
-                    RAISE EXCEPTION 'Las asignaciones anteriores no se eliminan físicamente.';
+                    RAISE EXCEPTION 'Las asignaciones anteriores no se eliminan fÃ­sicamente.';
                 END;
                 $$ LANGUAGE plpgsql;
             ");
@@ -100,3 +100,4 @@ return new class extends Migration
         Schema::dropIfExists('coordinator_distributor_assignments');
     }
 };
+

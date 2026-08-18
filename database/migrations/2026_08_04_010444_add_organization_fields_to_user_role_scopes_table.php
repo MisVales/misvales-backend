@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -74,7 +74,7 @@ return new class extends Migration
                 CREATE OR REPLACE FUNCTION prevent_urs_deletion()
                 RETURNS trigger AS $$
                 BEGIN
-                    RAISE EXCEPTION 'No se deben eliminar físicamente asignaciones anteriores.';
+                    RAISE EXCEPTION 'No se deben eliminar fÃ­sicamente asignaciones anteriores.';
                 END;
                 $$ LANGUAGE plpgsql;
             SQL);
@@ -140,3 +140,4 @@ return new class extends Migration
         DB::statement('CREATE UNIQUE INDEX user_role_scopes_branch_unique ON user_role_scopes (user_id, role_id, branch_id) WHERE branch_id IS NOT NULL AND revoked_at IS NULL');
     }
 };
+

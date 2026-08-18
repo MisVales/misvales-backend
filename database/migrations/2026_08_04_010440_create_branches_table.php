@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -28,15 +28,15 @@ return new class extends Migration
         });
 
         if (DB::connection()->getDriverName() === 'pgsql') {
-            // Índice único parcial para is_headquarters = true
+            // Ãndice Ãºnico parcial para is_headquarters = true
             DB::statement('CREATE UNIQUE INDEX branches_is_headquarters_unique ON branches (is_headquarters) WHERE is_headquarters = true;');
 
-            // Restricción: status solo admite ACTIVE o INACTIVE
+            // RestricciÃ³n: status solo admite ACTIVE o INACTIVE
             DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'));");
             DB::statement('ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0);');
 
             // Triggers para proteger la sucursal matriz
-            // 1. No puede eliminarse físicamente
+            // 1. No puede eliminarse fÃ­sicamente
             if (DB::getDriverName() !== 'sqlite') {
             if (DB::getDriverName() !== 'sqlite') {
             DB::statement("
@@ -44,7 +44,7 @@ return new class extends Migration
                 RETURNS trigger AS $$
                 BEGIN
                     IF OLD.is_headquarters = true THEN
-                        RAISE EXCEPTION 'La sucursal matriz no puede eliminarse físicamente.';
+                        RAISE EXCEPTION 'La sucursal matriz no puede eliminarse fÃ­sicamente.';
                     END IF;
                     RETURN OLD;
                 END;
@@ -102,3 +102,4 @@ return new class extends Migration
         Schema::dropIfExists('branches');
     }
 };
+

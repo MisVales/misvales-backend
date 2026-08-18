@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
@@ -36,7 +36,7 @@ return new class extends Migration
             $sinCanonica = DB::table('distributor_applications_m5 as legacy')
                 ->leftJoin('distributor_applications as canonical', 'canonical.id', '=', 'legacy.id')
                 ->whereNull('canonical.id')->limit(20)->pluck('legacy.id');
-            $this->abortarSiHay($sinCanonica, 'Solicitudes legacy sin raíz canónica');
+            $this->abortarSiHay($sinCanonica, 'Solicitudes legacy sin raÃ­z canÃ³nica');
 
             $payloads = DB::table('distributor_applications_m5')
                 ->when(DB::getDriverName() === 'sqlite', function ($q) {
@@ -45,7 +45,7 @@ return new class extends Migration
                     $q->whereRaw("applicant_data::jsonb <> '{}'::jsonb");
                 })
                 ->limit(20)->pluck('id');
-            $this->abortarSiHay($payloads, 'Solicitudes legacy con applicant_data que requiere migración explícita a tablas estructuradas');
+            $this->abortarSiHay($payloads, 'Solicitudes legacy con applicant_data que requiere migraciÃ³n explÃ­cita a tablas estructuradas');
 
             $conflictos = DB::table('distributor_applications_m5 as legacy')
                 ->join('distributor_applications as canonical', 'canonical.id', '=', 'legacy.id')
@@ -67,7 +67,7 @@ return new class extends Migration
             $huerfanos = DB::table($tabla.' as child')
                 ->leftJoin('distributor_applications as canonical', 'canonical.id', '=', 'child.application_id')
                 ->whereNull('canonical.id')->limit(20)->pluck('child.application_id');
-            $this->abortarSiHay($huerfanos, "{$tabla} contiene application_id sin raíz canónica");
+            $this->abortarSiHay($huerfanos, "{$tabla} contiene application_id sin raÃ­z canÃ³nica");
 
             if (DB::getDriverName() !== 'sqlite') {
             DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$tabla}_application_id_foreign");
@@ -86,7 +86,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        throw new RuntimeException('La consolidación de identidad de solicitudes es forward-only.');
+        throw new RuntimeException('La consolidaciÃ³n de identidad de solicitudes es forward-only.');
     }
 
     private function abortarSiHay($ids, string $mensaje): void
@@ -96,3 +96,4 @@ return new class extends Migration
         }
     }
 };
+
