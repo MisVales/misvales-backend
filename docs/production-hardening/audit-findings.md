@@ -12,4 +12,3 @@ Base auditada: backend `fa844ea2258774dc3cebcd82f0d436e5f2e65789` sobre `develop
 | P1 | Los headers efectivos dependen de Nginx/Cloudflare y no pueden certificarse sólo leyendo Laravel. | Requiere smoke test en un entorno representativo. |
 
 No se inspeccionaron ni exportaron filas de una base productiva durante esta fase. Los conteos y la restauración son gates obligatorios del runbook.
-

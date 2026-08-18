@@ -20,4 +20,3 @@
 ## Límite de evidencia
 
 Las pruebas automatizadas no sustituyen una verificación real de cookies, headers, proxy, TLS, workers, scheduler, Redis, almacenamiento y restauración en el entorno de release.
-

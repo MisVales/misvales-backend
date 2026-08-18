@@ -35,4 +35,3 @@
 - Backend base: `fa844ea2258774dc3cebcd82f0d436e5f2e65789`.
 - Frontend: administrado en su rama separada.
 - Deploy: no autorizado ni realizado.
-

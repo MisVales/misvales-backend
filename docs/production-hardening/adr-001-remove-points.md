@@ -26,4 +26,3 @@ Los registros inmutables de auditoría que pudieran contener el nombre de un eve
 ## Datos y despliegue
 
 La migración es destructiva y forward-only. Antes de ejecutarla en un entorno con datos se deben medir filas, generar un respaldo, verificar su restauración aislada y confirmar una ventana de mantenimiento. Revertir solamente el código después de aplicar la migración no restaura datos.
-

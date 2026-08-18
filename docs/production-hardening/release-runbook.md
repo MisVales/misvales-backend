@@ -40,4 +40,3 @@ Este procedimiento prepara el release; no autoriza un despliegue real.
 ## Evidencia a conservar
 
 Registrar SHA, hora, operador, resultado del backup/restore, salida sin secretos del validador, migraciones aplicadas, salud, smokes y decisión de restaurar tráfico.
-
