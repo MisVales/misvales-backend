@@ -110,6 +110,7 @@ class SecurityController extends Controller
         // Generar 10 nuevos
         $plainCodes = [];
         $insertData = [];
+        $batchId = Str::uuid();
 
         for ($i = 0; $i < 10; $i++) {
             $code = strtolower(Str::random(4).'-'.Str::random(4));
@@ -117,9 +118,10 @@ class SecurityController extends Controller
             $insertData[] = [
                 'id' => Str::uuid(),
                 'user_id' => $user->id,
+                'batch_id' => $batchId,
                 'code_hash' => hash('sha256', $code),
-                'created_at' => now(),
-                'updated_at' => now(),
+                'position' => $i + 1,
+                'generated_at' => now(),
             ];
         }
 

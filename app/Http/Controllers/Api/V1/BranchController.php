@@ -43,6 +43,18 @@ class BranchController extends Controller
             $query->whereIn('id', $branchIds);
         }
 
+        if ($request->query('eligible_for_manager') === 'true') {
+            $query->where('is_headquarters', false)
+                  ->where('status', 'ACTIVE')
+                  ->whereDoesntHave('personnel', function ($q) {
+                      $q->where('status', 'ACTIVE')
+                        ->whereNull('revoked_at')
+                        ->whereHas('role', function ($r) {
+                            $r->where('code', 'branch_manager');
+                        });
+                  });
+        }
+
         return response()->json($query->get());
     }
 

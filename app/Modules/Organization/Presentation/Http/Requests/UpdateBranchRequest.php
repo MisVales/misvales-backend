@@ -4,6 +4,8 @@ namespace App\Modules\Organization\Presentation\Http\Requests;
 
 final class UpdateBranchRequest extends OrganizationFormRequest
 {
+    use \App\Http\Requests\Traits\ValidaDireccionEstructurada;
+
     protected function prepareForValidation(): void
     {
         if ($this->has('lock_version') || ! $this->hasHeader('If-Match')) {
@@ -25,12 +27,19 @@ final class UpdateBranchRequest extends OrganizationFormRequest
     /** @return array<string, mixed> */
     public function rules(): array
     {
-        return [
+        $rules = [
             'name' => ['required', 'string', 'max:150'],
             'address' => ['required', 'string', 'max:500'],
+            'validated_address' => ['nullable', 'array'],
             'lat' => ['nullable', 'numeric'],
             'lng' => ['nullable', 'numeric'],
             'lock_version' => ['required', 'integer', 'min:0'],
         ];
+
+        return array_merge(
+            $rules,
+            $this->reglasDireccionEstructurada('validated_address', 'nullable'),
+            $this->reglasCodigoPostalMexicano('validated_address', 'nullable')
+        );
     }
 }
