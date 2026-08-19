@@ -87,7 +87,7 @@ final class RolePermissionsSeeder extends Seeder
                 'manual_reconciliation.authorize_branch', 'surpluses.view_branch',
                 'refunds.authorize_branch',
                 'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
-                'client_transfers.view', 'organization_changes.view', 'organization_changes.manage_branch',
+                'organization_changes.view', 'organization_changes.manage_branch',
                 'notifications.view_own', 'reports.view_branch', 'audit.view_branch', 'logs.view_branch',
                 'media.upload', 'media.download_branch',
             ],
@@ -102,8 +102,7 @@ final class RolePermissionsSeeder extends Seeder
                 'credit_increase_requests.reject_assigned', 'vouchers.view_assigned',
                 'voucher_modifications.authorize_branch', 'bank_movements.view_branch',
                 'manual_reconciliation.authorize_branch', 'risk.view_assigned',
-                'delinquency_removal.request_assigned', 'client_transfers.view',
-                'client_transfers.decide_assigned', 'notifications.view_own',
+                'delinquency_removal.request_assigned', 'notifications.view_own',
                 'media.upload', 'media.download_branch',
             ],
             'verifier' => [
@@ -119,7 +118,7 @@ final class RolePermissionsSeeder extends Seeder
                 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                 'vouchers.view_global', 'relations.view_global', 'bank_imports.view_global',
                 'bank_movements.view_global', 'surpluses.view_global', 'risk.view_global',
-                'client_transfers.view', 'organization_changes.view', 'notifications.view_own',
+                'organization_changes.view', 'notifications.view_own',
                 'reports.view_global', 'audit.view_global', 'logs.view_global',
             ],
             'distributor' => [
@@ -130,8 +129,7 @@ final class RolePermissionsSeeder extends Seeder
                 'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                 'vouchers.create_own', 'vouchers.view_own', 'relations.view_own',
                 'relations.download_own', 'payment_clarifications.create_own', 'surpluses.view_own',
-                'risk.view_own', 'client_transfers.view',
-                'client_transfers.initiate_own', 'client_transfers.receive_own',
+                'risk.view_own',
                 'notifications.view_own', 'media.upload',
             ],
             'cashier' => [

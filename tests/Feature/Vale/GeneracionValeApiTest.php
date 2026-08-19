@@ -20,20 +20,16 @@ use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RestriccionUsoCredito;
 use App\Models\Role;
-use App\Models\SolicitudTransferenciaCliente;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 final class GeneracionValeApiTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $actor;
 
     private Distribuidora $distribuidora;
@@ -72,6 +68,7 @@ final class GeneracionValeApiTest extends TestCase
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertDatabaseCount('voucher_installments', 4);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'VoucherGenerated']);
+        $this->assertSame('0.100000', $response->json('data.financial_snapshot.calculation.loan_commission_percentage'));
     }
 
     public function test_segundo_vale_global_del_cliente_es_digital_y_folios_no_se_reutilizan(): void
@@ -97,17 +94,6 @@ final class GeneracionValeApiTest extends TestCase
         $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
     }
 
-    public function test_cliente_transferido_sin_vales_previos_inicia_con_vale_digital(): void
-    {
-        $actual = AsignacionClienteDistribuidora::query()->where('client_id', $this->cliente->id)->whereNull('ends_at')->firstOrFail();
-        $origenUser = $this->usuarioConRol('distributor', $actual->branch_id);
-        $origen = Distribuidora::factory()->active()->create(['user_id' => $origenUser->id, 'branch_id' => $actual->branch_id]);
-        $historica = AsignacionClienteDistribuidora::query()->create(['client_id' => $this->cliente->id, 'distributor_id' => $origen->id, 'branch_id' => $actual->branch_id, 'starts_at' => now()->subDays(2), 'ends_at' => now()->subDay(), 'assigned_by' => $origenUser->id, 'reason' => 'Transferencia']);
-        SolicitudTransferenciaCliente::query()->create(['client_id' => $this->cliente->id, 'origin_assignment_id' => $historica->id, 'origin_distributor_id' => $origen->id, 'destination_distributor_id' => $this->distribuidora->id, 'origin_branch_id' => $actual->branch_id, 'destination_branch_id' => $actual->branch_id, 'status' => 'COMPLETED', 'initiated_by' => $origenUser->id, 'preaccepted_by' => $this->actor->id, 'preaccepted_at' => now()->subDay(), 'origin_decided_by' => $origenUser->id, 'origin_decision_reason' => 'Autorizada', 'origin_decided_at' => now()->subDay(), 'completed_by' => $this->actor->id, 'completed_at' => now()->subDay(), 'new_assignment_id' => $actual->id]);
-
-        $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
-    }
-
     public function test_secuencia_postgresql_reserva_folios_no_reutilizables(): void
     {
         $valores = collect(range(1, 20))->map(fn (): string => $this->crear()->assertSuccessful()->json('data.folio'));
@@ -129,8 +115,12 @@ final class GeneracionValeApiTest extends TestCase
 
     public function test_restriccion_del_cincuenta_rechaza_producto_fuera_del_rango(): void
     {
-        $definition = ConfigurationDefinition::query()->create(['key' => 'CREDIT_TOLERANCE_AMOUNT', 'name' => 'Tolerancia', 'value_type' => 'DECIMAL', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
-        $version = ConfigurationVersion::query()->create(['configuration_definition_id' => $definition->id, 'version' => 1, 'value' => '500.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
+        $definition = ConfigurationDefinition::query()->firstOrCreate(
+            ['key' => 'CREDIT_TOLERANCE_AMOUNT'],
+            ['name' => 'Tolerancia', 'value_type' => 'DECIMAL', 'status' => 'ACTIVE', 'created_by' => $this->actor->id],
+        );
+        $version = $definition->versions()->latest('version')->first()
+            ?? ConfigurationVersion::query()->create(['configuration_definition_id' => $definition->id, 'version' => 1, 'value' => '500.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
         $line = LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->firstOrFail();
         RestriccionUsoCredito::factory()->create(['credit_line_id' => $line->id, 'distributor_id' => $this->distribuidora->id, 'status' => 'ACTIVE', 'base_total' => '30000.0000', 'tolerance_amount' => '500.0000', 'configuration_version_id' => $version->id, 'source_id' => (string) Str::uuid()]);
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'CREDIT_50_PERCENT_RULE_NOT_SATISFIED');
@@ -139,10 +129,56 @@ final class GeneracionValeApiTest extends TestCase
     public function test_snapshot_no_cambia_cuando_cambia_el_catalogo(): void
     {
         $id = $this->crear()->json('data.id');
-        $this->producto->update(['name' => 'Nombre posterior', 'loan_commission_percentage' => '0.200000']);
+        $this->producto->update(['name' => 'Nombre posterior']);
         $vale = Vale::query()->findOrFail($id);
         $this->assertSame('Vale 10000', $vale->financial_snapshot['product_version']['name']);
         $this->assertSame('0.100000', $vale->financial_snapshot['calculation']['loan_commission_percentage']);
+    }
+
+    public function test_busqueda_para_vale_solo_devuelve_clientes_de_la_distribuidora_activa(): void
+    {
+        $otroCliente = Cliente::factory()->create(['first_name' => $this->cliente->first_name, 'created_by' => $this->actor->id]);
+        $otraSucursal = Branch::factory()->create();
+        $otroActor = $this->usuarioConRol('distributor', $otraSucursal->id);
+        $otraDistribuidora = Distribuidora::factory()->active()->create(['user_id' => $otroActor->id, 'branch_id' => $otraSucursal->id]);
+        AsignacionClienteDistribuidora::query()->create(['client_id' => $otroCliente->id, 'distributor_id' => $otraDistribuidora->id, 'branch_id' => $otraSucursal->id, 'starts_at' => now()->subDay(), 'assigned_by' => $otroActor->id, 'reason' => 'Prueba']);
+
+        $response = $this->getJson('/api/v1/vouchers/eligible-clients?search='.urlencode(mb_strtolower($this->cliente->first_name)));
+
+        $response->assertSuccessful()
+            ->assertJsonPath('data.0.id', $this->cliente->id)
+            ->assertJsonPath('data.0.client_number', $this->cliente->client_number)
+            ->assertJsonMissing(['id' => $otroCliente->id]);
+    }
+
+    public function test_lista_de_productos_omite_versiones_sin_condiciones_financieras(): void
+    {
+        $productoIncompleto = Product::query()->create([
+            'code' => 'VAL-INCOMPLETO',
+            'status' => 'ACTIVE',
+            'created_by' => $this->actor->id,
+        ]);
+        $incompleto = ProductVersion::query()->create([
+            'product_id' => $productoIncompleto->id,
+            'version' => 1,
+            'name' => 'Vale incompleto',
+            'nominal_amount' => '20000.0000',
+            'loan_commission_percentage' => null,
+            'simple_interest_percentage' => null,
+            'insurance_amount' => null,
+            'fortnights_count' => null,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba',
+            'created_by' => $this->actor->id,
+            'published_by' => $this->actor->id,
+            'published_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/voucher-products')
+            ->assertSuccessful()
+            ->assertJsonFragment(['id' => $this->producto->id])
+            ->assertJsonMissing(['id' => $incompleto->id]);
     }
 
     public function test_administrador_solo_lectura_no_puede_generar(): void

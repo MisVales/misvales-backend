@@ -48,7 +48,15 @@ class ConfiguracionController extends Controller
 
     public function show(string $key)
     {
-        $configuracion = ConfigurationDefinition::where('key', $key)->firstOrFail();
+        $configuracion = ConfigurationDefinition::with(['versions' => function ($query) {
+            $query->where('status', VersionStatus::PUBLISHED)
+                ->where('effective_from', '<=', now())
+                ->where(function ($query) {
+                    $query->whereNull('effective_to')
+                        ->orWhere('effective_to', '>', now());
+                })
+                ->latest('effective_from');
+        }])->where('key', $key)->firstOrFail();
         Gate::authorize('view', $configuracion);
 
         return new ConfiguracionResource($configuracion);

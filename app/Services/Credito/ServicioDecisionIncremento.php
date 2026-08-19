@@ -87,14 +87,22 @@ class ServicioDecisionIncremento
                     ->lockForUpdate()
                     ->firstOrFail();
 
-                // Validar que no exista otra restricción ACTIVE o RESERVED (Bloqueo pesimista para evitar concurrencia en la misma DB transaction)
+                // Cada incremento aprobado recalcula la regla con el nuevo total. Una
+                // restricción reservada no se puede sustituir porque ya protege un vale.
                 $restriccionActiva = RestriccionUsoCredito::where('credit_line_id', $linea->id)
                     ->whereIn('status', ['ACTIVE', 'RESERVED'])
                     ->lockForUpdate()
-                    ->exists();
+                    ->first();
 
-                if ($restriccionActiva) {
+                if ($restriccionActiva?->status->value === 'RESERVED') {
                     throw new ExcepcionCredito('CREDIT_USAGE_RESTRICTION_ACTIVE', 'La línea de crédito ya tiene una restricción activa. No se puede aplicar el incremento.', 409);
+                }
+
+                if ($restriccionActiva !== null) {
+                    $restriccionActiva->status = 'CANCELLED';
+                    $restriccionActiva->cancelled_at = now();
+                    $restriccionActiva->lock_version++;
+                    $restriccionActiva->save();
                 }
 
                 // Recalcular saldos actuales

@@ -531,19 +531,19 @@ class AuthController extends Controller
         $refreshToken = $request->cookie(self::REFRESH_COOKIE);
 
         if (! is_string($refreshToken) || $refreshToken === '') {
-            throw new ApiException('INVALID_SESSION', 'Refresh token inválido o expirado.', 401);
+            return $this->refreshFailure('INVALID_SESSION', 'Refresh token inválido o expirado.');
         }
 
         $hash = hash('sha256', $refreshToken);
         $data = Cache::get("auth_refresh_{$hash}");
 
         if (! $data) {
-            throw new ApiException('INVALID_SESSION', 'Refresh token inválido o expirado.', 401);
+            return $this->refreshFailure('INVALID_SESSION', 'Refresh token inválido o expirado.');
         }
 
         $user = User::find($data['user_id']);
         if (! $user || $user->state !== 'ACTIVE') {
-            throw new ApiException('ACCOUNT_INACTIVE', 'Usuario inactivo.', 401);
+            return $this->refreshFailure('ACCOUNT_INACTIVE', 'Usuario inactivo.');
         }
 
         // Buscar la sesión original
@@ -551,7 +551,7 @@ class AuthController extends Controller
         if (! $session || $session->revoked_at || ($session->expires_at && $session->expires_at->isPast())) {
             Cache::forget("auth_refresh_{$hash}");
 
-            throw new ApiException('INVALID_SESSION', 'La sesión maestra ha expirado o fue revocada.', 401);
+            return $this->refreshFailure('INVALID_SESSION', 'La sesión maestra ha expirado o fue revocada.');
         }
 
         // Validar inactividad en el refresco
@@ -560,7 +560,7 @@ class AuthController extends Controller
             $session->update(['revoked_at' => now(), 'revocation_reason' => 'INACTIVITY_TIMEOUT_ON_REFRESH']);
             Cache::forget("auth_refresh_{$hash}");
 
-            throw new ApiException('INVALID_SESSION', 'Sesión cerrada por inactividad.', 401);
+            return $this->refreshFailure('INVALID_SESSION', 'Sesión cerrada por inactividad.');
         }
 
         // Revocar token de Sanctum anterior (si sigue vivo)
@@ -747,7 +747,29 @@ class AuthController extends Controller
             return true;
         }
 
-        return in_array($origin, config('cors.allowed_origins', []), true);
+        $normalizedOrigin = rtrim(mb_strtolower($origin), '/');
+        $allowedOrigins = [
+            ...config('cors.allowed_origins', []),
+            config('production.frontend_url'),
+            config('app.url'),
+        ];
+
+        return in_array(
+            $normalizedOrigin,
+            array_map(
+                fn (mixed $allowedOrigin): string => rtrim(mb_strtolower((string) $allowedOrigin), '/'),
+                array_filter($allowedOrigins, 'is_string'),
+            ),
+            true,
+        );
+    }
+
+    private function refreshFailure(string $code, string $message): JsonResponse
+    {
+        return response()->json([
+            'error' => $code,
+            'message' => $message,
+        ], 401);
     }
 
     private function parseDeviceName(?string $userAgent): string

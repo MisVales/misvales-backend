@@ -6,18 +6,16 @@ use App\Enums\VersionStatus;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\ConfigurationDefinition;
+use App\Models\ProductVersion;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use Database\Seeders\RolesAndPermissionsSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class Module3ApiFeatureTest extends TestCase
 {
-    use RefreshDatabase;
-
     private User $admin;
 
     private User $cashier;
@@ -67,7 +65,7 @@ class Module3ApiFeatureTest extends TestCase
         ], ['X-Request-Id' => Str::uuid()->toString()]);
 
         $response->assertStatus(403)
-            ->assertJson(['error' => 'PERMISSION_DENIED']);
+            ->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
     }
 
     public function test_admin_can_create_configuration()
@@ -108,10 +106,11 @@ class Module3ApiFeatureTest extends TestCase
         ]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors(['reason']);
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR');
+        self::assertArrayHasKey('reason', $response->json('error.fields'));
     }
 
-    public function test_cannot_create_incomplete_product()
+    public function test_cannot_create_product_without_its_catalog_data()
     {
         // Producto base
         $response = $this->actingAs($this->admin)->postJson('/api/v1/products', [
@@ -120,15 +119,9 @@ class Module3ApiFeatureTest extends TestCase
         ], ['X-Request-Id' => Str::uuid()->toString()]);
 
         $response->assertStatus(422)
-            ->assertJsonValidationErrors([
-                'name',
-                'nominal_amount',
-                'loan_commission_percentage',
-                'simple_interest_percentage',
-                'insurance_amount',
-                'fortnights_count',
-                'effective_from',
-            ]);
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR');
+        self::assertArrayHasKey('name', $response->json('error.fields'));
+        self::assertArrayHasKey('nominal_amount', $response->json('error.fields'));
     }
 
     public function test_reject_product_amount_not_multiple_of_100()
@@ -137,10 +130,38 @@ class Module3ApiFeatureTest extends TestCase
         $response = $this->actingAs($this->admin)->postJson("/api/v1/products/{$productId}/versions", [
             'name' => 'Producto 1',
             'nominal_amount' => 1050.50, // Not multiple of 100
-            'effective_from' => now()->addDay()->toIso8601String(),
             'reason' => 'Init',
         ], ['X-Request-Id' => Str::uuid()->toString()]);
 
         $response->assertStatus(422);
+    }
+
+    public function test_manager_creates_and_publishes_an_amount_only_product(): void
+    {
+        $created = $this->actingAs($this->admin)->postJson('/api/v1/products', [
+            'code' => 'VALE-15000',
+            'name' => 'Vale de $15,000',
+            'description' => 'Importe nominal disponible para otorgar.',
+            'nominal_amount' => 15000,
+            'reason' => 'Alta del producto de prueba',
+        ]);
+
+        $created->assertCreated()
+            ->assertJsonPath('code', 'VALE-15000')
+            ->assertJsonPath('versions.0.name', 'Vale de $15,000')
+            ->assertJsonPath('versions.0.nominal_amount', '15000.0000')
+            ->assertJsonPath('versions.0.status', 'DRAFT');
+
+        $version = ProductVersion::query()->where('product_id', $created->json('id'))->sole();
+        self::assertNull($version->loan_commission_percentage);
+        self::assertNull($version->simple_interest_percentage);
+        self::assertNull($version->insurance_amount);
+        self::assertNull($version->fortnights_count);
+
+        $this->actingAs($this->admin)->postJson("/api/v1/product-versions/{$version->id}/publish", [
+            'reason' => 'Publicación inmediata del catálogo',
+            'lock_version' => $version->lock_version,
+        ])->assertOk()
+            ->assertJsonPath('status', 'PUBLISHED');
     }
 }

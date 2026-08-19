@@ -277,6 +277,7 @@ Route::prefix('v1')->group(function () {
             ->middleware('permission:clients.manage_portfolio');
 
         // Módulo 08 - Líneas de Crédito e Incrementos
+        Route::get('credit-lines', [LineaCreditoConsultaController::class, 'index']);
         Route::get('distributors/{distributor}/credit-line', [LineaCreditoConsultaController::class, 'show']);
         Route::get('distributors/{distributor}/credit-line/movements', [MovimientoLineaCreditoConsultaController::class, 'index']);
         Route::post('distributors/{distributor}/credit-increase-requests', [CrearSolicitudIncrementoController::class, 'store'])->middleware('idempotency');
@@ -290,6 +291,7 @@ Route::prefix('v1')->group(function () {
 
         // Módulo 09 - Prevales, vales digitales y motor financiero
         Route::get('voucher-products', [ValeController::class, 'products']);
+        Route::get('vouchers/eligible-clients', [ValeController::class, 'eligibleClients']);
         Route::post('vouchers/preview', [ValeController::class, 'preview']);
         Route::post('vouchers', [ValeController::class, 'store'])->middleware('idempotency');
         Route::get('vouchers', [ValeController::class, 'index']);
@@ -334,17 +336,7 @@ Route::prefix('v1')->group(function () {
         Route::post('distributors/{distribuidora}/delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'requestRemoval'])->middleware('idempotency');
         Route::get('delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'removals']);
         Route::post('delinquency-removal-requests/{solicitud}/decision', [RiesgoDistribuidoraController::class, 'decideRemoval'])->middleware('idempotency');
-        Route::get('client-transfer-destinations', [TransferenciaOrganizacionalController::class, 'destinations']);
-        Route::get('client-transfers', [TransferenciaOrganizacionalController::class, 'index']);
-        Route::post('clients/{client}/transfers', [TransferenciaOrganizacionalController::class, 'initiate'])->middleware('idempotency');
-        Route::post('client-transfers/{transfer}/preaccept', [TransferenciaOrganizacionalController::class, 'preaccept'])->middleware('idempotency');
-        Route::post('client-transfers/{transfer}/origin-decision', [TransferenciaOrganizacionalController::class, 'originDecision'])->middleware('idempotency');
-        Route::post('client-transfers/{transfer}/complete', [TransferenciaOrganizacionalController::class, 'complete'])->middleware('idempotency');
-        Route::post('client-transfers/{transfer}/cancel', [TransferenciaOrganizacionalController::class, 'cancel'])->middleware('idempotency');
-        Route::post('clients/{client}/administrative-reassignment', [TransferenciaOrganizacionalController::class, 'reassignClient'])->middleware('idempotency');
-        Route::post('distributors/{distributor}/branch-change', [TransferenciaOrganizacionalController::class, 'changeBranch'])->middleware('idempotency');
         Route::post('distributors/{distributor}/coordinator-change', [TransferenciaOrganizacionalController::class, 'changeCoordinator'])->middleware('idempotency');
-        Route::post('coordinators/{coordinator}/exit-reassignment', [TransferenciaOrganizacionalController::class, 'coordinatorExit'])->middleware('idempotency');
         Route::get('organizational-change-history', [TransferenciaOrganizacionalController::class, 'history']);
         Route::get('notifications', [CentroOperacionController::class, 'notifications']);
         Route::get('notifications/unread-count', [CentroOperacionController::class, 'unreadCount']);

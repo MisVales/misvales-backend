@@ -145,6 +145,73 @@ class ServiciosIncrementoTest extends TestCase
         $this->assertEquals('500.0000', $restriccion->tolerance_amount);
     }
 
+    public function test_autorizacion_reemplaza_la_restriccion_inicial_activa(): void
+    {
+        $servicio = app(ServicioDecisionIncremento::class);
+        $linea = LineaCredito::factory()->create([
+            'total_authorized' => '10000.0000',
+            'used_balance' => '2000.0000',
+        ]);
+        $restriccionInicial = RestriccionUsoCredito::factory()->create([
+            'credit_line_id' => $linea->id,
+            'distributor_id' => $linea->distributor_id,
+            'type' => 'INITIAL_50_PERCENT',
+            'status' => 'ACTIVE',
+            'base_total' => '10000.0000',
+        ]);
+        $solicitud = SolicitudIncrementoLinea::factory()->preauthorized()->create([
+            'credit_line_id' => $linea->id,
+            'distributor_id' => $linea->distributor_id,
+            'requested_amount' => '5000.0000',
+            'recommended_amount' => '5000.0000',
+            'lock_version' => 1,
+        ]);
+
+        $servicio->decidir($solicitud, User::factory()->create(), 'APPROVE_REQUESTED', null, 'Aprobado', 1);
+
+        $this->assertSame('CANCELLED', $restriccionInicial->fresh()->status->value);
+        $this->assertNotNull($restriccionInicial->fresh()->cancelled_at);
+        $this->assertDatabaseHas('credit_usage_restrictions', [
+            'credit_line_id' => $linea->id,
+            'type' => 'POST_INCREASE_50_PERCENT',
+            'status' => 'ACTIVE',
+            'base_total' => '15000.0000',
+        ]);
+    }
+
+    public function test_autorizacion_reemplaza_la_restriccion_post_incremento_activa(): void
+    {
+        $servicio = app(ServicioDecisionIncremento::class);
+        $linea = LineaCredito::factory()->create([
+            'total_authorized' => '15000.0000',
+            'used_balance' => '2000.0000',
+        ]);
+        $restriccionAnterior = RestriccionUsoCredito::factory()->create([
+            'credit_line_id' => $linea->id,
+            'distributor_id' => $linea->distributor_id,
+            'type' => 'POST_INCREASE_50_PERCENT',
+            'status' => 'ACTIVE',
+            'base_total' => '15000.0000',
+        ]);
+        $solicitud = SolicitudIncrementoLinea::factory()->preauthorized()->create([
+            'credit_line_id' => $linea->id,
+            'distributor_id' => $linea->distributor_id,
+            'requested_amount' => '5000.0000',
+            'recommended_amount' => '5000.0000',
+            'lock_version' => 1,
+        ]);
+
+        $servicio->decidir($solicitud, User::factory()->create(), 'APPROVE_REQUESTED', null, 'Aprobado', 1);
+
+        $this->assertSame('CANCELLED', $restriccionAnterior->fresh()->status->value);
+        $this->assertDatabaseHas('credit_usage_restrictions', [
+            'credit_line_id' => $linea->id,
+            'type' => 'POST_INCREASE_50_PERCENT',
+            'status' => 'ACTIVE',
+            'base_total' => '20000.0000',
+        ]);
+    }
+
     public function test_rechazo_gerencial()
     {
         $servicio = app(ServicioDecisionIncremento::class);

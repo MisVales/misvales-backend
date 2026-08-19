@@ -34,8 +34,8 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'email' => ['required', 'email:rfc', 'max:254'],
             'phone_number' => ['required', 'string', 'regex:/^\+?[0-9]{10,15}$/'],
             'identification_country' => ['required_if:nationality,FOREIGN', 'nullable', 'string', 'max:2'],
-            'official_id_type' => ['required', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
-            'official_id_number' => ['required', 'string', 'min:3', 'max:100'],
+            'official_id_type' => ['required', 'string', 'max:25', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
+            'official_id_number' => ['required', 'string', 'min:3', 'max:25'],
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);
@@ -49,6 +49,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'first_name.regex' => 'El nombre sólo puede contener letras.',
             'first_last_name.regex' => 'El apellido paterno sólo puede contener letras.',
             'second_last_name.regex' => 'El apellido materno sólo puede contener letras.',
+            'official_id_number.max' => 'El número de identificación no puede exceder 25 caracteres.',
         ];
     }
 }

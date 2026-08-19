@@ -27,4 +27,17 @@ final class CalculadorFinancieroValeTest extends TestCase
         self::assertSame(['3333.3333', '3333.3333', '3333.3334'], array_column($resultado['installments'], 'capital'));
         self::assertSame('10000.0000', array_reduce($resultado['installments'], fn (string $total, array $item): string => bcadd($total, $item['client_payment'], 4), '0.0000'));
     }
+
+    public function test_aplica_el_desglose_financiero_canonico_sin_confundir_la_ganancia_de_categoria(): void
+    {
+        $resultado = (new CalculadorFinancieroVale)->calcular('15000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
+
+        self::assertSame('1500.0000', $resultado['loan_commission_amount']);
+        self::assertSame('6000.0000', $resultado['interest_total']);
+        self::assertSame('22600.0000', $resultado['misvales_total']);
+        self::assertSame('2825.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('900.0000', $resultado['distributor_profit_total']);
+        self::assertSame('112.5000', $resultado['distributor_profit_per_fortnight']);
+        self::assertSame('2937.5000', $resultado['client_payment_per_fortnight']);
+    }
 }

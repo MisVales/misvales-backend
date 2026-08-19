@@ -917,6 +917,32 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         self::assertTrue(Schema::hasTable('distributor_category_assignments'));
     }
 
+    public function test_rechaza_numero_de_identificacion_de_mas_de_veinticinco_caracteres(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-26');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100026');
+        Sanctum::actingAs($general);
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX09',
+            'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => str_repeat('A', 26),
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.official_id_number.0', 'El número de identificación no puede exceder 25 caracteres.');
+    }
+
     private function usuarioConRol(string $rol, ?string $sucursalId = null): User
     {
         $email = Str::uuid().'@example.test';

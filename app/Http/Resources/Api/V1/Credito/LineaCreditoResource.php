@@ -7,6 +7,7 @@ use App\Services\Credito\CalculadorSaldoCredito;
 use App\Services\Credito\EvaluadorReglaCincuenta;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
+use Illuminate\Support\Facades\Gate;
 
 class LineaCreditoResource extends JsonResource
 {
@@ -68,7 +69,7 @@ class LineaCreditoResource extends JsonResource
             'can_request_increase' => $isOwner && ! $hasActiveRequest,
             'can_review_increase' => $isReviewer,
             'can_decide_increase' => $isDecider,
-            'can_view_movements' => true,
+            'can_view_movements' => Gate::allows('viewMovements', $this->resource),
         ];
     }
 }

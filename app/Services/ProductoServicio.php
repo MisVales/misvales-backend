@@ -32,7 +32,7 @@ class ProductoServicio
     {
         $ultimaVersion = $producto->versions()->max('version') ?? 0;
 
-        $effectiveFrom = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
+        $effectiveFrom = now('America/Monterrey')->setTimezone('UTC');
 
         return ProductVersion::create([
             'product_id' => $producto->id,
@@ -51,14 +51,14 @@ class ProductoServicio
         ]);
     }
 
-    private function normalizarPorcentaje(mixed $valor): string
-    {
-        return bcadd((string) $valor, '0', 6);
-    }
-
     private function normalizarMonto(mixed $valor): string
     {
         return bcadd((string) $valor, '0', 4);
+    }
+
+    private function normalizarPorcentaje(mixed $valor): string
+    {
+        return bcadd((string) $valor, '0', 6);
     }
 
     public function actualizarVersion(ProductVersion $version, array $datos): ProductVersion
@@ -97,14 +97,9 @@ class ProductoServicio
         if (array_key_exists('fortnights_count', $datos)) {
             $version->fortnights_count = (int) $datos['fortnights_count'];
         }
-
         if (array_key_exists('reason', $datos)) {
             $version->reason = $datos['reason'];
         }
-        if (array_key_exists('effective_from', $datos)) {
-            $version->effective_from = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
-        }
-
         $version->save();
 
         return $version;
@@ -116,16 +111,10 @@ class ProductoServicio
             throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
         }
 
-        // Punto 63: Impedir publicar un producto incompleto
-        if (
-            is_null($version->name) ||
-            is_null($version->nominal_amount) ||
-            is_null($version->loan_commission_percentage) ||
-            is_null($version->simple_interest_percentage) ||
-            is_null($version->insurance_amount) ||
-            is_null($version->fortnights_count)
-        ) {
-            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto con información financiera incompleta.');
+        if (is_null($version->name) || is_null($version->nominal_amount)
+            || is_null($version->loan_commission_percentage) || is_null($version->simple_interest_percentage)
+            || is_null($version->insurance_amount) || is_null($version->fortnights_count)) {
+            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin sus condiciones financieras completas.');
         }
 
         if (array_key_exists('lock_version', $datos)) {
@@ -136,6 +125,7 @@ class ProductoServicio
         }
 
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
+            $publicadaEn = now();
             $versionPrevia = ProductVersion::where('product_id', $version->product_id)
                 ->where('status', VersionStatus::PUBLISHED)
                 ->whereNull('effective_to')
@@ -143,27 +133,21 @@ class ProductoServicio
                 ->first();
 
             if ($versionPrevia) {
-                if ($version->effective_from->lessThanOrEqualTo($versionPrevia->effective_from)) {
+                if ($publicadaEn->lessThanOrEqualTo($versionPrevia->effective_from)) {
                     throw new BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
                 }
 
-                if ($version->effective_from->isPast()) {
-                    throw new BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
-                }
-
-                $versionPrevia->effective_to = $version->effective_from;
-
-                if ($version->effective_from->isPast() || $version->effective_from->isCurrentMinute()) {
-                    $versionPrevia->status = VersionStatus::INACTIVE;
-                }
+                $versionPrevia->effective_to = $publicadaEn;
+                $versionPrevia->status = VersionStatus::INACTIVE;
 
                 $versionPrevia->save();
             }
 
+            $version->effective_from = $publicadaEn;
             $version->status = VersionStatus::PUBLISHED;
             $version->reason .= "\n[Publicación]: ".$datos['reason'];
             $version->published_by = $usuarioId;
-            $version->published_at = now();
+            $version->published_at = $publicadaEn;
             $version->save();
 
             Cache::forget('productos:todos_vigentes');
@@ -224,10 +208,6 @@ class ProductoServicio
             'name' => $version->name,
             'description' => $version->description,
             'nominal_amount' => $version->nominal_amount,
-            'loan_commission_percentage' => $version->loan_commission_percentage,
-            'simple_interest_percentage' => $version->simple_interest_percentage,
-            'insurance_amount' => $version->insurance_amount,
-            'fortnights_count' => $version->fortnights_count,
             'effective_from' => $version->effective_from?->toIso8601String(),
             'effective_to' => $version->effective_to?->toIso8601String(),
             'version' => $version->version,

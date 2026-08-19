@@ -221,6 +221,11 @@ class ConfiguracionFeatureTest extends TestCase
             ->assertSuccessful()
             ->assertJsonPath('data.0.versions.0.value', 1)
             ->assertJsonCount(1, 'data.0.versions');
+
+        $this->getJson("/api/v1/configurations/{$definition->key}")
+            ->assertSuccessful()
+            ->assertJsonPath('data.versions.0.value', 1)
+            ->assertJsonCount(1, 'data.versions');
     }
 
     public function test_desactivar_exige_version_vigente_y_actualiza_el_bloqueo(): void

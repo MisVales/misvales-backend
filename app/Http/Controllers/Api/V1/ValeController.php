@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Vale\BuscarClienteParaValeRequest;
 use App\Http\Requests\Api\V1\Vale\PrevisualizarValeRequest;
 use App\Http\Resources\Api\V1\Vale\ValeResource;
 use App\Models\CoordinatorDistributorAssignment;
@@ -19,12 +20,30 @@ final class ValeController extends Controller
         Gate::authorize('create', Vale::class);
         $productos = ProductVersion::query()->with('product')->where('status', 'PUBLISHED')->where('effective_from', '<=', now())
             ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereNotNull('loan_commission_percentage')
+            ->whereNotNull('simple_interest_percentage')
+            ->whereNotNull('insurance_amount')
+            ->whereNotNull('fortnights_count')
             ->whereHas('product', fn ($query) => $query->where('status', 'ACTIVE'))->orderBy('nominal_amount')->get();
 
         return response()->json(['data' => $productos->map(fn (ProductVersion $version): array => [
             'id' => $version->id, 'product_id' => $version->product_id, 'code' => $version->product->code,
-            'name' => $version->name, 'nominal_amount' => $version->nominal_amount, 'fortnights_count' => $version->fortnights_count,
+            'name' => $version->name, 'nominal_amount' => $version->nominal_amount,
         ])]);
+    }
+
+    public function eligibleClients(BuscarClienteParaValeRequest $request, ServicioGeneracionVale $servicio)
+    {
+        Gate::authorize('create', Vale::class);
+
+        return response()->json(['data' => $servicio->buscarClientesElegibles(
+            $request->user(),
+            $request->validated('search'),
+        )->map(fn ($cliente): array => [
+            'id' => $cliente->id,
+            'client_number' => $cliente->client_number,
+            'full_name' => trim($cliente->first_name.' '.$cliente->first_last_name.' '.$cliente->second_last_name),
+        ])->values()]);
     }
 
     public function preview(PrevisualizarValeRequest $request, ServicioGeneracionVale $servicio)

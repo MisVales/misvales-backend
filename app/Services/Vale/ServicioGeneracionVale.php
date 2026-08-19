@@ -16,9 +16,9 @@ use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\OutboxEvent;
 use App\Models\ProductVersion;
-use App\Models\SolicitudTransferenciaCliente;
 use App\Models\User;
 use App\Models\Vale;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
 final class ServicioGeneracionVale
@@ -27,6 +27,29 @@ final class ServicioGeneracionVale
         private readonly CalculadorFinancieroVale $calculador,
         private readonly VerificadorDisponibilidadCredito $credito,
     ) {}
+
+    /** @return Collection<int, Cliente> */
+    public function buscarClientesElegibles(User $actor, string $termino): Collection
+    {
+        $distribuidora = $this->resolverDistribuidoraActiva($actor);
+        $termino = trim($termino);
+
+        return Cliente::query()
+            ->select(['id', 'client_number', 'first_name', 'first_last_name', 'second_last_name'])
+            ->whereHas('asignacionVigente', fn ($asignacion) => $asignacion
+                ->where('distributor_id', $distribuidora->id)
+                ->where('branch_id', $distribuidora->branch_id))
+            ->where(function ($consulta) use ($termino): void {
+                $consulta->where('client_number', 'ilike', "%{$termino}%")
+                    ->orWhere('first_name', 'ilike', "%{$termino}%")
+                    ->orWhere('first_last_name', 'ilike', "%{$termino}%")
+                    ->orWhere('second_last_name', 'ilike', "%{$termino}%");
+            })
+            ->orderBy('first_name')
+            ->orderBy('first_last_name')
+            ->limit(12)
+            ->get();
+    }
 
     public function previsualizar(User $actor, string $clienteId, string $versionProductoId): array
     {
@@ -86,14 +109,7 @@ final class ServicioGeneracionVale
 
     private function resolverContexto(User $actor, string $clienteId, string $versionProductoId): array
     {
-        if (! $actor->hasPermissionTo('vouchers.create_own')) {
-            throw new ExcepcionVale('VOUCHER_CREATE_FORBIDDEN', 'No tienes permiso para generar vales.', 403);
-        }
-
-        $distribuidora = Distribuidora::query()->where('user_id', $actor->id)->first();
-        if (! $distribuidora || $distribuidora->status !== EstadoDistribuidora::ACTIVA) {
-            throw new ExcepcionVale('DISTRIBUTOR_NOT_ACTIVE', 'La distribuidora no está activa.', 409);
-        }
+        $distribuidora = $this->resolverDistribuidoraActiva($actor);
         if (BloqueoOperativoDistribuidora::query()->where('distributor_id', $distribuidora->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->exists()) {
             throw new ExcepcionVale('DISTRIBUTOR_DELINQUENCY_BLOCK', 'La distribuidora tiene un bloqueo vigente por morosidad.', 409);
         }
@@ -118,6 +134,19 @@ final class ServicioGeneracionVale
             throw new ExcepcionVale('DISTRIBUTOR_CATEGORY_NOT_AVAILABLE', 'La distribuidora no tiene una categoría publicada vigente.', 409);
         }
 
+        if (
+            $versionProducto->loan_commission_percentage === null
+            || $versionProducto->simple_interest_percentage === null
+            || $versionProducto->insurance_amount === null
+            || $versionProducto->fortnights_count === null
+        ) {
+            throw new ExcepcionVale(
+                'PRODUCT_FINANCIAL_CONFIGURATION_MISSING',
+                'El producto publicado no tiene completas sus condiciones financieras. Solicita que se publique una versión completa del producto.',
+                409,
+            );
+        }
+
         $calculo = $this->calculador->calcular(
             (string) $versionProducto->nominal_amount,
             (string) $versionProducto->loan_commission_percentage,
@@ -135,6 +164,20 @@ final class ServicioGeneracionVale
         }
 
         return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $asignacionCategoria->versionCategoria, 'calculation' => $calculo, 'credit' => $credito];
+    }
+
+    private function resolverDistribuidoraActiva(User $actor): Distribuidora
+    {
+        if (! $actor->hasPermissionTo('vouchers.create_own')) {
+            throw new ExcepcionVale('VOUCHER_CREATE_FORBIDDEN', 'No tienes permiso para generar vales.', 403);
+        }
+
+        $distribuidora = Distribuidora::query()->where('user_id', $actor->id)->first();
+        if (! $distribuidora || $distribuidora->status !== EstadoDistribuidora::ACTIVA) {
+            throw new ExcepcionVale('DISTRIBUTOR_NOT_ACTIVE', 'La distribuidora no está activa.', 409);
+        }
+
+        return $distribuidora;
     }
 
     private function respuestaPrevisualizacion(array $contexto): array
@@ -157,7 +200,6 @@ final class ServicioGeneracionVale
 
     private function esValeDigital(string $clienteId): bool
     {
-        return Vale::query()->where('client_id', $clienteId)->exists()
-            || SolicitudTransferenciaCliente::query()->where('client_id', $clienteId)->where('status', 'COMPLETED')->exists();
+        return Vale::query()->where('client_id', $clienteId)->exists();
     }
 }

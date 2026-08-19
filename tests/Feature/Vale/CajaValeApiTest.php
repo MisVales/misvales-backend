@@ -31,6 +31,7 @@ use App\Models\SolicitudModificacionVale;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
+use App\Services\Cliente\ProtectorDatosCliente;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
@@ -84,7 +85,13 @@ final class CajaValeApiTest extends TestCase
     public function test_cajera_busca_libera_y_feria_incrementando_saldo(): void
     {
         Sanctum::actingAs($this->cashier);
-        $this->getJson('/api/v1/cashier/vouchers/search?search=99999999')->assertSuccessful()->assertJsonPath('data.0.folio', $this->voucher->folio);
+        $numeroIdentificacion = app(ProtectorDatosCliente::class)->descifrar(
+            $this->voucher->cliente->official_id_number_ciphertext,
+        );
+        $this->getJson('/api/v1/cashier/vouchers/search?search=99999999')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.folio', $this->voucher->folio)
+            ->assertJsonPath('data.0.identity.official_id_number', $numeroIdentificacion);
         $released = $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/release", ['lock_version' => 1])->assertSuccessful()->assertJsonPath('data.status', 'RELEASED');
         $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/cash", ['bank_transaction_number' => 'TX-CASH-001', 'lock_version' => $released->json('data.lock_version')])->assertSuccessful()->assertJsonPath('data.status', 'CASHED');
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '15000.0000']);

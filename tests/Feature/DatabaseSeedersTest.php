@@ -6,7 +6,6 @@ namespace Tests\Feature;
 
 use Database\Seeders\DatabaseSeeder;
 use Database\Seeders\Testing\LocalTestingUsersSeeder;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use RuntimeException;
@@ -14,19 +13,17 @@ use Tests\TestCase;
 
 final class DatabaseSeedersTest extends TestCase
 {
-    use RefreshDatabase;
-
     public function test_database_seeder_builds_the_foundation_and_is_idempotent(): void
     {
         $this->seed(DatabaseSeeder::class);
         $firstCounts = $this->foundationCounts();
 
         self::assertSame(7, $firstCounts['roles']);
-        self::assertSame(6, $firstCounts['users']);
-        self::assertSame(6, $firstCounts['user_role_scopes']);
-        self::assertSame(6, $firstCounts['mfa_credentials']);
+        self::assertSame(1, $firstCounts['users']);
+        self::assertSame(1, $firstCounts['user_role_scopes']);
+        self::assertSame(0, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(12, $firstCounts['configuration_definitions']);
+        self::assertSame(16, $firstCounts['configuration_definitions']);
         self::assertSame(10, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
@@ -46,24 +43,16 @@ final class DatabaseSeedersTest extends TestCase
         ]);
         self::assertSame(1, DB::table('branches')->where('is_headquarters', true)->count());
 
-        foreach ([
-            'test@gmail.com' => ['general_manager', 'GLOBAL'],
-            'qa.gs.torreon@misvales.test' => ['branch_manager', 'BRANCH'],
-            'qa.coord.a@misvales.test' => ['coordinator', 'BRANCH'],
-            'qa.verificador@misvales.test' => ['verifier', 'BRANCH'],
-            'qa.cajera@misvales.test' => ['cashier', 'BRANCH'],
-            'qa.admin@misvales.test' => ['admin', 'GLOBAL'],
-        ] as $email => [$roleCode, $scopeType]) {
-            self::assertSame(1, DB::table('users as user')
-                ->join('user_role_scopes as scope', 'scope.user_id', '=', 'user.id')
-                ->join('roles as role', 'role.id', '=', 'scope.role_id')
-                ->where('user.normalized_email', $email)
-                ->where('role.code', $roleCode)
-                ->where('scope.scope_type', $scopeType)
-                ->where('scope.status', 'ACTIVE')
-                ->whereNull('scope.revoked_at')
-                ->count(), $email);
-        }
+        $managerEmail = mb_strtolower((string) config('bootstrap.initial_general_manager.email'));
+        self::assertSame(1, DB::table('users as user')
+            ->join('user_role_scopes as scope', 'scope.user_id', '=', 'user.id')
+            ->join('roles as role', 'role.id', '=', 'scope.role_id')
+            ->where('user.normalized_email', $managerEmail)
+            ->where('role.code', 'general_manager')
+            ->where('scope.scope_type', 'GLOBAL')
+            ->where('scope.status', 'ACTIVE')
+            ->whereNull('scope.revoked_at')
+            ->count(), $managerEmail);
 
         $administratorSensitivePermissions = DB::table('role_permissions as role_permission')
             ->join('roles as role', 'role.id', '=', 'role_permission.role_id')

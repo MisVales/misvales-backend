@@ -12,7 +12,7 @@ class LineaCreditoPolicy
 {
     public function before(User $user)
     {
-        if ($user->status !== 'ACTIVE') {
+        if ($user->state !== 'ACTIVE') {
             return false;
         }
     }
@@ -24,9 +24,7 @@ class LineaCreditoPolicy
         }
 
         if ($user->hasPermissionTo('credit_lines.view_branch')) {
-            $managerScope = UserRoleScope::where('user_id', $user->id)->where('status', 'ACTIVE')->where('scope_type', 'BRANCH')->first();
-            $distributorScope = UserRoleScope::where('user_id', $lineaCredito->distributor_id)->where('status', 'ACTIVE')->where('scope_type', 'BRANCH')->first();
-            if ($managerScope && $distributorScope && $managerScope->branch_id === $distributorScope->branch_id) {
+            if ($this->hasBranchAccess($user, $lineaCredito)) {
                 return true;
             }
         }
@@ -57,9 +55,7 @@ class LineaCreditoPolicy
         }
 
         if ($user->hasPermissionTo('credit_line_movements.view_branch')) {
-            $managerScope = UserRoleScope::where('user_id', $user->id)->where('status', 'ACTIVE')->where('scope_type', 'BRANCH')->first();
-            $distributorScope = UserRoleScope::where('user_id', $lineaCredito->distributor_id)->where('status', 'ACTIVE')->where('scope_type', 'BRANCH')->first();
-            if ($managerScope && $distributorScope && $managerScope->branch_id === $distributorScope->branch_id) {
+            if ($this->hasBranchAccess($user, $lineaCredito)) {
                 return true;
             }
         }
@@ -81,5 +77,22 @@ class LineaCreditoPolicy
         }
 
         return false;
+    }
+
+    private function hasBranchAccess(User $user, LineaCredito $lineaCredito): bool
+    {
+        $branchId = $lineaCredito->distribuidora?->branch_id;
+
+        if ($branchId === null) {
+            $branchId = Distribuidora::query()->whereKey($lineaCredito->distributor_id)->value('branch_id');
+        }
+
+        return $branchId !== null && UserRoleScope::query()
+            ->where('user_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at')
+            ->where('scope_type', 'BRANCH')
+            ->where('branch_id', $branchId)
+            ->exists();
     }
 }

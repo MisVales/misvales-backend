@@ -134,10 +134,6 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'delinquency_removal', 'action' => 'request_assigned', 'code' => 'delinquency_removal.request_assigned', 'description' => 'Preparar retiro asignado'],
             ['module' => 'delinquency_removal', 'action' => 'decide_branch', 'code' => 'delinquency_removal.decide_branch', 'description' => 'Decidir retiro en sucursal'],
             ['module' => 'delinquency_removal', 'action' => 'decide_global', 'code' => 'delinquency_removal.decide_global', 'description' => 'Decidir retiro globalmente'],
-            ['module' => 'client_transfers', 'action' => 'view', 'code' => 'client_transfers.view', 'description' => 'Consultar transferencias visibles'],
-            ['module' => 'client_transfers', 'action' => 'initiate_own', 'code' => 'client_transfers.initiate_own', 'description' => 'Iniciar transferencia de cliente propio'],
-            ['module' => 'client_transfers', 'action' => 'receive_own', 'code' => 'client_transfers.receive_own', 'description' => 'Preaceptar y aceptar transferencias recibidas'],
-            ['module' => 'client_transfers', 'action' => 'decide_assigned', 'code' => 'client_transfers.decide_assigned', 'description' => 'Decidir salida de transferencias asignadas'],
             ['module' => 'organization_changes', 'action' => 'view', 'code' => 'organization_changes.view', 'description' => 'Consultar historial de cambios organizacionales'],
             ['module' => 'organization_changes', 'action' => 'manage_branch', 'code' => 'organization_changes.manage_branch', 'description' => 'Ejecutar cambios dentro de sucursal'],
             ['module' => 'organization_changes', 'action' => 'manage_global', 'code' => 'organization_changes.manage_global', 'description' => 'Ejecutar cambios globales'],
@@ -264,7 +260,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'manual_reconciliation.authorize_branch',
                     'surpluses.view_branch', 'refunds.authorize_branch',
                     'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
-                    'client_transfers.view', 'organization_changes.view', 'organization_changes.manage_branch',
+                    'organization_changes.view', 'organization_changes.manage_branch',
                     'notifications.view_own', 'reports.view_branch', 'audit.view_branch', 'logs.view_branch',
                     'media.upload', 'media.download_branch',
                 ]);
@@ -280,7 +276,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'bank_imports.view_global', 'bank_movements.view_global',
                     'surpluses.view_global',
                     'risk.view_global',
-                    'client_transfers.view', 'organization_changes.view',
+                    'organization_changes.view',
                     'notifications.view_own', 'reports.view_global', 'audit.view_global', 'logs.view_global',
                     'media.download_global',
                 ]);
@@ -299,7 +295,6 @@ class RolesAndPermissionsSeeder extends Seeder
                     'bank_movements.view_branch',
                     'manual_reconciliation.authorize_branch',
                     'risk.view_assigned', 'delinquency_removal.request_assigned',
-                    'client_transfers.view', 'client_transfers.decide_assigned',
                     'notifications.view_own',
                     'media.upload', 'media.download_branch',
                 ]);
@@ -317,7 +312,6 @@ class RolesAndPermissionsSeeder extends Seeder
                     'payment_clarifications.create_own',
                     'surpluses.view_own',
                     'risk.view_own',
-                    'client_transfers.view', 'client_transfers.initiate_own', 'client_transfers.receive_own',
                     'notifications.view_own',
                     'media.upload',
                 ]);

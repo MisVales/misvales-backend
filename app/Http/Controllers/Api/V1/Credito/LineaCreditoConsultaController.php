@@ -13,6 +13,38 @@ use Illuminate\Http\Request;
 
 class LineaCreditoConsultaController extends Controller
 {
+    public function index(Request $request)
+    {
+        $user = $request->user();
+        $query = LineaCredito::query()->with([
+            'distribuidora.usuario',
+            'restricciones' => fn ($query) => $query->whereIn('status', ['ACTIVE', 'RESERVED']),
+            'movimientos' => fn ($query) => $query->orderByDesc('sequence')->limit(1),
+        ]);
+
+        if ($user->hasPermissionTo('credit_lines.view_own')) {
+            $query->whereHas('distribuidora', fn ($query) => $query->where('user_id', $user->id));
+        } elseif ($user->hasPermissionTo('credit_lines.view_assigned')) {
+            $query->whereIn('distributor_id', CoordinatorDistributorAssignment::query()
+                ->where('coordinator_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('valid_to')
+                ->select('distributor_id'));
+        } elseif ($user->hasPermissionTo('credit_lines.view_branch')) {
+            $branches = UserRoleScope::query()
+                ->where('user_id', $user->id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->where('scope_type', 'BRANCH')
+                ->pluck('branch_id');
+            $query->whereHas('distribuidora', fn ($query) => $query->whereIn('branch_id', $branches));
+        } elseif (! $user->hasPermissionTo('credit_lines.view_global')) {
+            $query->whereRaw('1 = 0');
+        }
+
+        return LineaCreditoResource::collection($query->orderBy('created_at')->get());
+    }
+
     public function show(Request $request, string $distributorId)
     {
         $user = $request->user();
@@ -46,20 +78,13 @@ class LineaCreditoConsultaController extends Controller
                 $query->where('id', 'invalid-uuid');
             }
         } elseif ($user->hasPermissionTo('credit_lines.view_branch')) {
-            $managerScope = UserRoleScope::where('user_id', $user->id)
+            $branches = UserRoleScope::query()
+                ->where('user_id', $user->id)
                 ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
                 ->where('scope_type', 'BRANCH')
-                ->first();
-
-            $distributorScope = UserRoleScope::where('user_id', $distributorId)
-                ->where('status', 'ACTIVE')
-                ->where('scope_type', 'BRANCH')
-                ->first();
-
-            if (! $managerScope || ! $distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
-                // Forzar fallo si no son de la misma sucursal
-                $query->where('id', 'invalid-uuid');
-            }
+                ->pluck('branch_id');
+            $query->whereHas('distribuidora', fn ($query) => $query->whereIn('branch_id', $branches));
         } elseif (! $user->hasPermissionTo('credit_lines.view_global')) {
             // Roles sin acceso a ninguna
             $query->where('id', 'invalid-uuid');
@@ -73,7 +98,7 @@ class LineaCreditoConsultaController extends Controller
             $linea->id,
             null,
             $user,
-            $linea->branch_id ?? null,
+            $linea->distribuidora?->branch_id,
             [],
             [],
             'Consulta de línea de crédito y saldo vigente.',

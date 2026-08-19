@@ -5,11 +5,8 @@ namespace App\Http\Controllers\Api\V1\Credito;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Credito\MovimientosFiltroRequest;
 use App\Http\Resources\Api\V1\Credito\MovimientoLineaCreditoResource;
-use App\Models\CoordinatorDistributorAssignment;
-use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\MovimientoLineaCredito;
-use App\Models\UserRoleScope;
 use App\Services\Credito\AuditorIncrementos;
 use Illuminate\Support\Facades\Gate;
 
@@ -19,44 +16,7 @@ class MovimientoLineaCreditoConsultaController extends Controller
     {
         $user = $request->user();
 
-        // Aplicar la misma seguridad 404 que en la consulta de línea
-        $queryLinea = LineaCredito::where('distributor_id', $distributorId);
-
-        if ($user->hasPermissionTo('credit_line_movements.view_own')) {
-            $distribuidora = Distribuidora::where('user_id', $user->id)->first();
-            if ($distribuidora) {
-                $queryLinea->where('distributor_id', $distribuidora->id);
-            } else {
-                $queryLinea->where('distributor_id', $user->id);
-            }
-        } elseif ($user->hasPermissionTo('credit_line_movements.view_assigned')) {
-            $hasAssignment = CoordinatorDistributorAssignment::where('coordinator_id', $user->id)
-                ->where('distributor_id', $distributorId)
-                ->where('status', 'ACTIVE')
-                ->exists();
-
-            if (! $hasAssignment) {
-                $queryLinea->where('id', 'invalid-uuid');
-            }
-        } elseif ($user->hasPermissionTo('credit_line_movements.view_branch')) {
-            $managerScope = UserRoleScope::where('user_id', $user->id)
-                ->where('status', 'ACTIVE')
-                ->where('scope_type', 'BRANCH')
-                ->first();
-
-            $distributorScope = UserRoleScope::where('user_id', $distributorId)
-                ->where('status', 'ACTIVE')
-                ->where('scope_type', 'BRANCH')
-                ->first();
-
-            if (! $managerScope || ! $distributorScope || $managerScope->branch_id !== $distributorScope->branch_id) {
-                $queryLinea->where('id', 'invalid-uuid');
-            }
-        } elseif (! $user->hasPermissionTo('credit_line_movements.view_global')) {
-            $queryLinea->where('id', 'invalid-uuid');
-        }
-
-        $linea = $queryLinea->firstOrFail();
+        $linea = LineaCredito::query()->with('distribuidora')->where('distributor_id', $distributorId)->firstOrFail();
 
         Gate::authorize('viewMovements', $linea);
 
@@ -66,7 +26,7 @@ class MovimientoLineaCreditoConsultaController extends Controller
             $linea->id,
             null,
             $user,
-            $linea->branch_id ?? null,
+            $linea->distribuidora?->branch_id,
             [],
             [],
             'Consulta de movimientos de línea de crédito.',

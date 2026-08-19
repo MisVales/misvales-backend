@@ -57,7 +57,13 @@ final class InitialConfigurationVersionsSeeder extends Seeder
         });
     }
 
-    /** @return array<string, int|string> */
+    /**
+     * Las condiciones financieras de un vale no se precargan: el gerente
+     * general las publica explícitamente antes de operar. Así no se inventan
+     * tasas, seguros ni plazos al inicializar una instalación.
+     *
+     * @return array<string, int|string>
+     */
     private function values(): array
     {
         return [

@@ -16,14 +16,13 @@ class ActualizarVersionProductoRequest extends FormRequest
         return [
             'name' => ['sometimes', 'required', 'string', 'max:255'],
             'description' => ['sometimes', 'nullable', 'string'],
-            'nominal_amount' => ['sometimes', 'required', 'numeric', 'min:100', 'multiple_of:100'], // Punto 59
-            'loan_commission_percentage' => ['sometimes', 'required', 'numeric', 'min:0', 'max:1'], // Punto 60
-            'simple_interest_percentage' => ['sometimes', 'required', 'numeric', 'min:0', 'max:1'], // Punto 60
-            'insurance_amount' => ['sometimes', 'required', 'numeric', 'min:0'], // Punto 61
-            'fortnights_count' => ['sometimes', 'required', 'integer', 'min:1'], // Punto 62
+            'nominal_amount' => ['sometimes', 'required', 'numeric', 'min:100', 'multiple_of:100'],
+            'loan_commission_percentage' => ['sometimes', 'required', 'numeric', 'between:0,1'],
+            'simple_interest_percentage' => ['sometimes', 'required', 'numeric', 'between:0,1'],
+            'insurance_amount' => ['sometimes', 'required', 'numeric', 'min:0'],
+            'fortnights_count' => ['sometimes', 'required', 'integer', 'min:1'],
             'reason' => ['required', 'string'],
             'lock_version' => ['required', 'integer', 'min:0'],
-            'effective_from' => ['sometimes', 'required', 'date', 'after_or_equal:today'],
         ];
     }
 }

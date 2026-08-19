@@ -3646,6 +3646,17 @@ Solo Cloudflare, el balanceador público de aplicación y el punto de entrada de
 
 ## Parte IV. Especificación funcional canónica y reglas de negocio
 
+### Decisión operativa vigente — catálogo y condiciones de vales (2026-08-19)
+
+Esta decisión actualiza las referencias anteriores que atribuían comisión, interés, seguro o quincenas a la versión de producto.
+
+- Un **producto** representa exclusivamente la oferta de un vale: clave, nombre, descripción opcional e importe nominal múltiplo de $100. No captura comisión, interés, seguro ni plazo.
+- La **comisión del préstamo**, el **interés simple por quincena**, el **seguro** y el **número de quincenas** son condiciones financieras globales, versionadas y publicadas por Gerencia. No tienen valores iniciales inventados.
+- Al otorgar un Prevale o Vale digital, MisVales resuelve las condiciones vigentes, calcula el crédito y conserva en el vale el importe aplicado y las versiones de configuración utilizadas. Cambios posteriores no recalculan operaciones ya emitidas.
+- La ganancia de categoría de la distribuidora continúa siendo un concepto independiente, se toma de su categoría vigente y también queda congelada en el vale.
+- Los productos se crean como borrador y se publican o desactivan sin pedir una fecha de activación al usuario operativo.
+
+
 ### 1. Descripción del documento
 
 Este documento define el alcance, funcionamiento, procesos, cálculos, permisos, configuraciones y reglas de negocio de MisVales. Debe utilizarse durante el análisis, diseño, desarrollo, pruebas, aceptación y operación del sistema.
