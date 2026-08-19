@@ -33,13 +33,13 @@ class CrearClienteRequest extends FormRequest
             'first_last_name' => ['required', 'string', 'max:120'],
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
-            'rfc' => ['nullable', 'string', 'regex:/^[A-Za-zÃ±Ã‘&]{3,4}\d{6}[A-Za-z0-9]{3}$/'],
-            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:today'],
+            'rfc' => ['nullable', 'string', 'regex:/^([A-Z�&]{3,4})\d{6}[A-V1-9][A-Z1-9][0-9A]$/i'],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
             'birth_place' => ['required', 'string', 'max:160'],
             'birth_state' => ['required', 'string', 'max:120'],
             'birth_city' => ['required', 'string', 'max:120'],
             'official_id_type' => ['required', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
-            'official_id_number' => ['nullable', 'string', 'max:80'],
+            'official_id_number' => ['nullable', 'string', 'max:50'],
             'official_id_media_id' => ['nullable', 'uuid', 'exists:media_files,id'],
 
             'address' => ['required', 'array'],
@@ -48,8 +48,8 @@ class CrearClienteRequest extends FormRequest
             'bank_account' => ['required', 'array'],
             'bank_account.bank_name' => ['required', 'string', 'max:160'],
             'bank_account.account_holder_name' => ['required', 'string', 'max:240'],
-            'bank_account.account_number' => ['nullable', 'string', 'regex:/^\d{4,30}$/'],
-            'bank_account.clabe' => ['required', 'string', 'regex:/^\d{18}$/'],
+            'bank_account.account_number' => ['nullable', 'string', 'regex:/^\d{16}$/'],
+            'bank_account.clabe' => ['required_without:bank_account.account_number', 'nullable', 'string', 'regex:/^\d{18}$/'],
         ];
 
         return array_merge(

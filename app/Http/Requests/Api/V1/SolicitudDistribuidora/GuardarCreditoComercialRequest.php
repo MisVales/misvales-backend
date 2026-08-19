@@ -24,7 +24,7 @@ final class GuardarCreditoComercialRequest extends FormRequest
         $rules = [
             'lock_version' => ['required', 'integer', 'min:1'],
             'company_name' => [$presencia, 'string', 'max:180'],
-            'credit_limit' => [$presencia, 'string', 'regex:/^\d{1,15}(\.\d{1,4})?$/'],
+            'credit_limit' => [$presencia, 'regex:/^\d{1,15}(\.\d{1,4})?$/'],
             'is_current' => ['sometimes', 'boolean'],
             'proof_reference' => ['nullable', 'uuid'],
             'details_payload' => ['nullable', 'array'],

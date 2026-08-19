@@ -14,6 +14,13 @@ class AutorizarSolicitudRequest extends FormRequest
         return true;
     }
 
+    protected function prepareForValidation(): void
+    {
+        if ($this->input('decision') === 'APPROVED' && (! $this->filled('reason') || trim((string) $this->input('reason')) === '')) {
+            $this->merge(['reason' => 'Aprobación gerencial']);
+        }
+    }
+
     public function rules()
     {
         return [

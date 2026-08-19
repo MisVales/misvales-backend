@@ -58,6 +58,10 @@ final class SolicitudDistribuidoraPolicy
 
     public function submit(User $user, SolicitudDistribuidora $solicitud): bool
     {
+        if ($user->hasRole('cashier') || $user->hasRole('verifier')) {
+            return false;
+        }
+
         return $user->hasPermissionTo('distributor_applications.submit')
             && $this->puedeOperar($user, $solicitud);
     }
