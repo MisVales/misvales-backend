@@ -12,25 +12,22 @@ class TurnstileVerificationService
     /**
      * Valida el token de Cloudflare Turnstile en base a la configuración y requerimientos de seguridad.
      *
-     * @param Request $request
-     * @param string|null $token
-     * @return bool
      *
      * @throws ApiException
      */
     public function verify(Request $request, ?string $token): bool
     {
         $secret = config('services.turnstile.secret');
-        $hasSecret = !empty($secret) && is_string($secret) && trim($secret) !== '';
-        $hasToken = !empty($token) && is_string($token) && trim($token) !== '';
+        $hasSecret = ! empty($secret) && is_string($secret) && trim($secret) !== '';
+        $hasToken = ! empty($token) && is_string($token) && trim($token) !== '';
 
         // Caso A: Turnstile deshabilitado en backend y no enviado por cliente
-        if (!$hasSecret && !$hasToken) {
+        if (! $hasSecret && ! $hasToken) {
             return true;
         }
 
         // Caso D: Turnstile habilitado en backend pero el cliente no envió token
-        if ($hasSecret && !$hasToken) {
+        if ($hasSecret && ! $hasToken) {
             throw new ApiException(
                 'TURNSTILE_REQUIRED',
                 'La verificación de seguridad es obligatoria.',
@@ -39,7 +36,7 @@ class TurnstileVerificationService
         }
 
         // Caso C: Inconsistencia (Frontend envió token pero el backend no tiene TURNSTILE_SECRET)
-        if (!$hasSecret && $hasToken) {
+        if (! $hasSecret && $hasToken) {
             Log::critical('Inconsistencia Turnstile: Se recibió turnstile_token pero TURNSTILE_SECRET no está configurado en el servidor.');
             throw new ApiException(
                 'CONFIG_ERROR',
@@ -51,6 +48,7 @@ class TurnstileVerificationService
         // Caso B: Validación activa contra Cloudflare
         $verifyUrl = config('services.turnstile.url', 'https://challenges.cloudflare.com/turnstile/v0/siteverify');
         $verifySsl = (bool) config('services.turnstile.verify_ssl', true);
+        $caBundle = config('services.turnstile.ca_bundle');
 
         $remoteIp = $request->header('CF-Connecting-IP') ?? $request->ip();
         $payload = [
@@ -68,13 +66,17 @@ class TurnstileVerificationService
                 ->timeout(10)
                 ->connectTimeout(5);
 
+            if (is_string($caBundle) && trim($caBundle) !== '') {
+                $httpClient = $httpClient->withOptions(['verify' => $caBundle]);
+            }
+
             if (! $verifySsl || ! app()->isProduction()) {
                 $httpClient = $httpClient->withoutVerifying();
             }
 
             $response = $httpClient->post($verifyUrl, $payload);
 
-            if (!$response->successful() || !$response->json('success')) {
+            if (! $response->successful() || ! $response->json('success')) {
                 $errorCodes = $response->json('error-codes', []);
                 Log::warning('Fallo en validación de Turnstile', [
                     'ip' => $request->ip(),

@@ -42,6 +42,12 @@ final class GuardarDomicilioRequest extends FormRequest
     {
         return [
             'country.size' => 'Selecciona un país válido.',
+            'width_meters.decimal' => 'El frente debe ser un número válido.',
+            'width_meters.gt' => 'El frente debe ser mayor que cero.',
+            'length_meters.decimal' => 'El fondo debe ser un número válido.',
+            'length_meters.gt' => 'El fondo debe ser mayor que cero.',
+            'built_area_square_meters.decimal' => 'El área construida debe ser un número válido.',
+            'built_area_square_meters.gt' => 'El área construida debe ser mayor que cero.',
         ];
     }
 }

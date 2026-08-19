@@ -114,4 +114,16 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Development MFA Bypass
+    |--------------------------------------------------------------------------
+    |
+    | This is intentionally limited to the local environment. Production
+    | remains fail-closed even if the environment flag is set accidentally.
+    |
+    */
+    'development_mfa_bypass' => env('APP_ENV') === 'local'
+        && env('AUTH_DEVELOPMENT_MFA_BYPASS', false),
+
 ];

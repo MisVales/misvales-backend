@@ -19,7 +19,6 @@ class ActualizarVersionCategoriaRequest extends FormRequest
             'profit_percentage' => ['sometimes', 'required', 'numeric', 'min:0', 'max:1'], // Punto 52
             'reason' => ['required', 'string'],
             'lock_version' => ['required', 'integer', 'min:0'],
-            'effective_from' => ['sometimes', 'required', 'date', 'after_or_equal:today'],
         ];
     }
 }

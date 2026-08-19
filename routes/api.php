@@ -10,6 +10,7 @@ use App\Http\Controllers\Api\V1\Auth\InvitationController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
+use App\Http\Controllers\Api\V1\CatalogoVehiculosSolicitudController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\CentroOperacionController;
 use App\Http\Controllers\Api\V1\ClienteController;
@@ -95,6 +96,7 @@ Route::prefix('v1')->group(function () {
         // Módulo 4 - Solicitud Distribuidora
         Route::get('distributor-applications', [SolicitudDistribuidoraController::class, 'index']);
         Route::post('distributor-applications', [SolicitudDistribuidoraController::class, 'store']);
+        Route::get('distributor-applications/vehicle-catalog', CatalogoVehiculosSolicitudController::class);
         Route::get('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'show']);
         Route::patch('distributor-applications/{application}', [SolicitudDistribuidoraController::class, 'update']);
         Route::post('distributor-applications/{application}/submit', [SolicitudDistribuidoraController::class, 'enviarARevision']);

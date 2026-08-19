@@ -197,8 +197,23 @@ class ConfiguracionServicio
 
         // Punto 41: Caché solo para vigentes actuales
         if ($isCurrent) {
+            $cacheKey = "configuracion:{$key}";
+            $configuracion = Cache::remember(
+                $cacheKey,
+                $this->calcularCacheTTL(),
+                fn () => $this->resolverDesdeBD($key, $fechaConsulta)
+            );
+
+            // Una base reconstruida puede conservar Redis y dejar en caché una
+            // versión que ya no existe. No se debe propagar ese ID a llaves foráneas.
+            if (ConfigurationVersion::query()->whereKey($configuracion['version_id'] ?? null)->exists()) {
+                return $configuracion;
+            }
+
+            Cache::forget($cacheKey);
+
             return Cache::remember(
-                "configuracion:{$key}",
+                $cacheKey,
                 $this->calcularCacheTTL(),
                 fn () => $this->resolverDesdeBD($key, $fechaConsulta)
             );

@@ -31,8 +31,16 @@ final class GuardarPatrimonioRequest extends FormRequest
             'monthly_payment' => $importe,
             'is_active' => ['sometimes', 'boolean'],
             'details_payload' => ['nullable', 'array'],
+            'details_payload.description' => ['nullable', 'string', 'max:180', 'required_if:name,Otro'],
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'details_payload.description.required_if' => 'Debes especificar el bien, deuda o compromiso seleccionado como otro.',
+        ];
     }
 }

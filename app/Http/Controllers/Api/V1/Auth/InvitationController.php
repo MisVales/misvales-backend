@@ -58,6 +58,7 @@ class InvitationController extends Controller
         $exchangeTokenHash = hash('sha256', $rawExchangeToken);
 
         $isResuming = $invitation->state === 'PREPARED' && ! is_null($invitation->mfa_setup_completed_at);
+        $developmentMfaBypass = (bool) config('auth.development_mfa_bypass');
 
         // Actualizar la invitación a estado PREPARED
         $invitation->update([
@@ -83,6 +84,7 @@ class InvitationController extends Controller
             'exchange_token' => $rawExchangeToken,
             'expires_in' => 15 * 60,
             'step' => $isResuming ? 'passkey' : 'setup',
+            'development_mfa_bypass' => $developmentMfaBypass,
             'user' => [
                 'email' => $invitation->user->email,
                 'name' => $invitation->user->name,
@@ -90,7 +92,7 @@ class InvitationController extends Controller
             ],
         ];
 
-        if (! $isResuming) {
+        if (! $isResuming && ! $developmentMfaBypass) {
             // Generar la configuración de TOTP solo si es la primera vez
             $google2fa = new Google2FA;
             $totpSecret = $google2fa->generateSecretKey();
@@ -182,7 +184,9 @@ class InvitationController extends Controller
         $request->validate([
             'exchange_token' => 'required|string',
             'password' => ['required', 'confirmed', Password::min(12)->mixedCase()->numbers()->symbols()],
-            'totp_code' => 'required|string|size:6',
+            'totp_code' => config('auth.development_mfa_bypass')
+                ? 'nullable|string|size:6'
+                : 'required|string|size:6',
         ]);
 
         $exchangeTokenHash = hash('sha256', $request->exchange_token);
@@ -200,64 +204,74 @@ class InvitationController extends Controller
             throw new ApiException('USED_INVITATION', 'La configuración ya fue procesada. Debe confirmar los códigos.', 400);
         }
 
-        // Recuperar secreto TOTP de la caché
-        $totpSecret = Cache::get("totp_setup_{$exchangeTokenHash}");
+        $developmentMfaBypass = (bool) config('auth.development_mfa_bypass');
+        $totpSecret = null;
 
-        if (! $totpSecret) {
-            throw new ApiException('EXPIRED_INVITATION', 'La sesión de configuración MFA ha expirado. Vuelva a inspeccionar la invitación.', 400);
-        }
+        if (! $developmentMfaBypass) {
+            // Recuperar secreto TOTP de la caché
+            $totpSecret = Cache::get("totp_setup_{$exchangeTokenHash}");
 
-        // Validar el código TOTP protegiendo contra Replay Attacks
-        $mfaService = new MfaService;
-        $isValidTotp = $mfaService->verifyTotp($totpSecret, $request->totp_code, $invitation->user_id);
+            if (! $totpSecret) {
+                throw new ApiException('EXPIRED_INVITATION', 'La sesión de configuración MFA ha expirado. Vuelva a inspeccionar la invitación.', 400);
+            }
 
-        if (! $isValidTotp) {
-            // Aumentar contador de intentos en la invitación
-            $invitation->increment('attempt_count');
-            $invitation->update(['last_attempt_at' => now()]);
+            // Validar el código TOTP protegiendo contra Replay Attacks
+            $mfaService = new MfaService;
+            $isValidTotp = $mfaService->verifyTotp($totpSecret, $request->totp_code, $invitation->user_id);
 
-            throw new ApiException('INVALID_MFA', 'El código de autenticador es incorrecto.', 401);
+            if (! $isValidTotp) {
+                // Aumentar contador de intentos en la invitación
+                $invitation->increment('attempt_count');
+                $invitation->update(['last_attempt_at' => now()]);
+
+                throw new ApiException('INVALID_MFA', 'El código de autenticador es incorrecto.', 401);
+            }
         }
 
         // Generar 10 códigos de recuperación en texto plano (xxxx-xxxx)
-        $rawRecoveryCodes = collect(range(1, 10))->map(function () {
-            return strtolower(Str::random(4).'-'.Str::random(4));
-        });
+        $rawRecoveryCodes = $developmentMfaBypass
+            ? collect()
+            : collect(range(1, 10))->map(function () {
+                return strtolower(Str::random(4).'-'.Str::random(4));
+            });
 
-        DB::transaction(function () use ($invitation, $request, $totpSecret, $rawRecoveryCodes) {
+        DB::transaction(function () use ($invitation, $request, $totpSecret, $rawRecoveryCodes, $developmentMfaBypass) {
             $user = $invitation->user;
+            $now = now();
 
             // 1. Asignar contraseña (el modelo User tiene el cast 'hashed' que la hasheará automáticamente). EL USUARIO SIGUE EN SU ESTADO ORIGINAL HASTA CONFIRMAR CÓDIGOS.
             $user->update([
                 'password' => $request->password,
-                'mfa_enrolled_at' => now(),
+                'mfa_enrolled_at' => $developmentMfaBypass ? null : $now,
                 'password_changed_at' => now(),
             ]);
 
             // 2. Registrar Credencial MFA encriptando el secreto
-            MfaCredential::create([
-                'user_id' => $user->id,
-                'type' => 'TOTP',
-                'secret_ciphertext' => Crypt::encryptString($totpSecret),
-                'confirmed_at' => now(),
-            ]);
+            if (! $developmentMfaBypass) {
+                MfaCredential::create([
+                    'user_id' => $user->id,
+                    'type' => 'TOTP',
+                    'secret_ciphertext' => Crypt::encryptString($totpSecret),
+                    'confirmed_at' => $now,
+                ]);
+            }
 
             // 3. Registrar Códigos de Recuperación (Solo el Hash SHA-256)
-            $batchId = Str::uuid();
-            $now = now();
+            if (! $developmentMfaBypass) {
+                $batchId = Str::uuid();
+                $recoveryCodesData = $rawRecoveryCodes->map(function ($code, $index) use ($user, $batchId, $now) {
+                    return [
+                        'id' => Str::uuid(),
+                        'user_id' => $user->id,
+                        'batch_id' => $batchId,
+                        'code_hash' => hash('sha256', $code), // Solo guardamos el hash
+                        'position' => $index + 1,
+                        'generated_at' => $now,
+                    ];
+                });
 
-            $recoveryCodesData = $rawRecoveryCodes->map(function ($code, $index) use ($user, $batchId, $now) {
-                return [
-                    'id' => Str::uuid(),
-                    'user_id' => $user->id,
-                    'batch_id' => $batchId,
-                    'code_hash' => hash('sha256', $code), // Solo guardamos el hash
-                    'position' => $index + 1,
-                    'generated_at' => $now,
-                ];
-            });
-
-            MfaRecoveryCode::insert($recoveryCodesData->toArray());
+                MfaRecoveryCode::insert($recoveryCodesData->toArray());
+            }
 
             // 4. Marcar setup como completado, pero la invitación SIGUE PREPARED.
             $invitation->update([
@@ -268,9 +282,23 @@ class InvitationController extends Controller
             Cache::forget("totp_setup_{$request->exchange_token}");
         });
 
+        if ($developmentMfaBypass) {
+            app(SecurityAuditService::class)->log($request, [
+                'event_type' => 'MFA_BYPASSED_DEVELOPMENT',
+                'severity' => 'WARNING',
+                'outcome' => 'SUCCESS',
+                'entity_type' => 'AccountInvitation',
+                'entity_id' => $invitation->id,
+                'user_id' => $invitation->user_id,
+            ]);
+        }
+
         return response()->json([
-            'message' => 'Configuración de seguridad guardada exitosamente.',
+            'message' => $developmentMfaBypass
+                ? 'Configuración de cuenta guardada en modo desarrollo.'
+                : 'Configuración de seguridad guardada exitosamente.',
             'recovery_codes' => $rawRecoveryCodes,
+            'development_mfa_bypass' => $developmentMfaBypass,
             'note' => 'GUARDE ESTOS CÓDIGOS EN UN LUGAR SEGURO. Solo se mostrarán esta vez. Llame a /complete para finalizar la activación.',
         ]);
     }
@@ -380,7 +408,7 @@ class InvitationController extends Controller
         }
 
         $userRoles = $invitation->user->roleScopes()->with('role')->get()->pluck('role.code')->toArray();
-        if (in_array('general_manager', $userRoles)) {
+        if (in_array('general_manager', $userRoles) && ! config('auth.development_mfa_bypass')) {
             $hasPasskey = MfaCredential::where('user_id', $invitation->user_id)->where('type', 'PASSKEY')->exists();
             if (! $hasPasskey) {
                 return response()->json([

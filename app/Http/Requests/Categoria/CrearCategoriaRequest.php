@@ -19,7 +19,6 @@ class CrearCategoriaRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'profit_percentage' => ['required', 'numeric', 'min:0', 'max:1'], // Punto 52
             'reason' => ['required', 'string'],
-            'effective_from' => ['required', 'date', 'after_or_equal:today'],
         ];
     }
 }

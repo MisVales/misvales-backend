@@ -27,7 +27,7 @@ final class GuardarFamiliarRequest extends FormRequest
             'first_name' => [$presencia, 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
             'first_last_name' => [$presencia, 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
             'second_last_name' => ['nullable', 'string', 'max:120', 'regex:/^\pL[\pL\s.\'-]*$/u'],
-            'birth_date' => ['nullable', 'date_format:Y-m-d', 'before_or_equal:'.today()->subYears(18)->toDateString()],
+            'birth_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'school_name' => ['nullable', 'string', 'max:180'],
             'details_payload' => ['nullable', 'array'],
         ];
@@ -39,6 +39,7 @@ final class GuardarFamiliarRequest extends FormRequest
     {
         return [
             'birth_date.before_or_equal' => 'La referencia familiar debe tener al menos 18 años.',
+            'birth_date.after_or_equal' => 'La fecha de nacimiento debe ser igual o posterior al 01/01/1900.',
             'first_name.regex' => 'El nombre sólo puede contener letras.',
             'first_last_name.regex' => 'El apellido paterno sólo puede contener letras.',
             'second_last_name.regex' => 'El apellido materno sólo puede contener letras.',

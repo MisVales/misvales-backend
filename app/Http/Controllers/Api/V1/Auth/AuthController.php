@@ -36,7 +36,8 @@ class AuthController extends Controller
     public function login(
         Request $request,
         ProgressiveLockoutService $lockoutService,
-        TurnstileVerificationService $turnstileService
+        TurnstileVerificationService $turnstileService,
+        SessionPolicyService $policyService,
     ) {
         $request->validate([
             'email' => 'required|email',
@@ -120,6 +121,17 @@ class AuthController extends Controller
         // Éxito: Limpiamos los contadores
         $lockoutService->clearLockout($ip, $email);
         RateLimiter::clear($throttleKey);
+
+        if (config('auth.development_mfa_bypass')) {
+            app(SecurityAuditService::class)->log($request, [
+                'event_type' => 'MFA_BYPASSED_DEVELOPMENT',
+                'severity' => 'WARNING',
+                'outcome' => 'SUCCESS',
+                'user_id' => $user->id,
+            ]);
+
+            return $this->issueSessionTokens($user, $request, 'DEVELOPMENT_BYPASS', $policyService);
+        }
 
         $challengeToken = Str::random(64);
         $challengeHash = hash('sha256', $challengeToken);

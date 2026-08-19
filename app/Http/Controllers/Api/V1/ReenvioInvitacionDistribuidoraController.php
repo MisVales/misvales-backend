@@ -30,7 +30,7 @@ class ReenvioInvitacionDistribuidoraController extends Controller
                 $request->user(),
                 $distributor->branch_id,
                 resultado: 'FAILED',
-                motivo: $excepcion->codigo,
+                motivo: $excepcion->errorCode,
             );
 
             throw $excepcion;

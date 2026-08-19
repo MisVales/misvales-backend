@@ -117,6 +117,100 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             ->assertJsonPath('error.fields.first_name.0', 'El nombre sólo puede contener letras.');
     }
 
+    public function test_rechaza_fechas_de_nacimiento_no_reales_y_anios_de_vehiculo_fuera_del_rango(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-22');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100022');
+        Sanctum::actingAs($general);
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX09',
+            'birth_date' => '0800-01-01',
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => 'INE-001',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.birth_date.0', 'La fecha de nacimiento debe ser igual o posterior al 01/01/1900.');
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
+            'lock_version' => 1,
+            'relationship' => 'SIBLING',
+            'first_name' => 'Luis',
+            'first_last_name' => 'Pérez',
+            'birth_date' => '0800-01-01',
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.birth_date.0', 'La fecha de nacimiento debe ser igual o posterior al 01/01/1900.');
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles", [
+            'lock_version' => 1,
+            'vehicle_type' => 'Sedan',
+            'model_year' => 1989,
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.model_year.0', 'El año del vehículo debe ser 1990 o posterior.');
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles", [
+            'lock_version' => 1,
+            'vehicle_type' => 'Sedan',
+            'model_year' => now()->year + 2,
+        ])->assertUnprocessable()
+            ->assertJsonPath('error.fields.model_year.0', 'El año del vehículo no puede ser superior al año próximo.');
+    }
+
+    public function test_expone_catalogo_de_marcas_y_tipos_de_vehiculo_razonables_en_espanol(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        Sanctum::actingAs($general);
+
+        $this->getJson('/api/v1/distributor-applications/vehicle-catalog')
+            ->assertOk()
+            ->assertJsonPath('data.brands.0', 'Acura')
+            ->assertJsonPath('data.vehicle_types', [
+                'Automóvil', 'Sedán', 'Hatchback', 'Coupé', 'Convertible', 'SUV', 'Crossover', 'Pickup', 'Miniván',
+                'Van', 'Camioneta de carga', 'Camión', 'Motocicleta', 'Autobús', 'Remolque', 'Otro',
+            ]);
+    }
+
+    public function test_las_referencias_familiares_requieren_dos_registros_completos(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-23');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100023');
+        Sanctum::actingAs($general);
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
+            'lock_version' => 1,
+            'relationship' => 'SIBLING',
+            'first_name' => 'Luis',
+            'first_last_name' => 'Pérez',
+        ])->assertCreated();
+
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.section_declarations.family_references', 'PENDING');
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
+            'lock_version' => 2,
+            'relationship' => 'SIBLING',
+            'first_name' => 'María',
+            'first_last_name' => 'Pérez',
+        ])->assertCreated();
+
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.section_declarations.family_references', 'COMPLETED');
+    }
+
     public function test_autoguardado_parcial_de_datos_personales_conserva_los_campos_ya_guardados(): void
     {
         $general = $this->usuarioConRol('general_manager');
@@ -619,6 +713,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'company_name' => 'Vales del Norte',
             'credit_limit' => '20000.75',
             'is_current' => true,
+            'details_payload' => ['proof_type' => 'CARTA'],
         ])->assertCreated()
             ->assertJsonPath('data.credit_limit', '20000.7500')
             ->assertJsonPath('data.application_lock_version', 6);

@@ -25,11 +25,19 @@ final class GuardarVehiculoRequest extends FormRequest
             'vehicle_type' => [$presencia, 'string', 'max:64'],
             'brand' => ['nullable', 'string', 'max:120'],
             'model' => ['nullable', 'string', 'max:120'],
-            'model_year' => ['nullable', 'integer', 'min:1886', 'max:'.(now()->year + 2)],
+            'model_year' => ['nullable', 'integer', 'min:1990', 'max:'.(now()->year + 1)],
             'ownership_status' => ['nullable', 'string', 'max:32'],
             'details_payload' => ['nullable', 'array'],
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);
+    }
+
+    public function messages(): array
+    {
+        return [
+            'model_year.min' => 'El año del vehículo debe ser 1990 o posterior.',
+            'model_year.max' => 'El año del vehículo no puede ser superior al año próximo.',
+        ];
     }
 }

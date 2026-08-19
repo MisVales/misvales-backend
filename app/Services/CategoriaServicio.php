@@ -32,8 +32,6 @@ class CategoriaServicio
     {
         $ultimaVersion = $categoria->versions()->max('version') ?? 0;
 
-        $effectiveFrom = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
-
         return CategoryVersion::create([
             'category_id' => $categoria->id,
             'version' => $ultimaVersion + 1,
@@ -41,7 +39,7 @@ class CategoriaServicio
             'description' => $datos['description'] ?? null,
             'profit_percentage' => $this->normalizarPorcentaje($datos['profit_percentage']),
             'status' => VersionStatus::DRAFT,
-            'effective_from' => $effectiveFrom,
+            'effective_from' => now('America/Monterrey'),
             'reason' => $datos['reason'],
             'created_by' => $usuarioId,
         ]);
@@ -78,10 +76,6 @@ class CategoriaServicio
         if (array_key_exists('reason', $datos)) {
             $version->reason = $datos['reason'];
         }
-        if (array_key_exists('effective_from', $datos)) {
-            $version->effective_from = Carbon::parse($datos['effective_from'], 'America/Monterrey')->setTimezone('UTC');
-        }
-
         $version->save();
 
         return $version;
@@ -101,6 +95,7 @@ class CategoriaServicio
         }
 
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
+            $activatedAt = now('America/Monterrey');
             $versionPrevia = CategoryVersion::where('category_id', $version->category_id)
                 ->where('status', VersionStatus::PUBLISHED)
                 ->whereNull('effective_to')
@@ -108,24 +103,13 @@ class CategoriaServicio
                 ->first();
 
             if ($versionPrevia) {
-                if ($version->effective_from->lessThanOrEqualTo($versionPrevia->effective_from)) {
-                    throw new BusinessException('OVERLAPPING_VALIDITY', 'La vigencia debe ser estrictamente posterior a la versión publicada actual.');
-                }
-
-                if ($version->effective_from->isPast()) {
-                    throw new BusinessException('INVALID_VALIDITY', 'No se pueden programar versiones con fechas retroactivas.');
-                }
-
-                $versionPrevia->effective_to = $version->effective_from;
-
-                if ($version->effective_from->isPast() || $version->effective_from->isCurrentMinute()) {
-                    $versionPrevia->status = VersionStatus::INACTIVE;
-                }
-
+                $versionPrevia->effective_to = $activatedAt;
+                $versionPrevia->status = VersionStatus::INACTIVE;
                 $versionPrevia->save();
             }
 
             $version->status = VersionStatus::PUBLISHED;
+            $version->effective_from = $activatedAt;
             $version->reason .= "\n[Publicación]: ".$datos['reason'];
             $version->published_by = $usuarioId;
             $version->published_at = now();
@@ -197,11 +181,8 @@ class CategoriaServicio
 
     private function calcularCacheTTL(): Carbon
     {
-        $proximaVersion = CategoryVersion::where('status', VersionStatus::PUBLISHED)
-            ->where('effective_from', '>', now())
-            ->orderBy('effective_from', 'asc')
-            ->first();
-
-        return $proximaVersion ? $proximaVersion->effective_from : now()->addHours(24);
+        // Las categorías se activan de inmediato; no existen publicaciones programadas
+        // que deban acortar el tiempo de caché.
+        return now()->addHours(24);
     }
 }

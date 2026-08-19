@@ -140,7 +140,7 @@ final class ValidadorExpedienteSolicitud
             ]),
             'family_references' => $this->camposPresentes($solicitud->familiares(), [
                 'relationship', 'first_name', 'first_last_name',
-            ]),
+            ], 2),
             'vehicles' => $this->camposPresentes($solicitud->vehiculos(), ['vehicle_type']),
             'assets' => $this->camposPresentes($solicitud->patrimonio()->where('entry_type', 'ASSET')->where('is_active', true), ['entry_type', 'name']),
             'liabilities' => $this->camposPresentes($solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->where('is_active', true), ['entry_type', 'name']),
@@ -219,7 +219,7 @@ final class ValidadorExpedienteSolicitud
     }
 
     /** @param \Illuminate\Database\Eloquent\Relations\Relation<*, *, *> $consulta @param array<int, string> $campos */
-    private function camposPresentes($consulta, array $campos): bool
+    private function camposPresentes($consulta, array $campos, int $minimumRecords = 1): bool
     {
         foreach ($campos as $campo) {
             $consulta->whereNotNull($campo);
@@ -229,6 +229,6 @@ final class ValidadorExpedienteSolicitud
             }
         }
 
-        return $consulta->exists();
+        return $consulta->count() >= $minimumRecords;
     }
 }

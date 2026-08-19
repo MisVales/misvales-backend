@@ -19,7 +19,7 @@ use RuntimeException;
 
 final class LocalTestingUsersSeeder extends Seeder
 {
-    private const PASSWORD = '123456789ggg';
+    private const PASSWORD = '1234';
 
     public function run(): void
     {
@@ -28,16 +28,7 @@ final class LocalTestingUsersSeeder extends Seeder
         }
 
         DB::transaction(function (): void {
-            $branch = BranchRecord::query()->where('code', 'MATRIZ')->firstOrFail();
-
-            $managerEmail = trim((string) config('bootstrap.initial_general_manager.email'));
-            $managerName = trim((string) config('bootstrap.initial_general_manager.name'));
-
-            if ($managerEmail === '' || $managerName === '') {
-                throw new RuntimeException('Configure INITIAL_GENERAL_MANAGER_EMAIL e INITIAL_GENERAL_MANAGER_NAME para el local testing seeder.');
-            }
-
-            $manager = $this->upsertUser($managerEmail, $managerName);
+            $manager = $this->upsertUser('alberto@gmail.com', 'Alberto');
             $totpSecret = (string) config('bootstrap.local_testing_totp_secret');
 
             if ($totpSecret === '') {
@@ -47,18 +38,43 @@ final class LocalTestingUsersSeeder extends Seeder
             $this->assign($manager, 'general_manager', 'GLOBAL');
             $this->seedTotp($manager, $totpSecret);
 
+            $branch = $this->upsertMatamorosBranch($manager->id);
+
             foreach ([
-                ['qa.gs.torreon@misvales.test', 'Gerente Sucursal Torreón QA', 'branch_manager', 'BRANCH', $branch->id],
-                ['qa.coord.a@misvales.test', 'Coordinador A QA', 'coordinator', 'BRANCH', $branch->id],
-                ['qa.verificador@misvales.test', 'Verificador QA', 'verifier', 'BRANCH', $branch->id],
-                ['qa.admin@misvales.test', 'Administrador QA', 'admin', 'GLOBAL', null],
-                ['qa.cajera@misvales.test', 'Cajera QA', 'cashier', 'BRANCH', $branch->id],
+                ['admin@gmail.com', 'Administrador QA', 'admin', 'GLOBAL', null],
+                ['jorge@gmail.com', 'Jorge Ibarra', 'branch_manager', 'BRANCH', $branch->id],
+                ['dani@gmail.com', 'Daniel Garcia', 'coordinator', 'BRANCH', $branch->id],
+                ['jesus@gmail.com', 'Jesus Guillen', 'coordinator', 'BRANCH', $branch->id],
+                ['saul@gmail.com', 'Saul Sanchez', 'verifier', 'BRANCH', $branch->id],
+                ['aza@gmail.com', 'Azael Garcia', 'cashier', 'BRANCH', $branch->id],
             ] as [$email, $name, $roleCode, $scopeType, $branchId]) {
                 $user = $this->upsertUser($email, $name);
                 $this->assign($user, $roleCode, $scopeType, $branchId, $manager->id);
                 $this->seedTotp($user, $totpSecret);
             }
         });
+    }
+
+    private function upsertMatamorosBranch(string $managerId): BranchRecord
+    {
+        $branch = BranchRecord::query()->firstOrNew(['code' => 'MATAMOROS']);
+        $branch->fill([
+            'name' => 'Sucursal Matamoros',
+            'address' => null,
+            'address_validation_id' => null,
+            'address_place_id' => null,
+            'address_latitude' => null,
+            'address_longitude' => null,
+            'address_validated_at' => null,
+            'is_headquarters' => false,
+            'status' => 'ACTIVE',
+            'lock_version' => 0,
+        ]);
+        $branch->created_by ??= $managerId;
+        $branch->updated_by = $branch->exists ? $managerId : null;
+        $branch->save();
+
+        return $branch;
     }
 
     private function upsertUser(string $email, string $name): User
