@@ -12,6 +12,8 @@ class DistribuidoraDetalleResource extends JsonResource
         $categoria = $this->categoriaVigente?->versionCategoria;
         $coordinador = $this->coordinadorVigente?->coordinator;
         $restriccion = $this->lineaCredito?->restricciones->firstWhere('type', 'INITIAL_50_PERCENT');
+        $puedeVerCreditoInicial = $this->lineaCredito !== null
+            && ($request->user()?->can('view', $this->lineaCredito) ?? false);
 
         return [
             'id' => $this->id,
@@ -39,12 +41,12 @@ class DistribuidoraDetalleResource extends JsonResource
                     'authorized_at' => $this->solicitud->autorizacion->authorized_at?->toIso8601String(),
                 ] : null,
             ] : null,
-            'initial_credit' => $this->when($request->user()?->can('viewInitialCredit', $this->resource), fn () => $this->lineaCredito ? [
+            'initial_credit' => $this->when($puedeVerCreditoInicial, fn () => [
                 'total_authorized' => $this->lineaCredito->total_authorized,
                 'used_balance' => $this->lineaCredito->used_balance,
                 'available_balance' => $this->lineaCredito->saldoDisponible(),
-            ] : null),
-            'initial_restriction' => $this->when($request->user()?->can('viewInitialCredit', $this->resource), fn () => $restriccion ? [
+            ]),
+            'initial_restriction' => $this->when($puedeVerCreditoInicial, fn () => $restriccion ? [
                 'type' => $restriccion->type,
                 'status' => $restriccion->status->value,
                 'base_total' => $restriccion->base_total,

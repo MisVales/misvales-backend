@@ -7,6 +7,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\BaseStatus;
 use App\Enums\VersionStatus;
 use App\Models\CategoryVersion;
+use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
 use App\Models\User;
 use Illuminate\Database\Eloquent\Builder;
@@ -17,7 +18,7 @@ class ServicioPreparacionActivacion
     public function solicitudesAutorizadas(User $actor): Collection
     {
         $consulta = DistributorApplication::query()
-            ->with(['branch:id,name', 'authorization:id,application_id,decision,authorized_at', 'coordinator:id,name'])
+            ->with(['branch:id,name', 'authorization:id,application_id,decision,authorized_at', 'coordinator:id,name', 'datosPersonales:id,application_id,first_name,first_last_name,second_last_name'])
             ->where('status', ApplicationStatus::AUTHORIZED_PENDING_ACTIVATION)
             ->whereDoesntHave('distribuidora')
             ->whereHas('authorization', fn (Builder $query) => $query->where('decision', ApplicationAuthorizationDecision::APPROVED));
@@ -26,7 +27,7 @@ class ServicioPreparacionActivacion
 
         return $consulta->oldest('created_at')->get()->map(fn (DistributorApplication $solicitud) => [
             'id' => $solicitud->id,
-            'applicant_name' => $this->nombre($solicitud->applicant_data ?? []),
+            'applicant_name' => $this->nombre($solicitud->datosPersonales),
             'branch' => ['id' => $solicitud->branch_id, 'name' => $solicitud->branch?->name],
             'coordinator' => ['id' => $solicitud->coordinator_id, 'name' => $solicitud->coordinator?->name],
             'authorization' => [
@@ -82,12 +83,12 @@ class ServicioPreparacionActivacion
         $consulta->whereIn('branch_id', $sucursales);
     }
 
-    private function nombre(array $datos): string
+    private function nombre(?DatosPersonalesSolicitud $datos): string
     {
         return trim(implode(' ', array_filter([
-            data_get($datos, 'personal_info.first_name'),
-            data_get($datos, 'personal_info.last_name'),
-            data_get($datos, 'personal_info.second_last_name'),
+            $datos?->first_name,
+            $datos?->first_last_name,
+            $datos?->second_last_name,
         ])));
     }
 }

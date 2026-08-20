@@ -131,13 +131,15 @@ class User extends Authenticatable
             return;
         }
 
-        $this->roleScopes()->create([
+        $this->roleScopes()->firstOrCreate([
             'role_id' => $role->id,
             'branch_id' => $branchId,
             'scope_type' => $branchId === null ? 'GLOBAL' : 'BRANCH',
+            'status' => 'ACTIVE',
+            'revoked_at' => null,
+        ], [
             'assigned_by_user_id' => $this->id,
             'assigned_at' => now(),
-            'status' => 'ACTIVE',
         ]);
     }
 

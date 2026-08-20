@@ -30,7 +30,11 @@ class ServicioConsultaExpedientes
             $term = mb_strtolower($filters['buscar']);
             $query->where(function (Builder $search) use ($term): void {
                 $search->whereRaw('LOWER(id::text) LIKE ?', ["%{$term}%"])
-                    ->orWhereRaw('LOWER(applicant_data::text) LIKE ?', ["%{$term}%"]);
+                    ->orWhereHas('datosPersonales', function (Builder $personal) use ($term): void {
+                        $personal->whereRaw('LOWER(first_name) LIKE ?', ["%{$term}%"])
+                            ->orWhereRaw('LOWER(first_last_name) LIKE ?', ["%{$term}%"])
+                            ->orWhereRaw('LOWER(COALESCE(second_last_name, \'\')) LIKE ?', ["%{$term}%"]);
+                    });
             });
         }
 
@@ -99,6 +103,7 @@ class ServicioConsultaExpedientes
     {
         return [
             'branch:id,name',
+            'datosPersonales:id,application_id,first_name,first_last_name,second_last_name',
             'verificationVisits' => fn ($query) => $query->latest('created_at')->with('mediaFiles'),
             'corrections' => fn ($query) => $query->oldest('corrected_at')->with('visit'),
             'evaluation',
