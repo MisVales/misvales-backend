@@ -29,7 +29,7 @@ final class SolicitudDistribuidoraDetalleResource extends SolicitudDistribuidora
             'authorization' => new ApplicationAuthorizationResource($this->whenLoaded('authorization')),
             'has_vehicle_evidence' => $this->hasEvidence('VEHICLE_EVIDENCE'),
             'has_assets_evidence' => $this->hasEvidence('ASSET_EVIDENCE'),
-            'has_commercial_credit_evidence' => $this->hasEvidence('COMMERCIAL_CREDIT_EVIDENCE'),
+            'has_commercial_credit_evidence' => $this->hasEvidence('COMMERCIAL_EVIDENCE'),
         ]);
     }
 

@@ -13,7 +13,7 @@ final class OperationalHeartbeatCommand extends Command
 
     public function handle(): int
     {
-        DB::table('operational_heartbeats')->upsert([['component' => 'scheduler', 'last_seen_at' => now(), 'metadata' => json_encode(['source' => 'laravel-scheduler'])]], ['component'], ['last_seen_at', 'metadata']);
+        DB::table('operational_heartbeats')->upsert([['component' => 'scheduler', 'last_seen_at' => now('UTC'), 'metadata' => json_encode(['source' => 'laravel-scheduler'])]], ['component'], ['last_seen_at', 'metadata']);
 
         return self::SUCCESS;
     }

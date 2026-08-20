@@ -44,7 +44,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase
                 'verifier_id' => $verifierB->id, 'lock_version' => $app->lock_version,
             ]);
 
-        $response->assertStatus(403)->assertJsonPath('error', 'VERIFIER_BRANCH_MISMATCH');
+        $response->assertStatus(403)->assertJsonPath('error.code', 'VERIFIER_BRANCH_MISMATCH');
     }
 
     public function test_asignacion_exitosa_crea_visita_y_auditoria()
@@ -94,6 +94,34 @@ class RevisionCoordinadorTest extends Modulo5TestCase
 
         $this->actingAsMfaUser($other, ['coordinator'], $branch->id)
             ->getJson("/api/v1/distributor-applications/{$app->id}/available-verifiers")
-            ->assertForbidden()->assertJsonPath('error', 'AUTH_SCOPE_DENIED');
+            ->assertForbidden()->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
+    }
+
+    public function test_gerente_de_sucursal_puede_listar_verificadores_de_su_sucursal(): void
+    {
+        $branch = Branch::factory()->create();
+        $coordinator = User::factory()->create();
+        $manager = User::factory()->create();
+        $verifier = User::factory()->create(['state' => 'ACTIVE']);
+        $verifier->assignRole('verifier', $branch->id);
+        $app = DistributorApplication::factory()->create(['branch_id' => $branch->id, 'coordinator_id' => $coordinator->id]);
+
+        $this->actingAsMfaUser($manager, ['branch_manager'], $branch->id)
+            ->getJson("/api/v1/distributor-applications/{$app->id}/available-verifiers")
+            ->assertOk()
+            ->assertJsonPath('data.0.id', $verifier->id);
+    }
+
+    public function test_admin_no_puede_asignar_verificadores_por_ser_solo_consulta(): void
+    {
+        $branch = Branch::factory()->create();
+        $coordinator = User::factory()->create();
+        $admin = User::factory()->create();
+        $app = DistributorApplication::factory()->create(['branch_id' => $branch->id, 'coordinator_id' => $coordinator->id]);
+
+        $this->actingAsMfaUser($admin, ['admin'])
+            ->getJson("/api/v1/distributor-applications/{$app->id}/available-verifiers")
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
     }
 }

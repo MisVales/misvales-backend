@@ -522,28 +522,25 @@ class AuthController extends Controller
     public function refresh(Request $request, SessionPolicyService $policyService)
     {
         if (! $this->credentialOriginIsAllowed($request)) {
-            return response()->json([
-                'error' => 'ORIGIN_NOT_ALLOWED',
-                'message' => 'El origen de la solicitud no está autorizado.',
-            ], 403);
+            return $this->authError($request, 'ORIGIN_NOT_ALLOWED', 'El origen de la solicitud no está autorizado.', 403);
         }
 
         $refreshToken = $request->cookie(self::REFRESH_COOKIE);
 
         if (! is_string($refreshToken) || $refreshToken === '') {
-            return $this->refreshFailure('INVALID_SESSION', 'Refresh token inválido o expirado.');
+            return $this->refreshFailure($request, 'INVALID_SESSION', 'Refresh token inválido o expirado.');
         }
 
         $hash = hash('sha256', $refreshToken);
         $data = Cache::get("auth_refresh_{$hash}");
 
         if (! $data) {
-            return $this->refreshFailure('INVALID_SESSION', 'Refresh token inválido o expirado.');
+            return $this->refreshFailure($request, 'INVALID_SESSION', 'Refresh token inválido o expirado.');
         }
 
         $user = User::find($data['user_id']);
         if (! $user || $user->state !== 'ACTIVE') {
-            return $this->refreshFailure('ACCOUNT_INACTIVE', 'Usuario inactivo.');
+            return $this->refreshFailure($request, 'ACCOUNT_INACTIVE', 'Usuario inactivo.');
         }
 
         // Buscar la sesión original
@@ -551,7 +548,7 @@ class AuthController extends Controller
         if (! $session || $session->revoked_at || ($session->expires_at && $session->expires_at->isPast())) {
             Cache::forget("auth_refresh_{$hash}");
 
-            return $this->refreshFailure('INVALID_SESSION', 'La sesión maestra ha expirado o fue revocada.');
+            return $this->refreshFailure($request, 'INVALID_SESSION', 'La sesión maestra ha expirado o fue revocada.');
         }
 
         // Validar inactividad en el refresco
@@ -560,7 +557,7 @@ class AuthController extends Controller
             $session->update(['revoked_at' => now(), 'revocation_reason' => 'INACTIVITY_TIMEOUT_ON_REFRESH']);
             Cache::forget("auth_refresh_{$hash}");
 
-            return $this->refreshFailure('INVALID_SESSION', 'Sesión cerrada por inactividad.');
+            return $this->refreshFailure($request, 'INVALID_SESSION', 'Sesión cerrada por inactividad.');
         }
 
         // Revocar token de Sanctum anterior (si sigue vivo)
@@ -765,21 +762,23 @@ class AuthController extends Controller
             return true;
         }
 
-        foreach (config('cors.allowed_origins_patterns', []) as $pattern) {
-            if (is_string($pattern) && $pattern !== '' && @preg_match($pattern, $origin) === 1) {
-                return true;
-            }
-        }
-
         return false;
     }
 
-    private function refreshFailure(string $code, string $message): JsonResponse
+    private function refreshFailure(Request $request, string $code, string $message): JsonResponse
     {
-        return response()->json([
-            'error' => $code,
+        return $this->authError($request, $code, $message, 401);
+    }
+
+    private function authError(Request $request, string $code, string $message, int $status): JsonResponse
+    {
+        return response()->json(['error' => [
+            'code' => $code,
             'message' => $message,
-        ], 401);
+            'fields' => (object) [],
+            'details' => (object) [],
+            'request_id' => $request->attributes->get('request_id'),
+        ]], $status);
     }
 
     private function parseDeviceName(?string $userAgent): string

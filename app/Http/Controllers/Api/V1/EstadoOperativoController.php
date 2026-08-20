@@ -57,8 +57,9 @@ final class EstadoOperativoController extends Controller
 
     private function scheduler(): bool
     {
-        $last = DB::table('operational_heartbeats')->where('component', 'scheduler')->value('last_seen_at');
-
-        return $last !== null && now()->diffInMinutes($last, true) <= 5;
+        return DB::table('operational_heartbeats')
+            ->where('component', 'scheduler')
+            ->where('last_seen_at', '>=', DB::raw("CURRENT_TIMESTAMP - INTERVAL '5 minutes'"))
+            ->exists();
     }
 }

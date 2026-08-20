@@ -559,11 +559,9 @@ final class ServicioSolicitudDistribuidora
             return true;
         }
 
-        if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator' && $asignacion->branch_id === $branchId)) {
-            return true;
-        }
-
-        return $actor->id === $coordinatorId;
+        return $actor->id === $coordinatorId
+            && $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
+                && $asignacion->branch_id === $branchId);
     }
 
     private function actorPuedeOperar(User $actor, SolicitudDistribuidora $solicitud): bool

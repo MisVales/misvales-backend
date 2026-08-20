@@ -14,7 +14,7 @@ final class SolicitudDistribuidoraPolicy
             return false;
         }
 
-        if ($user->hasRole('general_manager') || $user->hasRole('admin')) {
+        if ($user->hasRole('general_manager')) {
             return true;
         }
 
@@ -75,8 +75,11 @@ final class SolicitudDistribuidoraPolicy
             return true;
         }
 
-        return $asignaciones->contains(fn ($asignacion): bool => $asignacion->branch_id === $solicitud->branch_id
-            && in_array($asignacion->role_code, ['branch_manager', 'coordinator'], true));
+        return $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'branch_manager'
+            && $asignacion->branch_id === $solicitud->branch_id)
+            || ($solicitud->coordinator_id === $user->id
+                && $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
+                    && $asignacion->branch_id === $solicitud->branch_id));
     }
 
     private function puedeOperar(User $user, SolicitudDistribuidora $solicitud): bool
@@ -94,7 +97,8 @@ final class SolicitudDistribuidoraPolicy
         }
 
         if ($asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
-            && $asignacion->branch_id === $solicitud->branch_id)) {
+            && $asignacion->branch_id === $solicitud->branch_id)
+            && $solicitud->coordinator_id === $user->id) {
             return true;
         }
 

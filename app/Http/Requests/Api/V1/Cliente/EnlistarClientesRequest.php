@@ -33,6 +33,6 @@ class EnlistarClientesRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new ApiException('CLIENT_VALIDATION_FAILED', 'Los filtros enviados no son vÃ¡lidos.', 422, $validator->errors()->toArray(), []);
+        throw new ApiException('CLIENT_VALIDATION_FAILED', 'Los filtros enviados no son válidos.', 422, $validator->errors()->toArray(), []);
     }
 }

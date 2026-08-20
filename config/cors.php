@@ -26,11 +26,9 @@ return [
         )
     )),
 
-    // Útil para dominios temporales de Cloudflare Tunnel en ambientes de prueba.
-    // En producción se recomienda declarar dominios explícitos en CORS_ALLOWED_ORIGINS.
-    'allowed_origins_patterns' => array_values(array_filter(
-        array_map('trim', explode(',', env('CORS_ALLOWED_ORIGIN_PATTERNS', '')))
-    )),
+    // La API sólo acepta orígenes explícitos; las credenciales no deben
+    // habilitarse para patrones amplios ni dominios de terceros.
+    'allowed_origins_patterns' => [],
 
     'allowed_headers' => ['*'],
 

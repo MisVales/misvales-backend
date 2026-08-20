@@ -272,6 +272,18 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $respondError($request, 'SERVICE_UNAVAILABLE', 'El servicio no está disponible temporalmente. Inténtalo nuevamente.', 503);
             }
 
+            if ($e->getStatusCode() === 405) {
+                return $respondError($request, 'METHOD_NOT_ALLOWED', 'El método HTTP no está permitido para este recurso.', 405);
+            }
+
+            if ($e->getStatusCode() === 403) {
+                return $respondError($request, 'AUTH_SCOPE_DENIED', 'No tienes permiso para acceder a este registro.', 403);
+            }
+
+            if ($e->getStatusCode() === 401) {
+                return $respondError($request, 'SESSION_EXPIRED', 'Tu sesión ha expirado. Inicia sesión nuevamente.', 401);
+            }
+
             return null;
         });
 

@@ -142,7 +142,7 @@ class ServicioRevisionCoordinador
                         $global->where('status', 'ACTIVE')
                             ->whereNull('revoked_at')
                             ->where('scope_type', 'GLOBAL')
-                            ->whereHas('role', fn ($roles) => $roles->whereIn('code', ['general_manager', 'admin']));
+                            ->whereHas('role', fn ($roles) => $roles->where('code', 'general_manager'));
                     })->orWhere(function ($branchManager) use ($application): void {
                         $branchManager->where('status', 'ACTIVE')
                             ->whereNull('revoked_at')
