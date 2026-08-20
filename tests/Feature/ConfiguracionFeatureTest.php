@@ -44,11 +44,11 @@ class ConfiguracionFeatureTest extends TestCase
 
         $response->assertStatus(201);
         $this->assertDatabaseHas('configuration_definitions', ['key' => 'MAX_LOAN_AMOUNT']);
-        $this->assertDatabaseHas('configuration_versions', [
-            'version' => 1,
-            'status' => 'DRAFT',
-            'value' => json_encode('50000.0000'),
-        ]);
+        $version = ConfigurationVersion::query()
+            ->where('version', 1)
+            ->where('status', 'DRAFT')
+            ->firstOrFail();
+        self::assertSame('50000.0000', json_decode((string) $version->getRawOriginal('value'), true));
     }
 
     public function test_publicar_version_cierra_version_previa()
@@ -257,7 +257,7 @@ class ConfiguracionFeatureTest extends TestCase
         $this->postJson("/api/v1/configuration-versions/{$version->id}/deactivate", [
             'reason' => 'Intento obsoleto',
             'lock_version' => $currentVersion + 1,
-        ])->assertStatus(409)->assertJsonPath('error', 'RESOURCE_VERSION_CONFLICT');
+        ])->assertStatus(409)->assertJsonPath('error.code', 'RESOURCE_VERSION_CONFLICT');
 
         $this->postJson("/api/v1/configuration-versions/{$version->id}/deactivate", [
             'reason' => 'Retiro autorizado',

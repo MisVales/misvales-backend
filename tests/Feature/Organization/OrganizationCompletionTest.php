@@ -75,7 +75,7 @@ final class OrganizationCompletionTest extends TestCase
             ->assertJsonPath('data.0.user.id', $branchManager->id);
         $this->getJson("/api/v1/personnel?branch_id={$otherBranch->id}")
             ->assertForbidden()
-            ->assertJsonPath('code', 'ORGANIZATION_SCOPE_DENIED');
+            ->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
 
         Sanctum::actingAs($administrator);
         $this->getJson('/api/v1/personnel')->assertOk();
@@ -154,8 +154,8 @@ final class OrganizationCompletionTest extends TestCase
 
         $this->getJson('/api/v1/personnel?assignment_status=UNKNOWN')
             ->assertUnprocessable()
-            ->assertJsonPath('code', 'VALIDATION_ERROR')
-            ->assertJsonStructure(['code', 'message', 'fields', 'details', 'request_id']);
+            ->assertJsonPath('error.code', 'VALIDATION_ERROR')
+            ->assertJsonStructure(['error' => ['code', 'message', 'fields', 'details', 'request_id']]);
     }
 
     private function user(string $name, string $state = 'ACTIVE'): User

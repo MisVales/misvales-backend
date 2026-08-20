@@ -69,7 +69,7 @@ final class BranchPersonnelApiTest extends TestCase
 
         $this->getJson("/api/v1/branches/{$otherBranch->id}/personnel")
             ->assertForbidden()
-            ->assertJsonPath('code', 'ORGANIZATION_SCOPE_DENIED');
+            ->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
     }
 
     public function test_administrator_can_consult_personnel_in_read_only_global_mode(): void

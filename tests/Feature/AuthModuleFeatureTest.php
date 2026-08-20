@@ -37,9 +37,7 @@ class AuthModuleFeatureTest extends TestCase
         ]);
 
         $response->assertStatus(401)
-            ->assertJson([
-                'error' => 'INVALID_CREDENTIALS',
-                'message' => 'Credenciales inválidas.',
-            ]);
+            ->assertJsonPath('error.code', 'INVALID_CREDENTIALS')
+            ->assertJsonPath('error.message', 'Credenciales inválidas.');
     }
 }

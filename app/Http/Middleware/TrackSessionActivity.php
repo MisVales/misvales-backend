@@ -44,13 +44,13 @@ class TrackSessionActivity
             if (! $session || $session->user_id !== $user->id) {
                 $token->delete();
 
-                return response()->json(['error' => 'INVALID_SESSION', 'message' => 'No autenticado o sesión inválida.'], 401);
+                return $this->invalidSessionResponse($request, 'No autenticado o sesión inválida.');
             }
 
             if ($session->revoked_at !== null) {
                 $token->delete();
 
-                return response()->json(['error' => 'INVALID_SESSION', 'message' => 'La sesión fue revocada.'], 401);
+                return $this->invalidSessionResponse($request, 'La sesión fue revocada.');
             }
 
             if ($tokenHash !== null && $session->getRawOriginal('session_identifier_hash') !== $tokenHash) {
@@ -71,7 +71,7 @@ class TrackSessionActivity
             if ($session->expires_at && $session->expires_at->isPast()) {
                 $this->revokeSession($session, $token, 'ABSOLUTE_TIMEOUT');
 
-                return response()->json(['error' => 'INVALID_SESSION', 'message' => 'La sesión ha expirado.'], 401);
+                return $this->invalidSessionResponse($request, 'La sesión ha expirado.');
             }
 
             // 2. Verificar inactividad según la política de sesión.
@@ -81,7 +81,7 @@ class TrackSessionActivity
                 if ($minutesInactive > $policy['inactivity']) {
                     $this->revokeSession($session, $token, 'INACTIVITY_TIMEOUT');
 
-                    return response()->json(['error' => 'INVALID_SESSION', 'message' => 'Sesión cerrada por inactividad.'], 401);
+                    return $this->invalidSessionResponse($request, 'Sesión cerrada por inactividad.');
                 }
             }
 
@@ -107,5 +107,16 @@ class TrackSessionActivity
         ]);
 
         $accessToken->delete();
+    }
+
+    private function invalidSessionResponse(Request $request, string $message): Response
+    {
+        return response()->json(['error' => [
+            'code' => 'INVALID_SESSION',
+            'message' => $message,
+            'fields' => (object) [],
+            'details' => (object) [],
+            'request_id' => $request->attributes->get('request_id') ?? $request->header('X-Request-Id'),
+        ]], 401);
     }
 }

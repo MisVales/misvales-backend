@@ -39,7 +39,7 @@ final class AuthSessionRevocationTest extends TestCase
         $this->withToken($token->plainTextToken)
             ->getJson('/api/v1/me')
             ->assertUnauthorized()
-            ->assertJsonPath('error', 'INVALID_SESSION');
+            ->assertJsonPath('error.code', 'INVALID_SESSION');
 
         $this->assertDatabaseMissing('personal_access_tokens', ['id' => $token->accessToken->id]);
     }

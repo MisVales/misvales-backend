@@ -47,7 +47,7 @@ final class UserDirectoryScopeTest extends TestCase
         );
         $this->getJson("/api/v1/users?branch_id={$otherBranch->id}")
             ->assertForbidden()
-            ->assertJsonPath('code', 'ORGANIZATION_SCOPE_DENIED');
+            ->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
 
         Sanctum::actingAs($administrator);
         $this->getJson('/api/v1/users')

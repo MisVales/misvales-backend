@@ -25,7 +25,7 @@ class AutorizacionGerencialTest extends Modulo5TestCase
                 // Faltan monto
             ]);
 
-        $response->assertStatus(422)->assertJsonPath('error', 'APPLICATION_INITIAL_CREDIT_LINE_REQUIRED');
+        $response->assertStatus(422)->assertJsonPath('error.code', 'APPLICATION_INITIAL_CREDIT_LINE_REQUIRED');
     }
 
     public function test_aislamiento_no_crea_datos_operativos_aun()

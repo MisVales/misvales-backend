@@ -78,7 +78,7 @@ final class OrganizationModuleFeatureTest extends TestCase
             'status' => 'INACTIVE',
             'lock_version' => 0,
         ])->assertConflict()
-            ->assertJsonPath('code', 'HEADQUARTERS_BRANCH_PROTECTED');
+            ->assertJsonPath('error.code', 'HEADQUARTERS_BRANCH_PROTECTED');
     }
 
     public function test_assign_personnel_to_branch(): void

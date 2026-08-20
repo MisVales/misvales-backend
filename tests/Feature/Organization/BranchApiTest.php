@@ -122,7 +122,7 @@ final class BranchApiTest extends TestCase
             'lock_version' => 0,
         ])
             ->assertConflict()
-            ->assertJsonPath('code', 'VERSION_CONFLICT');
+            ->assertJsonPath('error.code', 'RESOURCE_VERSION_CONFLICT');
     }
 
     public function test_general_manager_can_deactivate_and_reactivate_an_empty_branch(): void
@@ -155,7 +155,7 @@ final class BranchApiTest extends TestCase
             'lock_version' => 0,
         ])
             ->assertConflict()
-            ->assertJsonPath('code', 'HEADQUARTERS_BRANCH_PROTECTED');
+            ->assertJsonPath('error.code', 'HEADQUARTERS_BRANCH_PROTECTED');
 
         $this->assertDatabaseHas('branches', [
             'id' => $headquarters->id,
@@ -175,7 +175,7 @@ final class BranchApiTest extends TestCase
             'lock_version' => 0,
         ])
             ->assertConflict()
-            ->assertJsonPath('code', 'BRANCH_HAS_ACTIVE_ASSIGNMENTS');
+            ->assertJsonPath('error.code', 'BRANCH_HAS_ACTIVE_ASSIGNMENTS');
     }
 
     private function userWithRole(string $roleCode, ?string $branchId = null): User

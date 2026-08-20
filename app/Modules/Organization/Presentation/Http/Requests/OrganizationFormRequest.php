@@ -10,12 +10,12 @@ abstract class OrganizationFormRequest extends FormRequest
 {
     protected function failedValidation(Validator $validator): never
     {
-        throw new HttpResponseException(response()->json([
+        throw new HttpResponseException(response()->json(['error' => [
             'code' => 'VALIDATION_ERROR',
             'message' => 'La solicitud contiene datos inválidos.',
             'fields' => $validator->errors(),
             'details' => (object) [],
             'request_id' => $this->attributes->get('request_id'),
-        ], 422));
+        ]], 422));
     }
 }

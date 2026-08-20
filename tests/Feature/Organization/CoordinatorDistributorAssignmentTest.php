@@ -97,7 +97,7 @@ final class CoordinatorDistributorAssignmentTest extends TestCase
         $this->deleteJson("/api/v1/assignments/coordinator-distributor/{$assignment->id}", [
             'end_reason' => 'Retiro sin reemplazo',
         ])->assertConflict()
-            ->assertJsonPath('code', 'ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR');
+            ->assertJsonPath('error.code', 'ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR');
 
         $this->assertDatabaseHas('coordinator_distributor_assignments', [
             'id' => $assignment->id,
