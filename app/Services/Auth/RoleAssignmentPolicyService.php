@@ -15,6 +15,7 @@ class RoleAssignmentPolicyService
 {
     public function __construct(
         private readonly OrganizationAssignmentRules $assignmentRules,
+        private readonly RoleTransitionService $transitionService,
     ) {}
 
     /**
@@ -36,6 +37,14 @@ class RoleAssignmentPolicyService
      */
     public function validateAssignment(User $actor, User $targetUser, Role $roleToAssign, ?string $branchId)
     {
+        // Block non-assignable roles (distributor, general_manager)
+        if (!$this->transitionService->isRoleAssignable($roleToAssign->code)) {
+            if ($roleToAssign->code === 'distributor') {
+                return 'El rol de distribuidora se obtiene únicamente mediante el proceso de autorización de distribuidoras.';
+            }
+            return "El rol '{$roleToAssign->name}' no puede asignarse manualmente.";
+        }
+
         // 1. Estado del usuario receptor
         if (! in_array($targetUser->state, ['ACTIVE', 'INVITED', 'PENDING_ACTIVATION'])) {
             return 'El usuario receptor no está en un estado válido para recibir asignaciones.';
@@ -184,6 +193,7 @@ class RoleAssignmentPolicyService
 
         return Role::where('is_active', true)
             ->whereIn('code', array_keys($this->ranks))
+            ->whereNotIn('code', ['distributor', 'general_manager'])
             ->get()
             ->filter(fn (Role $role) => ($this->ranks[$role->code] ?? 0) < $actorMaxRank)
             ->values();

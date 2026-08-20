@@ -754,6 +754,8 @@ class AuthController extends Controller
             config('app.url'),
         ];
 
+        file_put_contents(storage_path('logs/origin.log'), json_encode(['origin' => $normalizedOrigin, 'allowed' => $allowedOrigins]));
+
         if (in_array(
             $normalizedOrigin,
             array_map(
@@ -806,3 +808,4 @@ class AuthController extends Controller
         return 'Other Device';
     }
 }
+
