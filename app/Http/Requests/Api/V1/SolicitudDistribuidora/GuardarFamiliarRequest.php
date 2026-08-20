@@ -30,6 +30,7 @@ final class GuardarFamiliarRequest extends FormRequest
             'birth_date' => ['nullable', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:'.today()->subYears(18)->toDateString()],
             'school_name' => ['nullable', 'string', 'max:180'],
             'details_payload' => ['nullable', 'array'],
+            'details_payload.other_relationship' => ['nullable', 'string', 'max:80', 'required_if:relationship,OTHER'],
         ];
 
         return $this->applyDraftRules($rules, ['lock_version']);

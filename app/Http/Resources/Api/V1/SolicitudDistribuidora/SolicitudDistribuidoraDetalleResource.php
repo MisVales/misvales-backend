@@ -6,6 +6,7 @@ use App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResourc
 use App\Http\Resources\VerificacionDistribuidora\ApplicationCorrectionResource;
 use App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource;
 use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
+use App\Models\MediaFileBinding;
 use Illuminate\Http\Request;
 
 final class SolicitudDistribuidoraDetalleResource extends SolicitudDistribuidoraResource
@@ -26,6 +27,18 @@ final class SolicitudDistribuidoraDetalleResource extends SolicitudDistribuidora
             'evaluations' => ApplicationEvaluationResource::collection($this->whenLoaded('evaluations')),
             'latest_evaluation' => new ApplicationEvaluationResource($this->whenLoaded('latestEvaluation')),
             'authorization' => new ApplicationAuthorizationResource($this->whenLoaded('authorization')),
+            'has_vehicle_evidence' => $this->hasEvidence('VEHICLE_EVIDENCE'),
+            'has_assets_evidence' => $this->hasEvidence('ASSET_EVIDENCE'),
+            'has_commercial_credit_evidence' => $this->hasEvidence('COMMERCIAL_CREDIT_EVIDENCE'),
         ]);
+    }
+
+    private function hasEvidence(string $purpose): bool
+    {
+        return MediaFileBinding::query()
+            ->where('owner_type', 'distributor_application')
+            ->where('owner_id', $this->id)
+            ->where('purpose', $purpose)
+            ->exists();
     }
 }

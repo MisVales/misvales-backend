@@ -19,7 +19,7 @@ class ServicioRevisionCoordinador
         if (! $application) {
             throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
         }
-        if ($application->coordinator_id !== $coordinatorId) {
+        if (! $this->puedeRevisarSolicitud($application, $coordinatorId)) {
             throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
         }
 
@@ -50,7 +50,7 @@ class ServicioRevisionCoordinador
                 throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
             }
 
-            if ($application->coordinator_id !== $coordinatorId) {
+            if (! $this->puedeRevisarSolicitud($application, $coordinatorId)) {
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $coordinatorId, $application->branch_id, null, null, 'No autorizado para devolver');
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
             }
@@ -80,7 +80,7 @@ class ServicioRevisionCoordinador
                 throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
             }
 
-            if ($application->coordinator_id !== $coordinatorId) {
+            if (! $this->puedeRevisarSolicitud($application, $coordinatorId)) {
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $coordinatorId, $application->branch_id, null, null, 'No autorizado para asignar');
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
             }
@@ -98,7 +98,13 @@ class ServicioRevisionCoordinador
             if (! method_exists($verifier, 'hasRole') || ! $verifier->hasRole('verifier')) {
                 throw new BusinessException('VERIFIER_ROLE_INVALID', 'Rol de verificador inválido.', 403);
             }
-            if ($verifier->branch_id !== $application->branch_id) {
+            $isVerifierInApplicationBranch = $verifier->roleScopes()
+                ->where('branch_id', $application->branch_id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereHas('role', fn ($role) => $role->where('code', 'verifier'))
+                ->exists();
+            if (! $isVerifierInApplicationBranch) {
                 throw new BusinessException('VERIFIER_BRANCH_MISMATCH', 'Sucursal incorrecta.', 403);
             }
 
@@ -120,5 +126,31 @@ class ServicioRevisionCoordinador
 
             return $visit;
         });
+    }
+
+    private function puedeRevisarSolicitud(DistributorApplication $application, string $actorId): bool
+    {
+        if ($application->coordinator_id === $actorId) {
+            return true;
+        }
+
+        return User::query()
+            ->whereKey($actorId)
+            ->whereHas('roleScopes', function ($scopes) use ($application): void {
+                $scopes->where(function ($authorized) use ($application): void {
+                    $authorized->where(function ($global) {
+                        $global->where('status', 'ACTIVE')
+                            ->whereNull('revoked_at')
+                            ->where('scope_type', 'GLOBAL')
+                            ->whereHas('role', fn ($roles) => $roles->whereIn('code', ['general_manager', 'admin']));
+                    })->orWhere(function ($branchManager) use ($application): void {
+                        $branchManager->where('status', 'ACTIVE')
+                            ->whereNull('revoked_at')
+                            ->where('branch_id', $application->branch_id)
+                            ->whereHas('role', fn ($roles) => $roles->where('code', 'branch_manager'));
+                    });
+                });
+            })
+            ->exists();
     }
 }

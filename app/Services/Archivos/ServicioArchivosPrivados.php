@@ -18,6 +18,9 @@ final class ServicioArchivosPrivados
     private const PURPOSES = [
         'PHOTO' => ['jpg', 'jpeg', 'png', 'webp'],
         'IDENTIFICATION' => ['jpg', 'jpeg', 'png', 'pdf'],
+        'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
+        'ASSET_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
+        'COMMERCIAL_CREDIT_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
         'RECEIPT' => ['jpg', 'jpeg', 'png', 'pdf'],
         'CLARIFICATION' => ['jpg', 'jpeg', 'png', 'pdf'],
         'REFUND_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],

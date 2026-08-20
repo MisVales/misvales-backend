@@ -754,14 +754,24 @@ class AuthController extends Controller
             config('app.url'),
         ];
 
-        return in_array(
+        if (in_array(
             $normalizedOrigin,
             array_map(
                 fn (mixed $allowedOrigin): string => rtrim(mb_strtolower((string) $allowedOrigin), '/'),
                 array_filter($allowedOrigins, 'is_string'),
             ),
             true,
-        );
+        )) {
+            return true;
+        }
+
+        foreach (config('cors.allowed_origins_patterns', []) as $pattern) {
+            if (is_string($pattern) && $pattern !== '' && @preg_match($pattern, $origin) === 1) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function refreshFailure(string $code, string $message): JsonResponse
