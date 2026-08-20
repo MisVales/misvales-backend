@@ -25,7 +25,7 @@ class VerificacionVisitaTest extends Modulo5TestCase
         $response = $this->actingAsMfaUser($verifierB, ['verifier'], $branchId)
             ->postJson("/api/v1/verification-visits/{$visitA->id}/start", ['lock_version' => 1]);
 
-        $response->assertStatus(403)->assertJsonPath('error', 'VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER');
+        $response->assertStatus(403)->assertJsonPath('error.code', 'VERIFICATION_VISIT_NOT_ASSIGNED_TO_USER');
     }
 
     public function test_iniciar_visita_transiciona_estado()

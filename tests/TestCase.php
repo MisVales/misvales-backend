@@ -9,11 +9,4 @@ abstract class TestCase extends BaseTestCase
 {
     use DatabaseTransactions;
 
-    /**
-     * Previene que RefreshDatabase ejecute migrate:fresh en la base de datos
-     */
-    public function refreshTestDatabase(): void
-    {
-        $this->beginDatabaseTransaction();
-    }
 }

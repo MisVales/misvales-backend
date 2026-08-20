@@ -27,6 +27,6 @@ class CrearCuentaBancariaClienteRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new ApiException('CLIENT_BANK_ACCOUNT_INVALID', 'Los datos de la cuenta bancaria no son vÃ¡lidos.', 422, $validator->errors()->toArray(), []);
+        throw new ApiException('CLIENT_BANK_ACCOUNT_INVALID', 'Los datos de la cuenta bancaria no son válidos.', 422, $validator->errors()->toArray(), []);
     }
 }

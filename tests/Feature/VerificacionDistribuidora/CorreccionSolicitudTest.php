@@ -21,7 +21,7 @@ class CorreccionSolicitudTest extends Modulo5TestCase
                 'visit_id' => $visit->id, 'section' => 'personal_info', 'field_path' => 'first_name', 'new_value' => 'New', 'reason' => 'Fix', 'lock_version' => 1,
             ]);
 
-        $response->assertStatus(403)->assertJsonPath('error', 'AUTH_SCOPE_DENIED');
+        $response->assertStatus(403)->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
     }
 
     public function test_diferencias_pendientes_bloquean_finalizacion()
@@ -35,6 +35,6 @@ class CorreccionSolicitudTest extends Modulo5TestCase
         $response = $this->actingAsMfaUser($coordinator, ['coordinator'])
             ->postJson("/api/v1/distributor-applications/{$app->id}/corrections/finish", ['lock_version' => 1]);
 
-        $response->assertStatus(409)->assertJsonPath('error', 'APPLICATION_CORRECTIONS_PENDING');
+        $response->assertStatus(409)->assertJsonPath('error.code', 'APPLICATION_CORRECTIONS_PENDING');
     }
 }

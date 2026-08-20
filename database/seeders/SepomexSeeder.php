@@ -36,7 +36,7 @@ final class SepomexSeeder extends Seeder
             $header = fgetcsv($handle, null, ',', '"', '');
             $this->validateHeader($header);
 
-            [$states, $municipalities, $postalCodes, $settlements] = $this->existingCatalog();
+            [$states, $municipalities, $postalCodes] = $this->existingCatalog();
             $nextStateId = ((int) DB::table('estados')->max('id')) + 1;
             $nextMunicipalityId = ((int) DB::table('municipios')->max('id')) + 1;
             $nextPostalCodeId = ((int) DB::table('codigos_postales')->max('id')) + 1;
@@ -81,19 +81,14 @@ final class SepomexSeeder extends Seeder
                 }
 
                 $postalCodeId = $postalCodes[$postalCodeKey];
-                $settlementKey = $this->key($postalCodeId, $settlementName, $settlementType);
-
-                if (! isset($settlements[$settlementKey])) {
-                    $settlements[$settlementKey] = true;
-                    $settlementBatch[] = [
-                        'codigo_postal_id' => $postalCodeId,
-                        'name' => $settlementName,
-                        'settlement_type' => $settlementType !== '' ? $settlementType : null,
-                        'created_at' => $timestamp,
-                        'updated_at' => $timestamp,
-                    ];
-                    $inserted++;
-                }
+                $settlementBatch[] = [
+                    'codigo_postal_id' => $postalCodeId,
+                    'name' => $settlementName,
+                    'settlement_type' => $settlementType !== '' ? $settlementType : null,
+                    'created_at' => $timestamp,
+                    'updated_at' => $timestamp,
+                ];
+                $inserted++;
 
                 $processed++;
 
@@ -110,13 +105,12 @@ final class SepomexSeeder extends Seeder
         }
     }
 
-    /** @return array{array<string, int>, array<string, int>, array<string, int>, array<string, bool>} */
+    /** @return array{array<string, int>, array<string, int>, array<string, int>} */
     private function existingCatalog(): array
     {
         $states = DB::table('estados')->pluck('id', 'name')->map(fn ($id): int => (int) $id)->all();
         $municipalities = [];
         $postalCodes = [];
-        $settlements = [];
 
         foreach (DB::table('municipios')->get(['id', 'estado_id', 'name']) as $municipality) {
             $municipalities[$this->key($municipality->estado_id, $municipality->name)] = (int) $municipality->id;
@@ -126,11 +120,7 @@ final class SepomexSeeder extends Seeder
             $postalCodes[$this->key($postalCode->municipio_id, $postalCode->code)] = (int) $postalCode->id;
         }
 
-        foreach (DB::table('colonias')->orderBy('id')->cursor() as $settlement) {
-            $settlements[$this->key($settlement->codigo_postal_id, $settlement->name, $settlement->settlement_type ?? '')] = true;
-        }
-
-        return [$states, $municipalities, $postalCodes, $settlements];
+        return [$states, $municipalities, $postalCodes];
     }
 
     /** @param list<string>|false $header */
@@ -180,7 +170,7 @@ final class SepomexSeeder extends Seeder
                 DB::table('codigos_postales')->insert($postalCodes);
             }
             if ($settlements !== []) {
-                DB::table('colonias')->insert($settlements);
+                DB::table('colonias')->insertOrIgnore($settlements);
             }
         });
 

@@ -44,6 +44,8 @@ final class GuardarDatosPersonalesRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'curp.size' => 'La CURP debe tener exactamente 18 caracteres.',
+            'rfc.max' => 'El RFC no puede exceder 13 caracteres.',
             'birth_date.before_or_equal' => 'La persona solicitante debe tener al menos 18 años.',
             'birth_date.after_or_equal' => 'La fecha de nacimiento debe ser igual o posterior al 01/01/1900.',
             'first_name.regex' => 'El nombre sólo puede contener letras.',

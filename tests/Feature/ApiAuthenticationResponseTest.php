@@ -10,7 +10,7 @@ final class ApiAuthenticationResponseTest extends TestCase
     {
         $this->get('/api/v1/me')
             ->assertUnauthorized()
-            ->assertJsonPath('error', 'INVALID_SESSION')
+            ->assertJsonPath('error.code', 'SESSION_EXPIRED')
             ->assertJsonMissingPath('exception')
             ->assertJsonMissingPath('trace');
     }

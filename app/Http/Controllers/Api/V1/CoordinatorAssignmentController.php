@@ -232,10 +232,7 @@ final class CoordinatorAssignmentController extends Controller
                 ->findOrFail($assignment->id);
 
             if ($lockedAssignment->status !== 'ACTIVE' || $lockedAssignment->valid_to !== null) {
-                return response()->json([
-                    'code' => 'ASSIGNMENT_ALREADY_CLOSED',
-                    'message' => 'La asignación ya está inactiva.',
-                ], 409);
+                return $this->errorResponse($request, 'ASSIGNMENT_ALREADY_CLOSED', 'La asignación ya está inactiva.', 409);
             }
 
             $distributor = Distribuidora::query()
@@ -243,10 +240,7 @@ final class CoordinatorAssignmentController extends Controller
                 ->find($lockedAssignment->distributor_id);
 
             if ($distributor?->status === EstadoDistribuidora::ACTIVA) {
-                return response()->json([
-                    'code' => 'ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR',
-                    'message' => 'Una distribuidora activa no puede quedar sin coordinador; debe reasignarse.',
-                ], 409);
+                return $this->errorResponse($request, 'ACTIVE_DISTRIBUTOR_REQUIRES_COORDINATOR', 'Una distribuidora activa no puede quedar sin coordinador; debe reasignarse.', 409);
             }
 
             $closedAt = now();
@@ -280,6 +274,17 @@ final class CoordinatorAssignmentController extends Controller
                 'data' => $this->serialize($lockedAssignment, $distributor),
             ]);
         });
+    }
+
+    private function errorResponse(Request $request, string $code, string $message, int $status): JsonResponse
+    {
+        return response()->json(['error' => [
+            'code' => $code,
+            'message' => $message,
+            'fields' => (object) [],
+            'details' => (object) [],
+            'request_id' => $request->attributes->get('request_id') ?? $request->header('X-Request-Id'),
+        ]], $status);
     }
 
     /** @return array<string, mixed> */

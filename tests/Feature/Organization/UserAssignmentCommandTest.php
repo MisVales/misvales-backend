@@ -81,10 +81,10 @@ final class UserAssignmentCommandTest extends TestCase
         $this->postJson("/api/v1/users/{$target->id}/assignments", $payload)->assertCreated();
         $this->postJson("/api/v1/users/{$target->id}/assignments", $payload)
             ->assertConflict()
-            ->assertJsonPath('code', 'DUPLICATE_ACTIVE_ASSIGNMENT');
+            ->assertJsonPath('error.code', 'DUPLICATE_ACTIVE_ASSIGNMENT');
         $this->postJson("/api/v1/users/{$blockedTarget->id}/assignments", $payload)
             ->assertUnprocessable()
-            ->assertJsonPath('code', 'USER_NOT_ASSIGNABLE');
+            ->assertJsonPath('error.code', 'USER_NOT_ASSIGNABLE');
     }
 
     public function test_branch_manager_can_only_assign_operational_roles_in_own_branch(): void
@@ -172,7 +172,7 @@ final class UserAssignmentCommandTest extends TestCase
         $this->patchJson("/api/v1/users/{$target->id}/assignments/{$assignmentId}", [
             'assignment_reason' => 'No debe modificar el historial',
         ])->assertConflict()
-            ->assertJsonPath('code', 'ASSIGNMENT_ALREADY_CLOSED');
+            ->assertJsonPath('error.code', 'ASSIGNMENT_ALREADY_CLOSED');
 
         $this->assertDatabaseHas('user_role_scopes', [
             'id' => $assignmentId,
@@ -196,13 +196,13 @@ final class UserAssignmentCommandTest extends TestCase
             'branch_id' => $branch->id,
             'scope' => 'BRANCH',
         ])->assertConflict()
-            ->assertJsonPath('code', 'BRANCH_INACTIVE');
+            ->assertJsonPath('error.code', 'BRANCH_INACTIVE');
 
         $this->postJson("/api/v1/users/{$target->id}/assignments", [
             'role_id' => $cashier->id,
             'scope' => 'GLOBAL',
         ])->assertUnprocessable()
-            ->assertJsonPath('code', 'ROLE_SCOPE_NOT_ALLOWED');
+            ->assertJsonPath('error.code', 'ROLE_SCOPE_NOT_ALLOWED');
     }
 
     private function user(string $state = 'ACTIVE'): User

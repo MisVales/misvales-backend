@@ -33,7 +33,7 @@ class CrearClienteRequest extends FormRequest
             'first_last_name' => ['required', 'string', 'max:120'],
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
-            'rfc' => ['nullable', 'string', 'regex:/^([A-Z�&]{3,4})\d{6}[A-V1-9][A-Z1-9][0-9A]$/i'],
+            'rfc' => ['nullable', 'string', 'regex:/^([A-ZÑ&]{3,4})\d{6}[A-V1-9][A-Z1-9][0-9A]$/i'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'before_or_equal:' . now()->subYears(18)->format('Y-m-d')],
             'birth_place' => ['required', 'string', 'max:160'],
             'birth_state' => ['required', 'string', 'max:120'],
@@ -62,9 +62,9 @@ class CrearClienteRequest extends FormRequest
     public function messages(): array
     {
         return [
-            'curp.regex' => 'La CURP no tiene un formato vÃ¡lido.',
-            'bank_account.clabe.regex' => 'La CLABE debe contener exactamente 18 dÃ­gitos.',
-            'address.postal_code.regex' => 'El cÃ³digo postal debe contener 5 dÃ­gitos.',
+            'curp.regex' => 'La CURP no tiene un formato válido.',
+            'bank_account.clabe.regex' => 'La CLABE debe contener exactamente 18 dígitos.',
+            'address.postal_code.regex' => 'El código postal debe contener 5 dígitos.',
         ];
     }
 

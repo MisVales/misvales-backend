@@ -33,6 +33,6 @@ class RegistrarMovimientoCarteraRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new ApiException('CLIENT_PORTFOLIO_ENTRY_INVALID', 'El movimiento de cartera no es vÃ¡lido.', 422, $validator->errors()->toArray(), []);
+        throw new ApiException('CLIENT_PORTFOLIO_ENTRY_INVALID', 'El movimiento de cartera no es válido.', 422, $validator->errors()->toArray(), []);
     }
 }

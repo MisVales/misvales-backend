@@ -12,8 +12,10 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -941,6 +943,92 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'official_id_number' => str_repeat('A', 26),
         ])->assertUnprocessable()
             ->assertJsonPath('error.fields.official_id_number.0', 'El número de identificación no puede exceder 25 caracteres.');
+    }
+
+    public function test_rechaza_curp_y_rfc_mas_largos_que_sus_limites(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-27');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100027');
+        Sanctum::actingAs($general);
+
+        $payload = [
+            'lock_version' => 1,
+            'nationality' => 'MEXICAN',
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'curp' => 'GODE561231HDFXXX090',
+            'rfc' => 'GODE561231GR80',
+            'birth_date' => '1990-01-15',
+            'birth_country' => 'MX',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana@example.test',
+            'phone_number' => '8711234567',
+            'official_id_type' => 'INE',
+            'official_id_number' => 'INE-001',
+        ];
+
+        $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", $payload)
+            ->assertUnprocessable()
+            ->assertJsonPath('error.fields.curp.0', 'La CURP debe tener exactamente 18 caracteres.')
+            ->assertJsonPath('error.fields.rfc.0', 'El RFC no puede exceder 13 caracteres.');
+    }
+
+    public function test_otro_parentesco_exige_especificacion_y_se_conserva(): void
+    {
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-28');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100028');
+        Sanctum::actingAs($general);
+
+        $base = [
+            'lock_version' => 1,
+            'relationship' => 'OTHER',
+            'first_name' => 'Luis',
+            'first_last_name' => 'Pérez',
+            'birth_date' => '1985-01-15',
+        ];
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", $base)
+            ->assertUnprocessable()
+            ->assertJsonStructure(['error' => ['fields' => ['details_payload.other_relationship']]]);
+
+        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/family-members", [
+            ...$base,
+            'details_payload' => ['other_relationship' => 'Primo'],
+        ])->assertCreated()
+            ->assertJsonPath('data.relationship', 'OTHER')
+            ->assertJsonPath('data.details_payload.other_relationship', 'Primo');
+    }
+
+    public function test_guarda_evidencias_de_vehiculos_patrimonio_y_creditos_comerciales(): void
+    {
+        Storage::fake('private');
+        $general = $this->usuarioConRol('general_manager');
+        $sucursal = $this->sucursal($general, 'TRC-29');
+        $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+        $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100029');
+        Sanctum::actingAs($general);
+        $jpeg = base64_decode('/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////2wBDAf//////////////////////////////////////////////////////////////////////////////////////wAARCAABAAEDASIAAhEBAxEB/8QAFQABAQAAAAAAAAAAAAAAAAAAAAX/xAAUEAEAAAAAAAAAAAAAAAAAAAAA/9oADAMBAAIQAxAAAAEf/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABBQJ//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPwF//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPwF//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQAGPwJ//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPyF//9oADAMBAAIAAwAAABAf/8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAwEBPxB//8QAFBEBAAAAAAAAAAAAAAAAAAAAAP/aAAgBAgEBPxB//8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxB//9k=', true);
+
+        foreach (['VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE'] as $purpose) {
+            $this->withHeader('Idempotency-Key', (string) Str::uuid())
+                ->post('/api/v1/media', [
+                    'file' => UploadedFile::fake()->createWithContent("{$purpose}.jpg", $jpeg),
+                    'owner_type' => 'distributor_application',
+                    'owner_id' => $solicitud->id,
+                    'purpose' => $purpose,
+                ])->assertCreated()->assertJsonPath('data.validation_status', 'VALIDATED');
+        }
+
+        $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
+            ->assertOk()
+            ->assertJsonPath('data.has_vehicle_evidence', true)
+            ->assertJsonPath('data.has_assets_evidence', true)
+            ->assertJsonPath('data.has_commercial_credit_evidence', true);
     }
 
     private function usuarioConRol(string $rol, ?string $sucursalId = null): User

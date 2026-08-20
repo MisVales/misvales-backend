@@ -32,6 +32,6 @@ class ActualizarMovimientoCarteraRequest extends FormRequest
 
     protected function failedValidation(Validator $validator): void
     {
-        throw new ApiException('CLIENT_PORTFOLIO_ENTRY_IMMUTABLE', 'El movimiento contiene campos no editables o invÃ¡lidos.', 422, $validator->errors()->toArray(), []);
+        throw new ApiException('CLIENT_PORTFOLIO_ENTRY_IMMUTABLE', 'El movimiento contiene campos no editables o inválidos.', 422, $validator->errors()->toArray(), []);
     }
 }

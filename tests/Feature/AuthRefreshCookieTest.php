@@ -59,7 +59,7 @@ class AuthRefreshCookieTest extends TestCase
     {
         $this->postJson('/api/v1/auth/refresh', ['refresh_token' => Str::random(80)])
             ->assertUnauthorized()
-            ->assertJsonPath('error', 'INVALID_SESSION');
+            ->assertJsonPath('error.code', 'INVALID_SESSION');
     }
 
     public function test_refresh_rejects_a_credentialed_request_from_an_untrusted_origin(): void
@@ -68,6 +68,17 @@ class AuthRefreshCookieTest extends TestCase
             ->withUnencryptedCookie('misvales_refresh', Str::random(80))
             ->postJson('/api/v1/auth/refresh')
             ->assertForbidden()
-            ->assertJsonPath('error', 'ORIGIN_NOT_ALLOWED');
+            ->assertJsonPath('error.code', 'ORIGIN_NOT_ALLOWED');
+    }
+
+    public function test_refresh_accepts_an_explicitly_configured_origin(): void
+    {
+        config()->set('cors.allowed_origins', ['https://expert-damages-voices-rough.trycloudflare.com']);
+        config()->set('production.frontend_url', 'https://expert-damages-voices-rough.trycloudflare.com');
+
+        $this->withHeader('Origin', 'https://expert-damages-voices-rough.trycloudflare.com')
+            ->postJson('/api/v1/auth/refresh')
+            ->assertUnauthorized()
+            ->assertJsonPath('error.code', 'INVALID_SESSION');
     }
 }
