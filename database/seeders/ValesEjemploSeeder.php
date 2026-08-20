@@ -54,8 +54,10 @@ final class ValesEjemploSeeder extends Seeder
                 ],
             );
 
-            foreach ([5000, 10000, 20000] as $importe) {
-                $cliente = $this->clienteDemo($usuario, $importe);
+            $importes = [5000, 10000, 20000];
+            foreach (range(1, 20) as $indice) {
+                $importe = $importes[($indice - 1) % count($importes)];
+                $cliente = $this->clienteDemo($usuario, $importe, $indice);
                 AsignacionClienteDistribuidora::query()->firstOrCreate(
                     ['client_id' => $cliente->id, 'distributor_id' => $distribuidora->id, 'ends_at' => null],
                     [
@@ -67,7 +69,7 @@ final class ValesEjemploSeeder extends Seeder
                 );
 
                 $versionProducto = $this->productoDemo($usuario, $importe);
-                $this->crearVale($usuario, $cliente, $distribuidora, $lineaCredito, $categoria, $versionProducto, $importe);
+                $this->crearVale($usuario, $cliente, $distribuidora, $lineaCredito, $categoria, $versionProducto, $importe, $indice);
             }
         });
     }
@@ -157,20 +159,22 @@ final class ValesEjemploSeeder extends Seeder
         );
     }
 
-    private function clienteDemo(User $usuario, int $importe): Cliente
+    private function clienteDemo(User $usuario, int $importe, int $indice): Cliente
     {
-        $numero = sprintf('CLI-%s-9%05d', now()->year, intdiv($importe, 1000));
+        $numero = $indice <= 3
+            ? sprintf('CLI-%s-9%05d', now()->year, intdiv($importe, 1000))
+            : sprintf('CLI-%s-8%05d', now()->year, $indice);
 
         $cliente = Cliente::query()->firstOrNew(['client_number' => $numero]);
         if (! $cliente->exists) {
             $cliente->forceFill([
                 'first_name' => 'Cliente',
                 'first_last_name' => 'Demostración',
-                'second_last_name' => (string) $importe,
-                'curp_ciphertext' => Crypt::encryptString("DEMO{$importe}CURP"),
-                'curp_hmac' => hash('sha256', "demo-curp-{$importe}"),
-                'rfc_ciphertext' => Crypt::encryptString("DEMO{$importe}RFC"),
-                'rfc_hmac' => hash('sha256', "demo-rfc-{$importe}"),
+                'second_last_name' => "{$importe}-{$indice}",
+                'curp_ciphertext' => Crypt::encryptString("DEMO{$importe}{$indice}CURP"),
+                'curp_hmac' => hash('sha256', "demo-curp-{$importe}-{$indice}"),
+                'rfc_ciphertext' => Crypt::encryptString("DEMO{$importe}{$indice}RFC"),
+                'rfc_hmac' => hash('sha256', "demo-rfc-{$importe}-{$indice}"),
                 'birth_date' => '1990-01-01',
                 'birth_place' => 'Monterrey',
                 'birth_state' => 'Nuevo León',
@@ -223,8 +227,9 @@ final class ValesEjemploSeeder extends Seeder
         CategoryVersion $categoria,
         ProductVersion $versionProducto,
         int $importe,
+        int $indice,
     ): void {
-        $folio = "DEMO-VAL-{$importe}";
+        $folio = $indice <= 3 ? "DEMO-VAL-{$importe}" : sprintf('DEMO-VAL-%02d-%s', $indice, $importe);
         if (Vale::query()->where('folio', $folio)->exists()) {
             return;
         }
