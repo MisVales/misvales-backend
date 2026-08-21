@@ -84,6 +84,13 @@ class Distribuidora extends Model
         return $this->hasOne(LineaCredito::class, 'distributor_id');
     }
 
+    public function cuentaBancariaVigente(): HasOne
+    {
+        return $this->hasOne(CuentaBancariaDistribuidora::class, 'distributor_id')
+            ->where('is_current', true)
+            ->whereNull('ends_at');
+    }
+
     public function asignacionesClientes(): HasMany
     {
         return $this->hasMany(AsignacionClienteDistribuidora::class, 'distributor_id');
@@ -102,5 +109,12 @@ class Distribuidora extends Model
     public function movimientosPuntos(): HasMany
     {
         return $this->hasMany(PointMovement::class, 'distributor_id');
+    }
+
+    public function archivosSolicitud(): HasMany
+    {
+        return $this->hasMany(MediaFileBinding::class, 'owner_id', 'application_id')
+            ->where('owner_type', 'distributor_application')
+            ->latest();
     }
 }

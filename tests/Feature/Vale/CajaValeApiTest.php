@@ -15,6 +15,7 @@ use App\Models\Cliente;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\DatosPersonalesSolicitud;
 use App\Models\Distribuidora;
 use App\Models\ExcedenteDistribuidora;
 use App\Models\ImportacionArchivoBancario;
@@ -33,6 +34,7 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
 use App\Services\Cliente\ProtectorDatosCliente;
+use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
@@ -71,6 +73,27 @@ final class CajaValeApiTest extends TestCase
         $this->distributorUser = $this->user('distributor', $this->branch->id);
         $this->cashier = $this->user('cashier', $this->branch->id);
         $distributor = Distribuidora::factory()->active()->create(['user_id' => $this->distributorUser->id, 'branch_id' => $this->branch->id]);
+        $protectorSolicitud = app(ProtectorDatosSolicitud::class);
+        $datosPersonales = new DatosPersonalesSolicitud([
+            'application_id' => $distributor->application_id,
+            'first_name' => 'Distribuidora',
+            'first_last_name' => 'Prueba',
+            'nationality' => 'MEXICAN',
+            'birth_country' => 'MX',
+            'birth_date' => '1990-01-01',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'distribuidora@example.test',
+            'phone_number' => '8710000000',
+            'identification_country' => 'MX',
+            'official_id_type' => 'INE',
+        ]);
+        $datosPersonales->forceFill([
+            'curp_ciphertext' => $protectorSolicitud->cifrarCurp('DIPR900101HCLSTR01'),
+            'curp_hmac' => $protectorSolicitud->generarHmacCurp('DIPR900101HCLSTR01'),
+            'official_id_number_ciphertext' => $protectorSolicitud->cifrarIdentificacion('ID-DISTRIBUIDORA-001'),
+            'official_id_number_hmac' => $protectorSolicitud->generarHmacIdentificacion('ID-DISTRIBUIDORA-001'),
+        ])->save();
         $line = LineaCredito::factory()->create(['distributor_id' => $distributor->id, 'total_authorized' => '30000.0000', 'used_balance' => '5000.0000']);
         $client = Cliente::factory()->create(['created_by' => $this->distributorUser->id]);
         AsignacionClienteDistribuidora::factory()->create(['client_id' => $client->id, 'distributor_id' => $distributor->id, 'branch_id' => $this->branch->id, 'starts_at' => now()->subDay(), 'ends_at' => null, 'assigned_by' => $this->distributorUser->id]);
@@ -88,8 +111,8 @@ final class CajaValeApiTest extends TestCase
         ]);
         MediaFileBinding::query()->create([
             'media_file_id' => $addressProof->id,
-            'owner_type' => 'client',
-            'owner_id' => $client->id,
+            'owner_type' => 'distributor_application',
+            'owner_id' => $distributor->application_id,
             'purpose' => 'ADDRESS_PROOF',
             'created_by' => $this->cashier->id,
         ]);
@@ -105,8 +128,8 @@ final class CajaValeApiTest extends TestCase
     public function test_cajera_busca_libera_y_feria_incrementando_saldo(): void
     {
         Sanctum::actingAs($this->cashier);
-        $numeroIdentificacion = app(ProtectorDatosCliente::class)->descifrar(
-            $this->voucher->cliente->official_id_number_ciphertext,
+        $numeroIdentificacion = app(ProtectorDatosSolicitud::class)->descifrar(
+            $this->voucher->distribuidora->solicitud->datosPersonales->official_id_number_ciphertext,
         );
         $this->getJson('/api/v1/cashier/vouchers/search?search=99999999')
             ->assertSuccessful()
@@ -117,6 +140,62 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '15000.0000']);
         $this->assertDatabaseHas('credit_line_movements', ['source_id' => $this->voucher->id, 'type' => 'VOUCHER_CASHED']);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'VoucherCashed']);
+    }
+
+    public function test_liberar_reutiliza_la_cuenta_bancaria_vigente_de_la_distribuidora(): void
+    {
+        Sanctum::actingAs($this->cashier);
+
+        $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/release", [
+            'lock_version' => 1,
+            'bank_name' => 'BBVA',
+            'clabe' => '012345678901234567',
+        ])->assertSuccessful();
+
+        $distribuidora = $this->voucher->distribuidora;
+        $this->assertDatabaseHas('distributor_bank_accounts', [
+            'distributor_id' => $distribuidora->id,
+            'bank_name' => 'BBVA',
+            'account_holder_name' => $distribuidora->usuario->name,
+        ]);
+
+        $segundoVale = $this->voucher->replicate(['id', 'folio', 'client_id', 'created_at', 'updated_at']);
+        $segundoVale->forceFill([
+            'id' => (string) Str::uuid(),
+            'folio' => 'VAL-2026-99999997',
+            'client_id' => Cliente::factory()->create(['created_by' => $this->distributorUser->id])->id,
+            'status' => EstadoVale::GENERADO,
+            'lock_version' => 1,
+        ])->save();
+
+        $this->getJson("/api/v1/cashier/vouchers/{$segundoVale->id}")
+            ->assertSuccessful()
+            ->assertJsonPath('data.bank_account.bank_name', 'BBVA')
+            ->assertJsonPath('data.bank_account.clabe_masked', '**************4567');
+        $this->postIdempotent("/api/v1/cashier/vouchers/{$segundoVale->id}/release", ['lock_version' => 1])
+            ->assertSuccessful();
+        $this->assertDatabaseCount('distributor_bank_accounts', 1);
+
+        $tercerVale = $segundoVale->replicate(['id', 'folio', 'created_at', 'updated_at']);
+        $tercerVale->forceFill([
+            'id' => (string) Str::uuid(),
+            'folio' => 'VAL-2026-99999996',
+            'status' => EstadoVale::GENERADO,
+            'lock_version' => 1,
+        ])->save();
+        $this->postIdempotent("/api/v1/cashier/vouchers/{$tercerVale->id}/release", [
+            'lock_version' => 1,
+            'bank_name' => 'Banorte',
+            'clabe' => '987654321098765432',
+        ])->assertSuccessful()
+            ->assertJsonPath('data.bank_account.bank_name', 'Banorte')
+            ->assertJsonPath('data.bank_account.clabe_masked', '**************5432');
+        $this->assertDatabaseHas('distributor_bank_accounts', [
+            'distributor_id' => $distribuidora->id,
+            'bank_name' => 'BBVA',
+            'is_current' => false,
+        ]);
+        $this->assertDatabaseCount('distributor_bank_accounts', 2);
     }
 
     public function test_cajera_puede_buscar_vale_de_cliente_final_sin_datos_opcionales(): void

@@ -14,7 +14,7 @@ final class RelacionDistribuidoraController extends Controller
     public function index(Request $request)
     {
         $query = RelacionDistribuidora::query()
-            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos'])
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos', 'partidas'])
             ->latest('cutoff_at');
         $this->scope($query, $request);
         if ($request->filled('cutoff')) {
