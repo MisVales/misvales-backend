@@ -10,6 +10,11 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('user_role_scopes', function (Blueprint $table) {
+            if (DB::getDriverName() === 'mysql') {
+                // Preserve an index for FK user_id before dropping the legacy composite unique index.
+                $table->index('user_id', 'user_role_scopes_user_id_idx');
+            }
+
             $table->dropIndex('user_role_scopes_global_unique');
             $table->dropIndex('user_role_scopes_branch_unique');
 
@@ -38,8 +43,7 @@ return new class extends Migration
             $table->index(['scope_type', 'status']);
         });
 
-        if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'pgsql') {
                 DB::statement(<<<'SQL'
             CREATE UNIQUE INDEX user_role_scopes_active_global_unique
             ON user_role_scopes (user_id, role_id, scope_type)
@@ -69,8 +73,7 @@ return new class extends Migration
             (status IN ('ENDED', 'REVOKED') AND revoked_at IS NOT NULL)
         );");
 
-                if (DB::getDriverName() !== 'sqlite') {
-                    DB::statement(<<<'SQL'
+                DB::statement(<<<'SQL'
                 CREATE OR REPLACE FUNCTION prevent_urs_deletion()
                 RETURNS trigger AS $$
                 BEGIN
@@ -78,39 +81,35 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             SQL);
-                    DB::statement('
+                DB::statement('
                 CREATE TRIGGER trg_prevent_urs_deletion
                 BEFORE DELETE ON user_role_scopes
                 FOR EACH ROW EXECUTE FUNCTION prevent_urs_deletion();
             ');
-                }
-            }
         }
     }
 
     public function down(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
-                DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
-            }
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_urs_deletion ON user_role_scopes;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_urs_deletion();');
         }
 
         Schema::table('user_role_scopes', function (Blueprint $table) {
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'pgsql') {
                 DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_status_consistency;');
             }
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'pgsql') {
                 DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_valid_dates;');
             }
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'pgsql') {
                 DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_branch_match;');
             }
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'pgsql') {
                 DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_urs_status;');
             }
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'pgsql') {
                 DB::statement('ALTER TABLE user_role_scopes DROP CONSTRAINT IF EXISTS chk_scope_type;');
             }
 
@@ -136,7 +135,9 @@ return new class extends Migration
             $table->dropColumn(['scope_type', 'status', 'created_at', 'updated_at']);
         });
 
-        DB::statement('CREATE UNIQUE INDEX user_role_scopes_global_unique ON user_role_scopes (user_id, role_id) WHERE branch_id IS NULL AND revoked_at IS NULL');
-        DB::statement('CREATE UNIQUE INDEX user_role_scopes_branch_unique ON user_role_scopes (user_id, role_id, branch_id) WHERE branch_id IS NOT NULL AND revoked_at IS NULL');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('CREATE UNIQUE INDEX user_role_scopes_global_unique ON user_role_scopes (user_id, role_id) WHERE branch_id IS NULL AND revoked_at IS NULL');
+            DB::statement('CREATE UNIQUE INDEX user_role_scopes_branch_unique ON user_role_scopes (user_id, role_id, branch_id) WHERE branch_id IS NOT NULL AND revoked_at IS NULL');
+        }
     }
 };
