@@ -13,6 +13,7 @@ use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CatalogoVehiculosSolicitudController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\CentroOperacionController;
+use App\Http\Controllers\Api\V1\ReportesExportController;
 use App\Http\Controllers\Api\V1\ClienteController;
 use App\Http\Controllers\Api\V1\ConciliacionBancariaController;
 use App\Http\Controllers\Api\V1\ConfiguracionController;
@@ -342,6 +343,8 @@ Route::prefix('v1')->group(function () {
         Route::get('notifications/unread-count', [CentroOperacionController::class, 'unreadCount']);
         Route::patch('notifications/{notification}/read', [CentroOperacionController::class, 'markNotification']);
         Route::post('notifications/read-all', [CentroOperacionController::class, 'markAllNotifications'])->middleware('idempotency');
+        Route::get('reports/points-balance/export', [ReportesExportController::class, 'pointsBalance']);
+        Route::get('reports/pre-requests/export', [ReportesExportController::class, 'preRequests']);
         Route::get('reports', [CentroOperacionController::class, 'reports']);
         Route::get('reports/{report}', [CentroOperacionController::class, 'report']);
         Route::get('audit-logs', [CentroOperacionController::class, 'audits']);

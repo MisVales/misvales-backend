@@ -22,6 +22,7 @@
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
         "nyholm/psr7": "^1.8",
+        "openspout/openspout": "^5.11",
         "pragmarx/google2fa": "^9.0",
         "predis/predis": "^3.5",
         "web-auth/webauthn-lib": "^5.3"

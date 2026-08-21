@@ -137,7 +137,6 @@ final class ValesEjemploSeeder extends Seeder
         $categoria = Category::query()->firstOrNew(['code' => 'CAT-DEMO-VALES']);
         if (! $categoria->exists) {
             $categoria->forceFill([
-                'name' => 'Categoría demostración',
                 'status' => 'ACTIVE',
                 'lock_version' => 0,
                 'created_by' => $usuario->id,
@@ -193,7 +192,6 @@ final class ValesEjemploSeeder extends Seeder
         $producto = Product::query()->firstOrNew(['code' => "VAL-DEMO-{$importe}"]);
         if (! $producto->exists) {
             $producto->forceFill([
-                'name' => "Vale de $".number_format($importe),
                 'status' => 'ACTIVE',
                 'lock_version' => 0,
                 'created_by' => $usuario->id,
