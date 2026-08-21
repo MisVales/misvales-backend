@@ -44,6 +44,10 @@ class ApiExceptionHandlerTest extends TestCase
             throw new \Exception('Un error SQL secreto de base de datos o fallo.');
         });
 
+        Route::get('api/v1/test-throwable-with-version-word', function () {
+            throw new \Exception('No se pudo leer lock_version del vale.');
+        });
+
         Route::get('api/v1/test-api-exception', function () {
             throw new ApiException('CUSTOM_ERROR', 'Mensaje de dominio', 400, ['campo' => 'detalle']);
         });
@@ -98,6 +102,14 @@ class ApiExceptionHandlerTest extends TestCase
             ->assertJsonPath('error.code', 'INTERNAL_ERROR');
 
         $this->assertStringNotContainsString('SQL', $response->getContent());
+    }
+
+    public function test_throwable_with_version_in_message_is_not_misreported_as_client_compatibility_error()
+    {
+        $response = $this->getJson('api/v1/test-throwable-with-version-word');
+
+        $response->assertStatus(500)
+            ->assertJsonPath('error.code', 'INTERNAL_ERROR');
     }
 
     public function test_custom_api_exception_returns_canonical_format()

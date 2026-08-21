@@ -27,7 +27,7 @@ final class CajaValeController extends Controller
         }
         $branches = $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
         $term = $request->string('search')->toString();
-        $query = Vale::query()->with(['cliente.domicilioVigente', 'cliente.cuentaBancariaVigente', 'cliente.archivosAdjuntos', 'distribuidora.usuario', 'versionProducto'])->whereIn('branch_id', $branches)->where(function ($query) use ($term): void {
+        $query = Vale::query()->with(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto'])->whereIn('branch_id', $branches)->where(function ($query) use ($term): void {
             $query->where('folio', 'ilike', '%'.$term.'%')->orWhereHas('cliente', fn ($client) => $client->whereRaw("concat_ws(' ', first_name, first_last_name, second_last_name) ilike ?", ['%'.$term.'%']));
         });
 
@@ -40,7 +40,7 @@ final class CajaValeController extends Controller
             throw new ExcepcionVale('VOUCHER_BRANCH_FORBIDDEN', 'Vale fuera de sucursal.', 404);
         }
 
-        return new ValeCajaResource($vale->load(['cliente.domicilioVigente', 'cliente.cuentaBancariaVigente', 'cliente.archivosAdjuntos', 'distribuidora.usuario', 'versionProducto', 'parcialidades']));
+        return new ValeCajaResource($vale->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto', 'parcialidades']));
     }
 
     public function release(Vale $vale, LiberarValeRequest $request, ServicioCajaVale $service): ValeCajaResource
@@ -51,12 +51,12 @@ final class CajaValeController extends Controller
             $request->integer('lock_version'),
             $request->validated('bank_name'),
             $request->validated('clabe')
-        )->load(['cliente.domicilioVigente', 'cliente.cuentaBancariaVigente', 'cliente.archivosAdjuntos', 'distribuidora.usuario', 'versionProducto']));
+        )->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
     }
 
     public function cash(Vale $vale, FeriarValeRequest $request, ServicioCajaVale $service): ValeCajaResource
     {
-        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->string('bank_transaction_number')->toString(), $request->integer('lock_version'))->load(['cliente.domicilioVigente', 'cliente.cuentaBancariaVigente', 'cliente.archivosAdjuntos', 'distribuidora.usuario', 'versionProducto']));
+        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->string('bank_transaction_number')->toString(), $request->integer('lock_version'))->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
     }
 
     public function requestModification(Vale $vale, SolicitarModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)

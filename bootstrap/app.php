@@ -7,8 +7,8 @@ use App\Http\Middleware\RequireActiveUser;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\RequirePermission;
 use App\Http\Middleware\TraceRequest;
-use App\Http\Middleware\TrustConfiguredProxies;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Http\Middleware\TrustConfiguredProxies;
 use App\Models\SolicitudDistribuidora;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
@@ -355,7 +355,6 @@ return Application::configure(basePath: dirname(__DIR__))
                 $e instanceof InvalidOrganizationAssignment => ['INVALID_ORGANIZATION_ASSIGNMENT', 422, 'Asignación organizacional inválida.'],
                 $e instanceof InvalidBranchAddress => ['INVALID_BRANCH_ADDRESS', 422, 'Dirección de sucursal inválida.'],
                 $e instanceof AddressValidationUnavailable => ['SERVICE_UNAVAILABLE', 503, 'El servicio de validación no está disponible temporalmente.'],
-                $e->getCode() === 426 || str_contains($e->getMessage(), 'version') => ['VERSION_CONFLICT', 426, 'La versión de la aplicación cliente no es compatible.'],
                 default => null,
             };
 

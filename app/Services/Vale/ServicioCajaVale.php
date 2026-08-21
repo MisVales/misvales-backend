@@ -8,7 +8,8 @@ use App\Enums\TipoMovimientoLineaCredito;
 use App\Exceptions\ExcepcionVale;
 use App\Helpers\AuditHelper;
 use App\Models\Cliente;
-use App\Models\CuentaBancariaCliente;
+use App\Models\CuentaBancariaDistribuidora;
+use App\Models\Distribuidora;
 use App\Services\Cliente\ProtectorDatosCliente;
 use App\Models\LineaCredito;
 use App\Models\MediaFileBinding;
@@ -40,37 +41,40 @@ final class ServicioCajaVale
             }
 
             $cliente = Cliente::query()->lockForUpdate()->findOrFail($vale->client_id);
-            if (! $this->tieneComprobanteDomicilio($cliente)) {
-                throw new ExcepcionVale('ADDRESS_PROOF_REQUIRED', 'Adjunta el comprobante de domicilio antes de liberar el vale.', 422);
+            $distribuidora = Distribuidora::query()
+                ->with('usuario:id,name')
+                ->lockForUpdate()
+                ->findOrFail($vale->distributor_id);
+            if (! $this->tieneComprobanteDomicilio($distribuidora->application_id)) {
+                throw new ExcepcionVale('ADDRESS_PROOF_REQUIRED', 'Adjunta el comprobante de domicilio de la distribuidora antes de liberar el vale.', 422);
             }
 
-            // Si se proporciona información bancaria, se registra para el cliente.
+            // Una cuenta pertenece a la distribuidora y se reutiliza en sus siguientes vales.
             if ($bankName && $clabe) {
-                $vigente = $cliente->cuentaBancariaVigente()->lockForUpdate()->first();
-                if (!$vigente) {
+                $vigente = $distribuidora->cuentaBancariaVigente()->lockForUpdate()->first();
+                $clabeHmac = $this->protector->hmacExacto(trim($clabe));
+                if ($vigente === null || ! hash_equals($vigente->clabe_hmac, $clabeHmac)) {
                     $ahora = now();
-                    $cuenta = new CuentaBancariaCliente([
-                        'client_id' => $cliente->id,
+                    if ($vigente !== null) {
+                        $vigente->forceFill(['is_current' => false, 'ends_at' => $ahora])->save();
+                    }
+
+                    $cuenta = new CuentaBancariaDistribuidora([
+                        'distributor_id' => $distribuidora->id,
                         'bank_name' => trim($bankName),
-                        'account_holder_name' => $cliente->full_name,
+                        'account_holder_name' => $distribuidora->usuario->name,
                         'is_current' => true,
                         'starts_at' => $ahora,
                         'created_by' => $cajera->id,
-                        'change_reason' => 'Capturado en caja durante la liberación del primer vale.',
+                        'change_reason' => $vigente === null
+                            ? 'Capturado en caja durante la liberación del primer vale.'
+                            : 'Actualizado en caja durante la liberación de un vale.',
                     ]);
                     $cuenta->forceFill([
-                        'account_number_ciphertext' => null,
-                        'account_number_hmac' => null,
                         'clabe_ciphertext' => $this->protector->cifrar(trim($clabe)),
-                        'clabe_hmac' => $this->protector->hmacExacto(trim($clabe)),
+                        'clabe_hmac' => $clabeHmac,
                         'lock_version' => 1,
                     ])->save();
-                    $cliente->forceFill(['lock_version' => $cliente->lock_version + 1])->save();
-                    OutboxEvent::create([
-                        'event_type' => 'CLIENT_BANK_ACCOUNT_ADDED',
-                        'payload' => ['client_id' => $cliente->id, 'bank_account_id' => $cuenta->id, 'distributor_id' => $vale->distributor_id],
-                        'status' => 'PENDING',
-                    ]);
                 }
             }
 
@@ -133,13 +137,12 @@ final class ServicioCajaVale
         }
     }
 
-    private function tieneComprobanteDomicilio(Cliente $cliente): bool
+    private function tieneComprobanteDomicilio(string $applicationId): bool
     {
-        return $cliente->domicilioVigente()->whereNotNull('address_proof_media_id')->exists()
-            || MediaFileBinding::query()
-                ->where('owner_type', 'client')
-                ->where('owner_id', $cliente->id)
-                ->where('purpose', 'ADDRESS_PROOF')
-                ->exists();
+        return MediaFileBinding::query()
+            ->where('owner_type', 'distributor_application')
+            ->where('owner_id', $applicationId)
+            ->where('purpose', 'ADDRESS_PROOF')
+            ->exists();
     }
 }
