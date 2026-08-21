@@ -374,8 +374,8 @@ class SecurityController extends Controller
             Cache::forget($cacheKey);
 
             return response()->json(['message' => 'Passkey registrado correctamente.']);
-        } catch (\Exception $e) {
-            throw new ApiException('PASSKEY_REGISTRATION_FAILED', 'Error al registrar el Passkey: '.$e->getMessage(), 400);
+        } catch (\Exception) {
+            throw new ApiException('PASSKEY_REGISTRATION_FAILED', 'No fue posible registrar la llave de acceso.', 400);
         }
     }
 
