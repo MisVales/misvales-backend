@@ -55,6 +55,7 @@ final class GeneracionValeApiTest extends TestCase
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $this->distribuidora->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $this->actor->id, 'reason' => 'Prueba']);
         $product = Product::query()->create(['code' => 'VAL-10000', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
         $this->producto = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale 10000', 'nominal_amount' => '10000.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
+        $this->publicarConfiguracionFinanciera();
         Sanctum::actingAs($this->actor);
     }
 
@@ -74,14 +75,36 @@ final class GeneracionValeApiTest extends TestCase
         $this->assertSame('0.100000', $response->json('data.financial_snapshot.calculation.loan_commission_percentage'));
     }
 
-    public function test_segundo_vale_global_del_cliente_es_digital_y_folios_no_se_reutilizan(): void
+    public function test_segundo_vale_de_la_distribuidora_es_digital_y_folios_no_se_reutilizan(): void
     {
         $primero = $this->crear()->json('data.folio');
         $segundo = $this->crear()->assertJsonPath('data.type', 'VALE_DIGITAL')->json('data.folio');
         $this->assertNotSame($primero, $segundo);
     }
 
-    public function test_transferencia_no_reinicia_historial_de_prevale(): void
+    public function test_primer_vale_de_otro_cliente_de_la_distribuidora_es_digital(): void
+    {
+        $this->crear()->assertJsonPath('data.type', 'PREVALE');
+        $otroCliente = Cliente::factory()->create(['created_by' => $this->actor->id]);
+        AsignacionClienteDistribuidora::query()->create([
+            'client_id' => $otroCliente->id,
+            'distributor_id' => $this->distribuidora->id,
+            'branch_id' => $this->distribuidora->branch_id,
+            'starts_at' => now(),
+            'assigned_by' => $this->actor->id,
+            'reason' => 'Prueba de segundo vale de distribuidora',
+        ]);
+
+        $this->postJson('/api/v1/vouchers/preview', [
+            'client_id' => $otroCliente->id,
+            'product_version_id' => $this->producto->id,
+            'installment_count' => 4,
+        ])->assertSuccessful()->assertJsonPath('data.voucher_type', 'VALE_DIGITAL');
+
+        $this->crear($otroCliente)->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
+    }
+
+    public function test_transferencia_inicia_un_nuevo_historial_de_prevale_por_distribuidora(): void
     {
         $this->crear()->assertJsonPath('data.type', 'PREVALE');
         $asignacion = AsignacionClienteDistribuidora::query()->where('client_id', $this->cliente->id)->whereNull('ends_at')->firstOrFail();
@@ -94,7 +117,7 @@ final class GeneracionValeApiTest extends TestCase
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $nuevaDistribuidora->id, 'category_version_id' => $versionCategoria, 'starts_at' => now()->subMinute(), 'assigned_by' => $nuevoActor->id, 'reason' => 'Transferencia']);
         AsignacionClienteDistribuidora::query()->create(['client_id' => $this->cliente->id, 'distributor_id' => $nuevaDistribuidora->id, 'branch_id' => $branch->id, 'starts_at' => now(), 'assigned_by' => $nuevoActor->id, 'reason' => 'Transferencia']);
         Sanctum::actingAs($nuevoActor);
-        $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
+        $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
     }
 
     public function test_secuencia_postgresql_reserva_folios_no_reutilizables(): void
@@ -171,9 +194,40 @@ final class GeneracionValeApiTest extends TestCase
         $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $ajeno->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200])->assertStatus(404)->assertJsonPath('error.code', 'CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR');
     }
 
-    private function crear()
+    private function crear(?Cliente $cliente = null)
     {
-        return $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200]);
+        return $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => ($cliente ?? $this->cliente)->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200]);
+    }
+
+    private function publicarConfiguracionFinanciera(): void
+    {
+        $valores = [
+            'LOAN_COMMISSION_PERCENTAGE' => ['PERCENTAGE', '0.1000'],
+            'INTEREST_RATE_PER_FORTNIGHT' => ['PERCENTAGE', '0.0300'],
+            'VOUCHER_INSURANCE_AMOUNT' => ['DECIMAL', '100.0000'],
+            'LATE_FEE_AMOUNT' => ['DECIMAL', '200.0000'],
+        ];
+
+        foreach ($valores as $key => [$tipo, $valor]) {
+            $definicion = ConfigurationDefinition::query()->create([
+                'key' => $key,
+                'name' => $key,
+                'value_type' => $tipo,
+                'status' => 'ACTIVE',
+                'created_by' => $this->actor->id,
+            ]);
+            ConfigurationVersion::query()->create([
+                'configuration_definition_id' => $definicion->id,
+                'version' => 1,
+                'value' => $valor,
+                'status' => 'PUBLISHED',
+                'effective_from' => now()->subDay(),
+                'reason' => 'Configuración financiera de prueba',
+                'created_by' => $this->actor->id,
+                'published_by' => $this->actor->id,
+                'published_at' => now(),
+            ]);
+        }
     }
 
     private function usuarioConRol(string $rol, ?string $branchId = null): User
