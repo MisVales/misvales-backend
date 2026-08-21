@@ -128,7 +128,14 @@ final class CentroOperacionController extends Controller
         
         $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
 
-        return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
+        try {
+            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'RELATION_CONFIGURATION_INCOMPLETE') {
+                return response()->json(['message' => 'Falta configuración en el sistema (horarios/días) para poder generar el corte.'], 422);
+            }
+            throw $e;
+        }
     }
 
     private function authorizeNotifications(Request $request): void
