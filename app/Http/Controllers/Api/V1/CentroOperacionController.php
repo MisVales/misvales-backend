@@ -74,17 +74,42 @@ final class CentroOperacionController extends Controller
     {
         $actor = $request->user();
         abort_unless($actor->hasPermissionTo('audit.view_global') || $actor->hasPermissionTo('audit.view_branch'), 403);
-        $query = AuditLog::query()->latest();
+        $query = AuditLog::query()->with(['actor', 'branch'])->latest();
         if (! $actor->hasPermissionTo('audit.view_global')) {
             $branches = $actor->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->whereNotNull('branch_id')->pluck('branch_id');
             $query->whereIn('branch_id', $branches);
         }
-        foreach (['event_name', 'entity_type', 'result', 'request_id', 'trace_id', 'correlation_id'] as $filter) {
+
+        if ($request->filled('search')) {
+            $s = '%' . trim($request->string('search')) . '%';
+            $query->where(function ($q) use ($s) {
+                $q->where('event_name', 'like', $s)
+                    ->orWhere('entity_type', 'like', $s)
+                    ->orWhere('reason', 'like', $s)
+                    ->orWhere('ip_address', 'like', $s)
+                    ->orWhere('request_id', 'like', $s)
+                    ->orWhere('trace_id', 'like', $s)
+                    ->orWhere('correlation_id', 'like', $s)
+                    ->orWhereHas('actor', function ($aq) use ($s) {
+                        $aq->where('name', 'like', $s)->orWhere('email', 'like', $s);
+                    });
+            });
+        }
+
+        foreach (['event_name', 'entity_type', 'actor_role', 'result', 'request_id', 'trace_id', 'correlation_id', 'branch_id'] as $filter) {
             if ($request->filled($filter)) {
                 $query->where($filter, $request->string($filter));
             }
         }
-        $page = $query->paginate(min($request->integer('per_page', 50), 100));
+
+        if ($request->filled('date_from')) {
+            $query->whereDate('created_at', '>=', $request->date('date_from'));
+        }
+        if ($request->filled('date_to')) {
+            $query->whereDate('created_at', '<=', $request->date('date_to'));
+        }
+
+        $page = $query->paginate(min($request->integer('per_page', 30), 100));
         $page->getCollection()->transform(function (AuditLog $audit) use ($sanitizer): array {
             $row = $audit->toArray();
             $row['previous_value'] = $sanitizer->sanitize($row['previous_value']);
