@@ -350,6 +350,15 @@ Route::prefix('v1')->group(function () {
         Route::get('operations/current-cutoff', [CentroOperacionController::class, 'currentCutoffSummary']);
         Route::post('operations/force-cutoff', [CentroOperacionController::class, 'forceCutoff'])->middleware('idempotency');
 
+        // Módulo - Puntos y canje por dinero
+        Route::get('points/balance', [\App\Http\Controllers\Api\V1\PuntosController::class, 'balance']);
+        Route::get('points/redemptions', [\App\Http\Controllers\Api\V1\PuntosController::class, 'redemptions']);
+        Route::get('points/redemptions/{redemption}', [\App\Http\Controllers\Api\V1\PuntosController::class, 'show']);
+        Route::post('points/redemptions', [\App\Http\Controllers\Api\V1\PuntosController::class, 'store'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/authorize', [\App\Http\Controllers\Api\V1\PuntosController::class, 'authorizeRequest'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/reject', [\App\Http\Controllers\Api\V1\PuntosController::class, 'rejectRequest'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/deliver', [\App\Http\Controllers\Api\V1\PuntosController::class, 'deliverRequest'])->middleware('idempotency');
+
         Route::get('reports/points-balance/export', [ReportesExportController::class, 'pointsBalance']);
         Route::get('reports/pre-requests/export', [ReportesExportController::class, 'preRequests']);
         Route::get('reports', [CentroOperacionController::class, 'reports']);

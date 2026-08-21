@@ -88,4 +88,19 @@ class Distribuidora extends Model
     {
         return $this->hasMany(AsignacionClienteDistribuidora::class, 'distributor_id');
     }
+
+    public function cuentaPuntos(): HasOne
+    {
+        return $this->hasOne(PointAccount::class, 'distributor_id');
+    }
+
+    public function canjesPuntos(): HasMany
+    {
+        return $this->hasMany(PointRedemptionRequest::class, 'distributor_id');
+    }
+
+    public function movimientosPuntos(): HasMany
+    {
+        return $this->hasMany(PointMovement::class, 'distributor_id');
+    }
 }
