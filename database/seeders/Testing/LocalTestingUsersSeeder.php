@@ -5,14 +5,18 @@ declare(strict_types=1);
 namespace Database\Seeders\Testing;
 
 use App\Models\MfaCredential;
+use App\Models\MediaFile;
+use App\Models\MediaFileBinding;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use App\Models\VerificationVisit;
 use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use PragmaRX\Google2FA\Google2FA;
 use RuntimeException;
@@ -20,6 +24,24 @@ use RuntimeException;
 final class LocalTestingUsersSeeder extends Seeder
 {
     private const PASSWORD = '1234';
+
+    /** @var array<string, list<string>> */
+    private const PEPE_MEDIA_SOURCES = [
+        'identification' => [
+            'C:\\Users\\saubt\\Downloads\\ine.webp',
+            'C:\\Users\\saubt\\Downloads\\OIP.jpg',
+        ],
+        'vehicle' => [
+            'C:\\Users\\saubt\\Downloads\\tenencia.webp',
+            'C:\\Users\\saubt\\Downloads\\titulocarro.jpg',
+        ],
+        'asset' => ['C:\\Users\\saubt\\Downloads\\titulo casa.webp'],
+        'visit' => [
+            'C:\\Users\\saubt\\Downloads\\fachada.webp',
+            'C:\\Users\\saubt\\Downloads\\interior.webp',
+            'C:\\Users\\saubt\\Downloads\\evidencia-01a021e5-a5eb-71e2-821f-4b9423297f6c.png',
+        ],
+    ];
 
     public function run(): void
     {
@@ -55,6 +77,9 @@ final class LocalTestingUsersSeeder extends Seeder
                 if ($roleCode === 'distributor' && $branchId !== null) {
                     $distribuidora = $this->setupDistributor($user, $branchId, $manager->id);
                     $scopeId = $distribuidora->id;
+                    if (app()->environment('local')) {
+                        $this->seedPepeMedia($user, $distribuidora, $manager);
+                    }
                 }
                 
                 $this->assign($user, $roleCode, $scopeType, $branchId, $manager->id, $scopeId);
@@ -208,5 +233,133 @@ final class LocalTestingUsersSeeder extends Seeder
             'digits' => 6,
             'period' => 30,
         ]);
+    }
+
+    private function seedPepeMedia(User $pepe, \App\Models\Distribuidora $distribuidora, User $manager): void
+    {
+        $application = $distribuidora->solicitud;
+        if ($application === null) {
+            throw new RuntimeException('No se encontró la solicitud de la distribuidora de Pepe para adjuntar sus evidencias.');
+        }
+
+        $this->attachMediaIfMissing(
+            'distributor_application',
+            $application->id,
+            'IDENTIFICATION',
+            'IDENTIFICATION_EVIDENCE',
+            $this->randomSource('identification'),
+            $pepe,
+        );
+        $this->attachMediaIfMissing(
+            'distributor_application',
+            $application->id,
+            'VEHICLE_EVIDENCE',
+            'VEHICLE_EVIDENCE',
+            $this->randomSource('vehicle'),
+            $pepe,
+        );
+        $this->attachMediaIfMissing(
+            'distributor_application',
+            $application->id,
+            'ASSET_EVIDENCE',
+            'ASSET_EVIDENCE',
+            $this->randomSource('asset'),
+            $pepe,
+        );
+
+        $verifier = User::query()->where('normalized_email', 'saul@gmail.com')->firstOrFail();
+        $visit = VerificationVisit::query()->firstOrCreate(
+            [
+                'application_id' => $application->id,
+                'status' => 'COMPLETED',
+                'result' => 'FAVORABLE',
+            ],
+            [
+                'verifier_id' => $verifier->id,
+                'assigned_by' => $manager->id,
+                'assigned_at' => now()->subHour(),
+                'started_at' => now()->subMinutes(50),
+                'visited_at' => now()->subMinutes(30),
+                'completed_at' => now()->subMinutes(30),
+                'observations' => 'Visita de demostración con evidencias adjuntas.',
+                'differences_payload' => null,
+                'lock_version' => 1,
+            ],
+        );
+
+        foreach ([
+            'FACHADA' => self::PEPE_MEDIA_SOURCES['visit'][0],
+            'INTERIOR' => self::PEPE_MEDIA_SOURCES['visit'][1],
+            'DOCUMENTO' => self::PEPE_MEDIA_SOURCES['visit'][2],
+        ] as $fileType => $source) {
+            $this->attachMediaIfMissing('verification_visit', $visit->id, 'EVIDENCE', $fileType, $source, $verifier);
+        }
+    }
+
+    private function attachMediaIfMissing(
+        string $ownerType,
+        string $ownerId,
+        string $purpose,
+        string $fileType,
+        string $source,
+        User $uploadedBy,
+    ): void {
+        $exists = MediaFileBinding::query()
+            ->where('owner_type', $ownerType)
+            ->where('owner_id', $ownerId)
+            ->where('purpose', $purpose)
+            ->whereHas('mediaFile', fn ($query) => $query->where('file_type', $fileType))
+            ->exists();
+
+        if ($exists) {
+            return;
+        }
+
+        if (! is_file($source)) {
+            throw new RuntimeException("No se encontró el archivo de demostración requerido: {$source}");
+        }
+
+        $extension = strtolower(pathinfo($source, PATHINFO_EXTENSION));
+        $destination = 'seed/pepe/'.Str::uuid().'.'.$extension;
+        $contents = file_get_contents($source);
+        if ($contents === false || ! Storage::disk(config('filesystems.default'))->put($destination, $contents)) {
+            throw new RuntimeException("No fue posible almacenar el archivo de demostración: {$source}");
+        }
+
+        $media = MediaFile::query()->create([
+            'file_type' => $fileType,
+            'disk' => config('filesystems.default'),
+            'path' => $destination,
+            'original_name' => basename($source),
+            'mime_type' => $this->mimeType($extension),
+            'size_bytes' => filesize($source),
+            'sha256' => hash_file('sha256', $source),
+            'uploaded_by' => $uploadedBy->id,
+            'validation_status' => 'VALIDATED',
+            'validated_at' => now(),
+        ]);
+
+        MediaFileBinding::query()->create([
+            'media_file_id' => $media->id,
+            'owner_type' => $ownerType,
+            'owner_id' => $ownerId,
+            'purpose' => $purpose,
+            'created_by' => $uploadedBy->id,
+        ]);
+    }
+
+    private function randomSource(string $group): string
+    {
+        return self::PEPE_MEDIA_SOURCES[$group][array_rand(self::PEPE_MEDIA_SOURCES[$group])];
+    }
+
+    private function mimeType(string $extension): string
+    {
+        return match ($extension) {
+            'jpg', 'jpeg' => 'image/jpeg',
+            'png' => 'image/png',
+            'webp' => 'image/webp',
+            default => throw new RuntimeException("Extensión no permitida para evidencia de demostración: {$extension}"),
+        };
     }
 }
