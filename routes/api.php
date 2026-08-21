@@ -13,7 +13,6 @@ use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
 use App\Http\Controllers\Api\V1\CatalogoVehiculosSolicitudController;
 use App\Http\Controllers\Api\V1\CategoriaController;
 use App\Http\Controllers\Api\V1\CentroOperacionController;
-use App\Http\Controllers\Api\V1\ReportesExportController;
 use App\Http\Controllers\Api\V1\ClienteController;
 use App\Http\Controllers\Api\V1\ConciliacionBancariaController;
 use App\Http\Controllers\Api\V1\ConfiguracionController;
@@ -31,8 +30,10 @@ use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PermissionController;
 use App\Http\Controllers\Api\V1\ProductoController;
+use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
+use App\Http\Controllers\Api\V1\ReportesExportController;
 use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
@@ -353,13 +354,13 @@ Route::prefix('v1')->group(function () {
         Route::post('operations/force-cutoff', [CentroOperacionController::class, 'forceCutoff'])->middleware('idempotency');
 
         // Módulo - Puntos y canje por dinero
-        Route::get('points/balance', [\App\Http\Controllers\Api\V1\PuntosController::class, 'balance']);
-        Route::get('points/redemptions', [\App\Http\Controllers\Api\V1\PuntosController::class, 'redemptions']);
-        Route::get('points/redemptions/{redemption}', [\App\Http\Controllers\Api\V1\PuntosController::class, 'show']);
-        Route::post('points/redemptions', [\App\Http\Controllers\Api\V1\PuntosController::class, 'store'])->middleware('idempotency');
-        Route::post('points/redemptions/{redemption}/authorize', [\App\Http\Controllers\Api\V1\PuntosController::class, 'authorizeRequest'])->middleware('idempotency');
-        Route::post('points/redemptions/{redemption}/reject', [\App\Http\Controllers\Api\V1\PuntosController::class, 'rejectRequest'])->middleware('idempotency');
-        Route::post('points/redemptions/{redemption}/deliver', [\App\Http\Controllers\Api\V1\PuntosController::class, 'deliverRequest'])->middleware('idempotency');
+        Route::get('points/balance', [PuntosController::class, 'balance']);
+        Route::get('points/redemptions', [PuntosController::class, 'redemptions']);
+        Route::get('points/redemptions/{redemption}', [PuntosController::class, 'show']);
+        Route::post('points/redemptions', [PuntosController::class, 'store'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/authorize', [PuntosController::class, 'authorizeRequest'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/reject', [PuntosController::class, 'rejectRequest'])->middleware('idempotency');
+        Route::post('points/redemptions/{redemption}/deliver', [PuntosController::class, 'deliverRequest'])->middleware('idempotency');
 
         Route::get('reports/points-balance/export', [ReportesExportController::class, 'pointsBalance']);
         Route::get('reports/pre-requests/export', [ReportesExportController::class, 'preRequests']);
