@@ -54,6 +54,13 @@ final class ServicioGeneracionRelacion
             }
             AuditLog::create(['entity_type' => 'distributor_relation', 'event_name' => 'RelationGenerated', 'entity_id' => $relation->id, 'new_value' => ['cutoff_at' => $cutoff->toIso8601String(), 'items' => $items->count(), 'balance' => $misvales], 'result' => 'SUCCESS']);
             $this->surpluses->aplicarDisponibles($relation);
+            
+            // Notificar a la distribuidora sobre el nuevo saldo de corte
+            $d->usuario->notify(new \App\Notifications\NotificacionEventoDominio([
+                'title' => 'Nuevo corte generado',
+                'description' => "Tu corte ha sido generado. Tienes un saldo por pagar de $" . number_format((float)$relation->balance, 2) . ". Fecha límite: " . $relation->payment_deadline_at->setTimezone($config['timezone'])->format('d/m/Y h:i A') . ".",
+                'deep_link' => '/cartera'
+            ]));
         }
 
         return $groups->count();

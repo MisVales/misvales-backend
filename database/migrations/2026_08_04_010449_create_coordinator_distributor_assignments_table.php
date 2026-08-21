@@ -41,18 +41,31 @@ return new class extends Migration
         });
 
         // 6.6 Ãndices
-        // Una distribuidora solo puede tener un coordinador activo:
-        DB::statement("
+        // Una distribuidora solo puede tener un coordinador activo.
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("
             CREATE UNIQUE INDEX coordinator_distributor_active_distributor_unique
             ON coordinator_distributor_assignments (distributor_id)
             WHERE status = 'ACTIVE' AND valid_to IS NULL;
         ");
 
-        DB::statement("
+            DB::statement("
             CREATE UNIQUE INDEX coordinator_distributor_active_pair_unique
             ON coordinator_distributor_assignments (coordinator_id, distributor_id, branch_id)
             WHERE status = 'ACTIVE' AND valid_to IS NULL;
         ");
+        }
+
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('coordinator_distributor_assignments', function (Blueprint $table) {
+                $table->unsignedTinyInteger('active_marker')
+                    ->nullable()
+                    ->storedAs("IF(status = 'ACTIVE' AND valid_to IS NULL, 1, NULL)");
+
+                $table->unique(['distributor_id', 'active_marker'], 'coordinator_distributor_active_distributor_unique');
+                $table->unique(['coordinator_id', 'distributor_id', 'branch_id', 'active_marker'], 'coordinator_distributor_active_pair_unique');
+            });
+        }
 
         // 6.5 Constraints
         DB::statement("ALTER TABLE coordinator_distributor_assignments ADD CONSTRAINT chk_cda_status CHECK (status IN ('ACTIVE', 'ENDED', 'REASSIGNED'));");
@@ -64,10 +77,8 @@ return new class extends Migration
             (status IN ('ENDED', 'REASSIGNED') AND valid_to IS NOT NULL)
         );");
 
-        if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                if (DB::getDriverName() !== 'sqlite') {
-                    DB::statement("
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement("
                 CREATE OR REPLACE FUNCTION prevent_cda_deletion()
                 RETURNS trigger AS $$
                 BEGIN
@@ -75,13 +86,11 @@ return new class extends Migration
                 END;
                 $$ LANGUAGE plpgsql;
             ");
-                    DB::statement('
+            DB::statement('
                 CREATE TRIGGER trg_prevent_cda_deletion
                 BEFORE DELETE ON coordinator_distributor_assignments
                 FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
             ');
-                }
-            }
         }
     }
 
@@ -90,11 +99,9 @@ return new class extends Migration
      */
     public function down(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
-                DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
-            }
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
+            DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');
         }
 
         Schema::dropIfExists('coordinator_distributor_assignments');
