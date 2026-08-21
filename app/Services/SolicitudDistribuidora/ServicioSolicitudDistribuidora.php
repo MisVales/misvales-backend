@@ -431,14 +431,42 @@ final class ServicioSolicitudDistribuidora
             return;
         }
 
-        $sucursales = $asignaciones
-            ->whereIn('role_code', ['branch_manager', 'coordinator'])
+        $sucursalesGerente = $asignaciones
+            ->where('role_code', 'branch_manager')
             ->pluck('branch_id')
             ->filter()
             ->unique()
-            ->values();
+            ->values()
+            ->all();
 
-        $consulta->whereIn('branch_id', $sucursales);
+        $sucursalesCoordinador = $asignaciones
+            ->where('role_code', 'coordinator')
+            ->pluck('branch_id')
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if (empty($sucursalesGerente) && empty($sucursalesCoordinador)) {
+            $consulta->whereRaw('1 = 0');
+            return;
+        }
+
+        $consulta->where(function (Builder $query) use ($sucursalesGerente, $sucursalesCoordinador, $actor) {
+            if (!empty($sucursalesGerente)) {
+                $query->orWhereIn('branch_id', $sucursalesGerente);
+            }
+
+            if (!empty($sucursalesCoordinador)) {
+                $query->orWhere(function (Builder $subQuery) use ($sucursalesCoordinador, $actor) {
+                    $subQuery->whereIn('branch_id', $sucursalesCoordinador)
+                        ->where(function (Builder $q) use ($actor) {
+                            $q->where('coordinator_id', $actor->id)
+                              ->orWhere('created_by', $actor->id);
+                        });
+                });
+            }
+        });
     }
 
     private function listarRegistros(User $actor, SolicitudDistribuidora $solicitud, string $relacion)

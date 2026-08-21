@@ -70,4 +70,11 @@ class Cliente extends Model
     {
         return $this->hasMany(MovimientoCarteraCliente::class, 'client_id');
     }
+
+    public function archivosAdjuntos(): HasMany
+    {
+        return $this->hasMany(MediaFileBinding::class, 'owner_id')
+            ->where('owner_type', 'client')
+            ->latest();
+    }
 }

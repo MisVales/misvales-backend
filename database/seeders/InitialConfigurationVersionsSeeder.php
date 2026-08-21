@@ -58,10 +58,6 @@ final class InitialConfigurationVersionsSeeder extends Seeder
     }
 
     /**
-     * Las condiciones financieras de un vale no se precargan: el gerente
-     * general las publica explícitamente antes de operar. Así no se inventan
-     * tasas, seguros ni plazos al inicializar una instalación.
-     *
      * @return array<string, int|string>
      */
     private function values(): array
@@ -75,8 +71,10 @@ final class InitialConfigurationVersionsSeeder extends Seeder
             'BANK_UPLOAD_DEADLINE_TIME' => '08:00',
             'POST_DUE_EVALUATION_TIME' => '08:30',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
-            'LATE_FEE_AMOUNT' => '300.0000',
-            'MODIFICATION_TOKEN_TTL' => 5,
+            'LOAN_COMMISSION_PERCENTAGE' => '0.1000',
+            'INTEREST_RATE_PER_FORTNIGHT' => '0.0300',
+            'VOUCHER_INSURANCE_AMOUNT' => '100.0000',
+            'LATE_FEE_AMOUNT' => '200.0000',
         ];
     }
 

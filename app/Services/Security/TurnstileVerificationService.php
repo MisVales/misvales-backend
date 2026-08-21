@@ -21,6 +21,10 @@ class TurnstileVerificationService
         $hasSecret = ! empty($secret) && is_string($secret) && trim($secret) !== '';
         $hasToken = ! empty($token) && is_string($token) && trim($token) !== '';
 
+        if (app()->environment('local')) {
+            return true;
+        }
+
         // Caso A: Turnstile deshabilitado en backend y no enviado por cliente
         if (! $hasSecret && ! $hasToken) {
             return true;

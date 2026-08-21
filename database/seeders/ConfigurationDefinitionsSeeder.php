@@ -33,6 +33,15 @@ final class ConfigurationDefinitionsSeeder extends Seeder
 
                 $definition->save();
             }
+
+            ConfigurationDefinition::query()
+                ->whereIn('key', ['VOUCHER_FORTNIGHTS_COUNT', 'MODIFICATION_TOKEN_TTL'])
+                ->each(function (ConfigurationDefinition $definition) use ($managerId): void {
+                    $definition->forceFill([
+                        'status' => 'INACTIVE',
+                        'updated_by' => $managerId,
+                    ])->save();
+                });
         });
     }
 
@@ -51,9 +60,7 @@ final class ConfigurationDefinitionsSeeder extends Seeder
             ['key' => 'LOAN_COMMISSION_PERCENTAGE', 'name' => 'Comisión del préstamo', 'description' => 'Porcentaje global aplicado al capital al emitir un vale nuevo.', 'value_type' => 'PERCENTAGE', 'unit' => 'percentage'],
             ['key' => 'INTEREST_RATE_PER_FORTNIGHT', 'name' => 'Interés por quincena', 'description' => 'Porcentaje global de interés simple aplicado por cada quincena de un vale nuevo.', 'value_type' => 'PERCENTAGE', 'unit' => 'percentage'],
             ['key' => 'VOUCHER_INSURANCE_AMOUNT', 'name' => 'Seguro del vale', 'description' => 'Importe global de seguro aplicado al emitir un vale nuevo.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
-            ['key' => 'VOUCHER_FORTNIGHTS_COUNT', 'name' => 'Número de quincenas', 'description' => 'Plazo global en quincenas aplicado al emitir un vale nuevo.', 'value_type' => 'INTEGER', 'unit' => 'fortnights'],
             ['key' => 'LATE_FEE_AMOUNT', 'name' => 'Recargo por falta de pago', 'description' => 'Importe del recargo aplicable por falta de pago.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
-            ['key' => 'MODIFICATION_TOKEN_TTL', 'name' => 'Vigencia del token de modificación', 'description' => 'Duración de vigencia de un token de modificación autorizada.', 'value_type' => 'DURATION', 'unit' => 'minutes'],
             ['key' => 'EARLY_PAYMENT_PERIOD', 'name' => 'Periodo de pago anticipado', 'description' => 'Desplazamientos en días, desde el corte, para el inicio y fin del periodo de pago anticipado.', 'value_type' => 'JSON', 'unit' => 'days_after_cutoff'],
             ['key' => 'RELATION_PAYMENT_BANK', 'name' => 'Datos bancarios para relaciones', 'description' => 'Banco, beneficiario, convenio y CLABE publicados para el pago de relaciones.', 'value_type' => 'JSON', 'unit' => null],
         ];

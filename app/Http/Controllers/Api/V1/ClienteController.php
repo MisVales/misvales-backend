@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\ExcepcionCliente;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Cliente\CrearClienteRequest;
+use App\Http\Requests\Api\V1\Cliente\CrearClienteParaValeRequest;
 use App\Http\Requests\Api\V1\Cliente\EnlistarClientesRequest;
 use App\Http\Resources\Api\V1\Cliente\ClienteDetalleResource;
 use App\Http\Resources\Api\V1\Cliente\ClienteResource;
@@ -32,6 +33,15 @@ class ClienteController extends Controller
         }
 
         $cliente = $servicio->registrar($request->validated(), $request->user());
+
+        return response()->json([
+            'data' => (new ClienteResource($cliente))->resolve($request),
+        ], 201);
+    }
+
+    public function storeForVoucher(CrearClienteParaValeRequest $request, ServicioRegistroCliente $servicio): JsonResponse
+    {
+        $cliente = $servicio->registrarBasicoParaVale($request->validated(), $request->user());
 
         return response()->json([
             'data' => (new ClienteResource($cliente))->resolve($request),

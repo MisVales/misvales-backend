@@ -13,6 +13,10 @@ final class LiberarValeRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['lock_version' => ['required', 'integer', 'min:1']];
+        return [
+            'lock_version' => ['required', 'integer', 'min:1'],
+            'bank_name' => ['nullable', 'string', 'max:255'],
+            'clabe' => ['nullable', 'string', 'size:18']
+        ];
     }
 }

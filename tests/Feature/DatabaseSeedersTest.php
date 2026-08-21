@@ -23,8 +23,8 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(1, $firstCounts['user_role_scopes']);
         self::assertSame(0, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(16, $firstCounts['configuration_definitions']);
-        self::assertSame(10, $firstCounts['configuration_versions']);
+        self::assertSame(14, $firstCounts['configuration_definitions']);
+        self::assertSame(12, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
         self::assertGreaterThan(0, $firstCounts['codigos_postales']);
@@ -163,8 +163,10 @@ final class DatabaseSeedersTest extends TestCase
             'BANK_UPLOAD_DEADLINE_TIME' => '08:00',
             'POST_DUE_EVALUATION_TIME' => '08:30',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
-            'LATE_FEE_AMOUNT' => '300.0000',
-            'MODIFICATION_TOKEN_TTL' => 5,
+            'LOAN_COMMISSION_PERCENTAGE' => '0.1000',
+            'INTEREST_RATE_PER_FORTNIGHT' => '0.0300',
+            'VOUCHER_INSURANCE_AMOUNT' => '100.0000',
+            'LATE_FEE_AMOUNT' => '200.0000',
         ];
     }
 }

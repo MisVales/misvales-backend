@@ -22,7 +22,15 @@ class DatabaseSeeder extends Seeder
             HeadquartersBranchSeeder::class,
             ConfigurationDefinitionsSeeder::class,
             InitialConfigurationVersionsSeeder::class,
+            InitialCatalogSeeder::class,
             SepomexSeeder::class,
         ]);
+
+        if (app()->environment('local', 'testing', 'development')) {
+            $this->call([
+                LocalDevSeeder::class,
+                ValesEjemploSeeder::class,
+            ]);
+        }
     }
 }

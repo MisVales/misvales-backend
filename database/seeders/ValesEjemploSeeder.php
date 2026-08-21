@@ -20,6 +20,7 @@ use App\Models\ProductVersion;
 use App\Models\User;
 use App\Models\Vale;
 use App\Services\Vale\CalculadorFinancieroVale;
+use App\Services\Vale\ConfiguracionFinancieraVale;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
@@ -137,7 +138,6 @@ final class ValesEjemploSeeder extends Seeder
         $categoria = Category::query()->firstOrNew(['code' => 'CAT-DEMO-VALES']);
         if (! $categoria->exists) {
             $categoria->forceFill([
-                'name' => 'Categoría demostración',
                 'status' => 'ACTIVE',
                 'lock_version' => 0,
                 'created_by' => $usuario->id,
@@ -193,7 +193,6 @@ final class ValesEjemploSeeder extends Seeder
         $producto = Product::query()->firstOrNew(['code' => "VAL-DEMO-{$importe}"]);
         if (! $producto->exists) {
             $producto->forceFill([
-                'name' => "Vale de $".number_format($importe),
                 'status' => 'ACTIVE',
                 'lock_version' => 0,
                 'created_by' => $usuario->id,
@@ -205,11 +204,7 @@ final class ValesEjemploSeeder extends Seeder
             [
                 'name' => "Vale de $".number_format($importe),
                 'nominal_amount' => number_format($importe, 4, '.', ''),
-                'loan_commission_percentage' => '0.100000',
-                'simple_interest_percentage' => '0.020000',
-                'insurance_amount' => '100.0000',
-                'fortnights_count' => 4,
-                'status' => 'PUBLISHED',
+                                'status' => 'PUBLISHED',
                 'effective_from' => now()->subDay(),
                 'reason' => 'Datos de demostración',
                 'created_by' => $usuario->id,
@@ -234,12 +229,13 @@ final class ValesEjemploSeeder extends Seeder
             return;
         }
 
+        $condiciones = app(ConfiguracionFinancieraVale::class)->resolver()['values'];
         $calculo = app(CalculadorFinancieroVale::class)->calcular(
             number_format($importe, 4, '.', ''),
-            (string) $versionProducto->loan_commission_percentage,
-            (string) $versionProducto->simple_interest_percentage,
-            (int) $versionProducto->fortnights_count,
-            (string) $versionProducto->insurance_amount,
+            $condiciones['loan_commission_percentage'],
+            $condiciones['simple_interest_percentage'],
+            4,
+            $condiciones['insurance_amount'],
             (string) $categoria->profit_percentage,
         );
 
@@ -254,7 +250,14 @@ final class ValesEjemploSeeder extends Seeder
             'product_id' => $versionProducto->product_id,
             'product_version_id' => $versionProducto->id,
             'category_version_id' => $categoria->id,
-            ...collect($calculo)->except('installments')->all(),
+            ...collect($calculo)->only([
+                'capital', 'loan_commission_percentage', 'loan_commission_amount',
+                'simple_interest_percentage', 'fortnights_count', 'insurance_amount',
+                'interest_total', 'misvales_total', 'misvales_payment_per_fortnight',
+                'distributor_profit_percentage', 'distributor_profit_total',
+                'distributor_profit_per_fortnight', 'client_payment_per_fortnight',
+                'client_total',
+            ])->all(),
             'financial_snapshot' => [
                 'source' => 'ValesEjemploSeeder',
                 'product_version_id' => $versionProducto->id,

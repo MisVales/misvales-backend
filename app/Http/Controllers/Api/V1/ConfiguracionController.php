@@ -2,8 +2,10 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Enums\BaseStatus;
 use App\Enums\VersionStatus;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Configuracion\ActualizarConfiguracionActualRequest;
 use App\Http\Requests\Configuracion\ActualizarVersionRequest;
 use App\Http\Requests\Configuracion\CrearConfiguracionRequest;
 use App\Http\Requests\Configuracion\CrearVersionRequest;
@@ -30,7 +32,9 @@ class ConfiguracionController extends Controller
                         ->orWhere('effective_to', '>', now());
                 })
                 ->latest('effective_from');
-        }])->get();
+        }])
+            ->where('status', BaseStatus::ACTIVE)
+            ->get();
 
         return ConfiguracionResource::collection($configuraciones);
     }
@@ -56,7 +60,10 @@ class ConfiguracionController extends Controller
                         ->orWhere('effective_to', '>', now());
                 })
                 ->latest('effective_from');
-        }])->where('key', $key)->firstOrFail();
+        }])
+            ->where('key', $key)
+            ->where('status', BaseStatus::ACTIVE)
+            ->firstOrFail();
         Gate::authorize('view', $configuracion);
 
         return new ConfiguracionResource($configuracion);
@@ -64,7 +71,10 @@ class ConfiguracionController extends Controller
 
     public function getVersionsByKey(string $key)
     {
-        $configuracion = ConfigurationDefinition::where('key', $key)->firstOrFail();
+        $configuracion = ConfigurationDefinition::query()
+            ->where('key', $key)
+            ->where('status', BaseStatus::ACTIVE)
+            ->firstOrFail();
         Gate::authorize('view', $configuracion);
 
         return ConfiguracionVersionResource::collection($configuracion->versions()->orderByDesc('version')->get());
@@ -72,7 +82,10 @@ class ConfiguracionController extends Controller
 
     public function storeVersionByKey(CrearVersionRequest $request, string $key)
     {
-        $configuracion = ConfigurationDefinition::where('key', $key)->firstOrFail();
+        $configuracion = ConfigurationDefinition::query()
+            ->where('key', $key)
+            ->where('status', BaseStatus::ACTIVE)
+            ->firstOrFail();
         Gate::authorize('update', $configuracion);
         $version = $this->servicio->crearVersion(
             $configuracion,
@@ -83,9 +96,26 @@ class ConfiguracionController extends Controller
         return (new ConfiguracionVersionResource($version))->response()->setStatusCode(201);
     }
 
+    public function updateCurrent(ActualizarConfiguracionActualRequest $request, string $key)
+    {
+        $configuracion = ConfigurationDefinition::query()
+            ->where('key', $key)
+            ->where('status', BaseStatus::ACTIVE)
+            ->firstOrFail();
+        Gate::authorize('update', $configuracion);
+
+        $actualizada = $this->servicio->actualizarValorActual(
+            $configuracion,
+            $request->validated(),
+            $request->user()->id,
+        );
+
+        return (new ConfiguracionVersionResource($actualizada))->response()->setStatusCode(200);
+    }
+
     public function showVersion(string $id)
     {
-        $version = ConfigurationVersion::findOrFail($id);
+        $version = $this->findActiveVersion($id);
         Gate::authorize('view', $version);
 
         return new ConfiguracionVersionResource($version);
@@ -93,7 +123,7 @@ class ConfiguracionController extends Controller
 
     public function updateVersion(ActualizarVersionRequest $request, string $id)
     {
-        $version = ConfigurationVersion::findOrFail($id);
+        $version = $this->findActiveVersion($id);
         Gate::authorize('update', $version);
         try {
             $actualizada = $this->servicio->actualizarVersion($version, $request->validated());
@@ -106,9 +136,8 @@ class ConfiguracionController extends Controller
 
     public function publishVersion(TransicionVersionRequest $request, string $id)
     {
-        $version = ConfigurationVersion::findOrFail($id);
+        $version = $this->findActiveVersion($id);
         Gate::authorize('publish', $version);
-
         try {
             $publicada = $this->servicio->publicarVersion($version, $request->validated(), $request->user()->id);
 
@@ -120,10 +149,19 @@ class ConfiguracionController extends Controller
 
     public function deactivateVersion(TransicionVersionRequest $request, string $id)
     {
-        $version = ConfigurationVersion::findOrFail($id);
+        $version = $this->findActiveVersion($id);
         Gate::authorize('delete', $version);
         $desactivada = $this->servicio->desactivarVersion($version, $request->validated(), $request->user()->id);
 
         return new ConfiguracionVersionResource($desactivada);
     }
+
+    private function findActiveVersion(string $id): ConfigurationVersion
+    {
+        return ConfigurationVersion::query()
+            ->with('definition')
+            ->whereHas('definition', fn ($query) => $query->where('status', BaseStatus::ACTIVE))
+            ->findOrFail($id);
+    }
+
 }

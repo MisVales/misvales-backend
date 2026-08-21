@@ -44,15 +44,16 @@ class ServicioEvidenciaVerificacion
                     ->where('owner_id', $visit->id))
                 ->exists();
             if ($exists) {
-                throw new BusinessException('VERIFICATION_EVIDENCE_DUPLICATE', 'Evidencia duplicada.', 409);
+                throw new BusinessException('VERIFICATION_EVIDENCE_DUPLICATE', 'Esta evidencia ya se cargó.', 409);
             }
 
             $mime = $file->getMimeType();
-            $path = $file->store('evidences/'.$visit->id, 'private');
+            $disk = config('filesystems.default');
+            $path = $file->store('evidences/'.$visit->id, $disk);
 
             $media = MediaFile::create([
                 'file_type' => $fileType,
-                'disk' => 'private',
+                'disk' => $disk,
                 'path' => $path,
                 'original_name' => $file->getClientOriginalName(),
                 'mime_type' => $mime,

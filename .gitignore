@@ -63,3 +63,9 @@ FILE-MANIFEST.txt
 
 # Extensiones locales de desarrollo (credenciales y sesiones técnicas)
 /bootstrap/local/
+
+# Scripts temporales de depuración y apoyo local
+/*.py
+/debug_*.php
+/fix_*.php
+/test*.php

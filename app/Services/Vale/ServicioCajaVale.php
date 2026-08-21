@@ -7,7 +7,11 @@ use App\Enums\EstadoVale;
 use App\Enums\TipoMovimientoLineaCredito;
 use App\Exceptions\ExcepcionVale;
 use App\Helpers\AuditHelper;
+use App\Models\Cliente;
+use App\Models\CuentaBancariaCliente;
+use App\Services\Cliente\ProtectorDatosCliente;
 use App\Models\LineaCredito;
+use App\Models\MediaFileBinding;
 use App\Models\MovimientoLineaCredito;
 use App\Models\OutboxEvent;
 use App\Models\RestriccionUsoCredito;
@@ -18,11 +22,14 @@ use Illuminate\Support\Facades\DB;
 
 final class ServicioCajaVale
 {
-    public function __construct(private readonly VerificadorDisponibilidadCredito $credito) {}
+    public function __construct(
+        private readonly VerificadorDisponibilidadCredito $credito,
+        private readonly ProtectorDatosCliente $protector
+    ) {}
 
-    public function liberar(Vale $vale, User $cajera, int $version): Vale
+    public function liberar(Vale $vale, User $cajera, int $version, ?string $bankName = null, ?string $clabe = null): Vale
     {
-        return DB::transaction(function () use ($vale, $cajera, $version): Vale {
+        return DB::transaction(function () use ($vale, $cajera, $version, $bankName, $clabe): Vale {
             $vale = Vale::query()->lockForUpdate()->findOrFail($vale->id);
             $this->validarCajera($cajera, $vale);
             if ($vale->lock_version !== $version) {
@@ -31,6 +38,42 @@ final class ServicioCajaVale
             if ($vale->status !== EstadoVale::GENERADO) {
                 throw new ExcepcionVale('VOUCHER_STATUS_INVALID', 'Solo un vale generado puede liberarse.', 409);
             }
+
+            $cliente = Cliente::query()->lockForUpdate()->findOrFail($vale->client_id);
+            if (! $this->tieneComprobanteDomicilio($cliente)) {
+                throw new ExcepcionVale('ADDRESS_PROOF_REQUIRED', 'Adjunta el comprobante de domicilio antes de liberar el vale.', 422);
+            }
+
+            // Si se proporciona información bancaria, se registra para el cliente.
+            if ($bankName && $clabe) {
+                $vigente = $cliente->cuentaBancariaVigente()->lockForUpdate()->first();
+                if (!$vigente) {
+                    $ahora = now();
+                    $cuenta = new CuentaBancariaCliente([
+                        'client_id' => $cliente->id,
+                        'bank_name' => trim($bankName),
+                        'account_holder_name' => $cliente->full_name,
+                        'is_current' => true,
+                        'starts_at' => $ahora,
+                        'created_by' => $cajera->id,
+                        'change_reason' => 'Capturado en caja durante la liberación del primer vale.',
+                    ]);
+                    $cuenta->forceFill([
+                        'account_number_ciphertext' => null,
+                        'account_number_hmac' => null,
+                        'clabe_ciphertext' => $this->protector->cifrar(trim($clabe)),
+                        'clabe_hmac' => $this->protector->hmacExacto(trim($clabe)),
+                        'lock_version' => 1,
+                    ])->save();
+                    $cliente->forceFill(['lock_version' => $cliente->lock_version + 1])->save();
+                    OutboxEvent::create([
+                        'event_type' => 'CLIENT_BANK_ACCOUNT_ADDED',
+                        'payload' => ['client_id' => $cliente->id, 'bank_account_id' => $cuenta->id, 'distributor_id' => $vale->distributor_id],
+                        'status' => 'PENDING',
+                    ]);
+                }
+            }
+
             $vale->forceFill(['status' => EstadoVale::LIBERADO, 'released_by' => $cajera->id, 'released_at' => now(), 'lock_version' => $vale->lock_version + 1])->save();
             AuditHelper::log('VOUCHER_RELEASED', 'vouchers', $vale->id, $cajera->id, $vale->branch_id, ['status' => EstadoVale::GENERADO->value], ['status' => EstadoVale::LIBERADO->value]);
 
@@ -88,5 +131,15 @@ final class ServicioCajaVale
         if (! $actor->hasPermissionTo('vouchers.cash_branch') || ! $actor->hasScopeForBranch($vale->branch_id)) {
             throw new ExcepcionVale('VOUCHER_BRANCH_FORBIDDEN', 'El vale no pertenece al alcance de caja.', 404);
         }
+    }
+
+    private function tieneComprobanteDomicilio(Cliente $cliente): bool
+    {
+        return $cliente->domicilioVigente()->whereNotNull('address_proof_media_id')->exists()
+            || MediaFileBinding::query()
+                ->where('owner_type', 'client')
+                ->where('owner_id', $cliente->id)
+                ->where('purpose', 'ADDRESS_PROOF')
+                ->exists();
     }
 }

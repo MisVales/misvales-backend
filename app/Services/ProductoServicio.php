@@ -40,10 +40,6 @@ class ProductoServicio
             'name' => $datos['name'],
             'description' => $datos['description'] ?? null,
             'nominal_amount' => $this->normalizarMonto($datos['nominal_amount']),
-            'loan_commission_percentage' => $this->normalizarPorcentaje($datos['loan_commission_percentage']),
-            'simple_interest_percentage' => $this->normalizarPorcentaje($datos['simple_interest_percentage']),
-            'insurance_amount' => $this->normalizarMonto($datos['insurance_amount']),
-            'fortnights_count' => (int) $datos['fortnights_count'],
             'status' => VersionStatus::DRAFT,
             'effective_from' => $effectiveFrom,
             'reason' => $datos['reason'],
@@ -54,11 +50,6 @@ class ProductoServicio
     private function normalizarMonto(mixed $valor): string
     {
         return bcadd((string) $valor, '0', 4);
-    }
-
-    private function normalizarPorcentaje(mixed $valor): string
-    {
-        return bcadd((string) $valor, '0', 6);
     }
 
     public function actualizarVersion(ProductVersion $version, array $datos): ProductVersion
@@ -85,18 +76,6 @@ class ProductoServicio
         if (array_key_exists('nominal_amount', $datos)) {
             $version->nominal_amount = $this->normalizarMonto($datos['nominal_amount']);
         }
-        if (array_key_exists('loan_commission_percentage', $datos)) {
-            $version->loan_commission_percentage = $this->normalizarPorcentaje($datos['loan_commission_percentage']);
-        }
-        if (array_key_exists('simple_interest_percentage', $datos)) {
-            $version->simple_interest_percentage = $this->normalizarPorcentaje($datos['simple_interest_percentage']);
-        }
-        if (array_key_exists('insurance_amount', $datos)) {
-            $version->insurance_amount = $this->normalizarMonto($datos['insurance_amount']);
-        }
-        if (array_key_exists('fortnights_count', $datos)) {
-            $version->fortnights_count = (int) $datos['fortnights_count'];
-        }
         if (array_key_exists('reason', $datos)) {
             $version->reason = $datos['reason'];
         }
@@ -111,10 +90,8 @@ class ProductoServicio
             throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
         }
 
-        if (is_null($version->name) || is_null($version->nominal_amount)
-            || is_null($version->loan_commission_percentage) || is_null($version->simple_interest_percentage)
-            || is_null($version->insurance_amount) || is_null($version->fortnights_count)) {
-            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin sus condiciones financieras completas.');
+        if (is_null($version->name) || is_null($version->nominal_amount)) {
+            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin nombre e importe nominal.');
         }
 
         if (array_key_exists('lock_version', $datos)) {

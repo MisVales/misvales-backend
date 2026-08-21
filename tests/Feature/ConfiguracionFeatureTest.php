@@ -147,6 +147,47 @@ class ConfiguracionFeatureTest extends TestCase
         ])->assertCreated();
     }
 
+    public function test_actualiza_directamente_y_conserva_el_historial_de_cambios(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
+        $definition = ConfigurationDefinition::query()->create([
+            'key' => 'DIRECT_UPDATE_TEST',
+            'name' => 'Actualización directa',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $user->id,
+        ]);
+        $previous = $definition->versions()->create([
+            'version' => 1,
+            'value' => '100.0000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subMinute(),
+            'reason' => 'Valor inicial registrado',
+            'created_by' => $user->id,
+            'published_by' => $user->id,
+            'published_at' => now()->subMinute(),
+        ]);
+
+        $this->actingAs($user)
+            ->putJson("/api/v1/configurations/{$definition->key}/current", [
+                'value' => 250,
+                'reason' => 'Ajuste directo autorizado',
+            ])
+            ->assertOk()
+            ->assertJsonPath('data.status', 'PUBLISHED')
+            ->assertJsonPath('data.value', '250.0000');
+
+        self::assertSame('INACTIVE', $previous->fresh()->status->value);
+        self::assertNotNull($previous->fresh()->effective_to);
+        self::assertDatabaseHas('configuration_versions', [
+            'configuration_definition_id' => $definition->id,
+            'version' => 2,
+            'status' => 'PUBLISHED',
+            'reason' => 'Ajuste directo autorizado',
+        ]);
+    }
+
     public function test_el_corte_programado_se_resuelve_desde_versiones_publicadas_y_no_desde_env(): void
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);

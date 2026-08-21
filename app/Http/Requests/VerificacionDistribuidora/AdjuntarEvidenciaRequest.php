@@ -16,7 +16,7 @@ class AdjuntarEvidenciaRequest extends FormRequest
     public function rules()
     {
         return [
-            'file' => 'required|file|mimes:jpeg,png,pdf|max:10240',
+            'file' => 'required|file|mimes:jpg,jpeg,png,webp,pdf|max:10240',
             'file_type' => 'required|string|max:50',
             'lock_version' => 'required|integer|min:1',
         ];

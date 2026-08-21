@@ -37,11 +37,8 @@ class EvaluadorReglaCincuenta
         // reference_amount = base_total * 0.50
         $referenceAmount = bcmul($baseTotal, '0.5000', 4);
 
-        // temp_lower = reference_amount - tolerance_amount
-        $tempLower = bcsub($referenceAmount, $toleranceAmount, 4);
-
-        // lower_limit = max(0, reference_amount - tolerance_amount)
-        $lowerLimit = bccomp($tempLower, '0.0000', 4) > 0 ? $tempLower : '0.0000';
+        // lower_limit = 0.0000 (hasta el 50% + tolerancia)
+        $lowerLimit = '0.0000';
 
         // temp_upper = reference_amount + tolerance_amount
         $tempUpper = bcadd($referenceAmount, $toleranceAmount, 4);

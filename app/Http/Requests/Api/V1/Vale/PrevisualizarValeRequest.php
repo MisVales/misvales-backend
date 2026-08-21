@@ -14,6 +14,10 @@ final class PrevisualizarValeRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['client_id' => ['required', 'uuid'], 'product_version_id' => ['required', 'uuid']];
+        return [
+            'client_id' => ['required', 'uuid'],
+            'product_version_id' => ['required', 'uuid'],
+            'installment_count' => ['required', 'integer', 'min:1'],
+        ];
     }
 }

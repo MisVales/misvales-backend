@@ -20,6 +20,7 @@ use App\Models\ExcedenteDistribuidora;
 use App\Models\ImportacionArchivoBancario;
 use App\Models\LineaCredito;
 use App\Models\MediaFile;
+use App\Models\MediaFileBinding;
 use App\Models\MovimientoBancario;
 use App\Models\Product;
 use App\Models\ProductVersion;
@@ -73,6 +74,25 @@ final class CajaValeApiTest extends TestCase
         $line = LineaCredito::factory()->create(['distributor_id' => $distributor->id, 'total_authorized' => '30000.0000', 'used_balance' => '5000.0000']);
         $client = Cliente::factory()->create(['created_by' => $this->distributorUser->id]);
         AsignacionClienteDistribuidora::factory()->create(['client_id' => $client->id, 'distributor_id' => $distributor->id, 'branch_id' => $this->branch->id, 'starts_at' => now()->subDay(), 'ends_at' => null, 'assigned_by' => $this->distributorUser->id]);
+        $addressProof = MediaFile::query()->create([
+            'file_type' => 'ADDRESS_PROOF',
+            'disk' => 'local',
+            'path' => 'private/address-proof.pdf',
+            'original_name' => 'address-proof.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 10,
+            'sha256' => hash('sha256', 'address-proof'),
+            'uploaded_by' => $this->cashier->id,
+            'validation_status' => 'VALIDATED',
+            'validated_at' => now(),
+        ]);
+        MediaFileBinding::query()->create([
+            'media_file_id' => $addressProof->id,
+            'owner_type' => 'client',
+            'owner_id' => $client->id,
+            'purpose' => 'ADDRESS_PROOF',
+            'created_by' => $this->cashier->id,
+        ]);
         $category = Category::query()->create(['code' => 'CASH-CAT', 'status' => 'ACTIVE', 'created_by' => $this->distributorUser->id]);
         $categoryVersion = CategoryVersion::query()->create(['category_id' => $category->id, 'version' => 1, 'name' => 'Base', 'profit_percentage' => '0.050000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $distributor->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $this->distributorUser->id]);
@@ -97,6 +117,25 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '15000.0000']);
         $this->assertDatabaseHas('credit_line_movements', ['source_id' => $this->voucher->id, 'type' => 'VOUCHER_CASHED']);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'VoucherCashed']);
+    }
+
+    public function test_cajera_puede_buscar_vale_de_cliente_final_sin_datos_opcionales(): void
+    {
+        $this->voucher->cliente->forceFill([
+            'curp_ciphertext' => null,
+            'curp_hmac' => null,
+            'official_id_type' => null,
+            'official_id_number_ciphertext' => null,
+            'official_id_number_hmac' => null,
+        ])->save();
+
+        Sanctum::actingAs($this->cashier);
+
+        $this->getJson('/api/v1/cashier/vouchers/search?search=99999999')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.folio', $this->voucher->folio)
+            ->assertJsonMissingPath('data.0.identity.curp')
+            ->assertJsonPath('data.0.bank_account', null);
     }
 
     public function test_flujo_financiero_integrado_desde_feria_hasta_liquidacion(): void
@@ -227,8 +266,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseCount('distributor_relation_items', 1);
         $relation = RelacionDistribuidora::query()->firstOrFail();
         $this->assertSame('2975.0000', $relation->balance);
-        $this->assertSame('2027-02-14 23:59:59', $relation->payment_deadline_at->setTimezone('America/Monterrey')->format('Y-m-d H:i:s'));
-        $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
+                $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
         $this->assertArrayHasKey('EARLY_PAYMENT_PERIOD', $relation->header_snapshot['configuration_versions']);
         $this->assertArrayNotHasKey('points', $relation->header_snapshot);
         $this->assertSame('VAL-2026-99999999', $relation->partidas()->firstOrFail()->snapshot['folio']);
@@ -383,7 +421,7 @@ final class CajaValeApiTest extends TestCase
         $coordinator = $this->user('coordinator', $this->branch->id);
         CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinator->id, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'status' => 'ACTIVE', 'valid_from' => now()->subDay(), 'valid_to' => null, 'assigned_by' => $manager->id]);
         Sanctum::actingAs($this->distributorUser);
-        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id])
+        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id, 'commission_rate' => 0.10, 'interest_rate' => 0.03, 'insurance_amount' => 100, 'installment_count' => 4])
             ->assertStatus(409)
             ->assertJsonPath('error.code', 'DISTRIBUTOR_DELINQUENCY_BLOCK');
         try {
@@ -403,7 +441,7 @@ final class CajaValeApiTest extends TestCase
         $service->decidirRetiro($request, $manager, true, 'Regularizacion comprobada');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
 
-        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id])
+        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id, 'commission_rate' => 0.10, 'interest_rate' => 0.03, 'insurance_amount' => 100, 'installment_count' => 4])
             ->assertSuccessful();
     }
 

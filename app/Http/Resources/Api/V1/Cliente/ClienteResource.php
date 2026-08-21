@@ -11,7 +11,7 @@ class ClienteResource extends JsonResource
     public function toArray(Request $request): array
     {
         $protector = app(ProtectorDatosCliente::class);
-        $curp = $protector->descifrar($this->curp_ciphertext);
+        $curp = $this->curp_ciphertext === null ? null : $protector->descifrar($this->curp_ciphertext);
         $cuenta = $this->cuentaBancariaVigente;
         $clabe = $cuenta?->clabe_ciphertext === null ? null : $protector->descifrar($cuenta->clabe_ciphertext);
         $incrementos = (string) ($this->portfolio_increases_sum_amount ?? '0.0000');
@@ -28,7 +28,7 @@ class ClienteResource extends JsonResource
             'id' => $this->id,
             'client_number' => $this->client_number,
             'full_name' => trim(implode(' ', array_filter([$this->first_name, $this->first_last_name, $this->second_last_name]))),
-            'curp_masked' => $protector->enmascarar($curp, 4, 3),
+            'curp_masked' => $curp === null ? null : $protector->enmascarar($curp, 4, 3),
             'birth_date' => $this->birth_date?->format('Y-m-d'),
             'address' => $this->whenLoaded('domicilioVigente', fn () => $this->domicilioVigente ? [
                 'street' => $this->domicilioVigente->street,
