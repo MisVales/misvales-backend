@@ -320,6 +320,8 @@ Route::prefix('v1')->group(function () {
         Route::post('bank-imports', [ConciliacionBancariaController::class, 'import']);
         Route::get('bank-imports', [ConciliacionBancariaController::class, 'imports']);
         Route::get('bank-movements', [ConciliacionBancariaController::class, 'movements']);
+        Route::get('payment-clarifications', [ConciliacionBancariaController::class, 'clarifications']);
+        Route::get('manual-reconciliation-requests', [ConciliacionBancariaController::class, 'manualRequests']);
         Route::post('relations/{relacion}/clarifications', [ConciliacionBancariaController::class, 'clarify']);
         Route::post('bank-movements/{movimiento}/manual-reconciliation-requests', [ConciliacionBancariaController::class, 'requestManual']);
         Route::post('manual-reconciliation-requests/{solicitud}/decision', [ConciliacionBancariaController::class, 'decideManual']);

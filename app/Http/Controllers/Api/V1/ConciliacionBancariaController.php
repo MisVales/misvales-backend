@@ -2,109 +2,187 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\ExcepcionConciliacion;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Api\V1\Conciliacion\CrearAclaracionPagoRequest;
+use App\Http\Requests\Api\V1\Conciliacion\DecidirConciliacionManualRequest;
 use App\Http\Requests\Api\V1\Conciliacion\ImportarArchivoBancarioRequest;
+use App\Http\Requests\Api\V1\Conciliacion\ListarFlujoConciliacionRequest;
+use App\Http\Requests\Api\V1\Conciliacion\ListarMovimientosBancariosRequest;
+use App\Http\Requests\Api\V1\Conciliacion\SolicitarConciliacionManualRequest;
+use App\Http\Resources\Api\V1\Conciliacion\AclaracionPagoResource;
+use App\Http\Resources\Api\V1\Conciliacion\ImportacionBancariaResource;
+use App\Http\Resources\Api\V1\Conciliacion\MovimientoBancarioResource;
+use App\Http\Resources\Api\V1\Conciliacion\SolicitudConciliacionManualResource;
 use App\Models\AclaracionPago;
+use App\Models\CoordinatorDistributorAssignment;
 use App\Models\ImportacionArchivoBancario;
 use App\Models\MovimientoBancario;
 use App\Models\RelacionDistribuidora;
 use App\Models\SolicitudConciliacionManual;
+use App\Models\User;
+use App\Services\Conciliacion\ServicioConciliacionManual;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 final class ConciliacionBancariaController extends Controller
 {
     public function import(ImportarArchivoBancarioRequest $request, ServicioImportacionBancaria $service)
     {
-        $branch = $request->user()->branch_id;
-        abort_unless($branch, 403);
+        $branchId = $request->user()->branch_id;
+        if (! $request->user()->hasRole('cashier') || $branchId === null || ! $request->user()->hasScopeForBranch($branchId)) {
+            throw new ExcepcionConciliacion('BANK_IMPORT_SCOPE_DENIED', 'La cajera no tiene una sucursal operativa autorizada.', 403);
+        }
 
-        return response()->json(['data' => $service->importar($request->file('file'), $request->user(), $branch)], 201);
+        $import = $service->importar($request->file('file'), $request->user(), $branchId);
+
+        return (new ImportacionBancariaResource($import))
+            ->response()
+            ->setStatusCode($import->replayed ? 200 : 201);
     }
 
     public function imports(Request $request)
     {
-        $global = $request->user()->hasPermissionTo('bank_imports.view_global');
-        abort_unless($global || $request->user()->hasPermissionTo('bank_imports.view_branch'), 403);
-        $query = ImportacionArchivoBancario::query();
-        if (! $global) {
-            $branches = $request->user()->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
-            $query->whereIn('branch_id', $branches);
+        $user = $request->user();
+        $global = $user->hasPermissionTo('bank_imports.view_global');
+        if (! $global && ! $user->hasPermissionTo('bank_imports.view_branch')) {
+            throw new ExcepcionConciliacion('BANK_IMPORT_VIEW_DENIED', 'No tienes permiso para consultar importaciones bancarias.', 403);
         }
 
-        return response()->json(['data' => $query->latest()->paginate(25)]);
-    }
-
-    public function movements(Request $request)
-    {
-        $global = $request->user()->hasPermissionTo('bank_movements.view_global');
-        abort_unless($global || $request->user()->hasPermissionTo('bank_movements.view_branch'), 403);
-        $query = MovimientoBancario::query();
+        $query = ImportacionArchivoBancario::query()->latest();
         if (! $global) {
-            $branches = $request->user()->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
-            $query->whereHas('import', fn ($q) => $q->whereIn('branch_id', $branches));
+            $query->whereIn('branch_id', $this->branchIds($user));
         }
 
-        return response()->json(['data' => $query->latest()->paginate(50)]);
+        return ImportacionBancariaResource::collection($query->paginate(25));
     }
 
-    public function clarify(RelacionDistribuidora $relacion, Request $request)
+    public function movements(ListarMovimientosBancariosRequest $request)
     {
-        abort_unless($request->user()->hasPermissionTo('payment_clarifications.create_own') && $request->user()->distribuidora?->id === $relacion->distributor_id, 403);
-        $data = $request->validate(['evidence_media_id' => ['required', 'uuid', 'exists:media_files,id'], 'reason' => ['required', 'string', 'max:1000']]);
-        $item = AclaracionPago::create($data + ['folio' => 'ACL-'.strtoupper(Str::random(12)), 'distributor_id' => $relacion->distributor_id, 'relation_id' => $relacion->id]);
-        $relacion->update(['review_status' => 'CLARIFICATION_OPEN']);
+        $data = $request->validated();
+        $query = MovimientoBancario::query()
+            ->with(['relation', 'distributor', 'manualRequest'])
+            ->latest();
+        if (! $request->user()->hasPermissionTo('bank_movements.view_global')) {
+            $query->whereHas('import', fn (Builder $import) => $import->whereIn('branch_id', $this->branchIds($request->user())));
+        }
+        $query
+            ->when($data['result'] ?? null, fn (Builder $builder, string $result) => $builder->where('classification', $result))
+            ->when($data['status'] ?? null, fn (Builder $builder, string $status) => $builder->where('reconciliation_status', $status))
+            ->when($data['search'] ?? null, function (Builder $builder, string $search): void {
+                $builder->where(function (Builder $nested) use ($search): void {
+                    $nested->where('bank_folio', 'like', "%{$search}%")
+                        ->orWhere('payment_reference', 'like', "%{$search}%")
+                        ->orWhere('concept', 'like', "%{$search}%");
+                });
+            });
 
-        return response()->json(['data' => $item], 201);
+        return MovimientoBancarioResource::collection($query->paginate($data['per_page'] ?? 50));
     }
 
-    public function requestManual(MovimientoBancario $movimiento, Request $request)
+    public function clarifications(ListarFlujoConciliacionRequest $request)
     {
-        abort_unless($request->user()->hasPermissionTo('manual_reconciliation.request_branch') && $request->user()->hasScopeForBranch($movimiento->import->branch_id), 403);
-        abort_unless($movimiento->classification === 'UNRECONCILED', 409);
-        $data = $request->validate(['relation_id' => ['required', 'uuid', 'exists:distributor_relations,id'], 'clarification_id' => ['required', 'uuid', 'exists:payment_clarifications,id'], 'reason' => ['required', 'string', 'max:1000']]);
-        $relation = RelacionDistribuidora::findOrFail($data['relation_id']);
-        $clar = AclaracionPago::findOrFail($data['clarification_id']);
-        abort_unless($relation->branch_id === $movimiento->import->branch_id && $clar->relation_id === $relation->id, 422);
+        $query = AclaracionPago::query()->with(['relation', 'distributor'])->latest();
+        $this->scopeClarifications($query, $request->user());
+        $query->when($request->validated('status'), fn (Builder $builder, string $status) => $builder->where('status', $status));
 
-        return response()->json(['data' => SolicitudConciliacionManual::create($data + ['bank_movement_id' => $movimiento->id, 'branch_id' => $relation->branch_id, 'requested_by' => $request->user()->id])], 201);
+        return AclaracionPagoResource::collection($query->paginate($request->integer('per_page', 25)));
     }
 
-    public function decideManual(SolicitudConciliacionManual $solicitud, Request $request)
+    public function manualRequests(ListarFlujoConciliacionRequest $request)
     {
-        $global = $request->user()->hasPermissionTo('manual_reconciliation.authorize_global');
-        abort_unless($global || ($request->user()->hasPermissionTo('manual_reconciliation.authorize_branch') && $request->user()->hasScopeForBranch($solicitud->branch_id)), 403);
-        abort_if($solicitud->requested_by === $request->user()->id, 403);
-        abort_unless($solicitud->status === 'REQUESTED', 409);
-        $data = $request->validate(['decision' => ['required', 'in:AUTHORIZE,REJECT']]);
-        $solicitud->update(['status' => $data['decision'] === 'AUTHORIZE' ? 'AUTHORIZED' : 'REJECTED', 'authorized_by' => $request->user()->id, 'authorized_at' => now()]);
+        $query = SolicitudConciliacionManual::query()
+            ->with(['movement', 'relation', 'clarification', 'requester', 'authorizer', 'executor'])
+            ->latest();
+        $this->scopeManualRequests($query, $request->user());
+        $query->when($request->validated('status'), fn (Builder $builder, string $status) => $builder->where('status', $status));
 
-        return response()->json(['data' => $solicitud->fresh()]);
+        return SolicitudConciliacionManualResource::collection($query->paginate($request->integer('per_page', 25)));
     }
 
-    public function executeManual(SolicitudConciliacionManual $solicitud, Request $request, \App\Services\Pago\ServicioAplicacionPago $servicioPago)
+    public function clarify(RelacionDistribuidora $relacion, CrearAclaracionPagoRequest $request, ServicioConciliacionManual $service)
     {
-        abort_unless($request->user()->hasPermissionTo('manual_reconciliation.execute_branch') && $request->user()->hasScopeForBranch($solicitud->branch_id), 403);
-        abort_unless($solicitud->status === 'AUTHORIZED', 409);
-        DB::transaction(function () use ($solicitud, $request, $servicioPago) {
-            $relation = RelacionDistribuidora::whereKey($solicitud->relation_id)->lockForUpdate()->firstOrFail();
-            $movement = MovimientoBancario::whereKey($solicitud->bank_movement_id)->lockForUpdate()->firstOrFail();
-            $before = ['balance' => $relation->balance, 'reconciled_total' => $relation->reconciled_total];
-            
-            $servicioPago->aplicar($movement, $relation);
-            $relation->refresh();
+        return (new AclaracionPagoResource($service->aclarar($relacion, $request->validated(), $request->user())))
+            ->response()
+            ->setStatusCode(201);
+    }
 
-            $solicitud->update([
-                'status' => 'EXECUTED',
-                'executed_by' => $request->user()->id,
-                'executed_at' => now(),
-                'before_snapshot' => $before,
-                'after_snapshot' => ['balance' => $relation->balance, 'reconciled_total' => $relation->reconciled_total],
-            ]);
-        });
+    public function requestManual(MovimientoBancario $movimiento, SolicitarConciliacionManualRequest $request, ServicioConciliacionManual $service)
+    {
+        return (new SolicitudConciliacionManualResource($service->solicitar($movimiento, $request->validated(), $request->user())))
+            ->response()
+            ->setStatusCode(201);
+    }
 
-        return response()->json(['data' => $solicitud->fresh()]);
+    public function decideManual(SolicitudConciliacionManual $solicitud, DecidirConciliacionManualRequest $request, ServicioConciliacionManual $service)
+    {
+        return new SolicitudConciliacionManualResource($service->decidir($solicitud, $request->validated(), $request->user()));
+    }
+
+    public function executeManual(SolicitudConciliacionManual $solicitud, Request $request, ServicioConciliacionManual $service)
+    {
+        return new SolicitudConciliacionManualResource($service->ejecutar($solicitud, $request->user()));
+    }
+
+    private function scopeClarifications(Builder $query, User $user): void
+    {
+        if ($user->hasPermissionTo('payment_clarifications.view_global')) {
+            return;
+        }
+        if ($user->hasPermissionTo('payment_clarifications.view_branch')) {
+            $query->whereHas('relation', fn (Builder $relation) => $relation->whereIn('branch_id', $this->branchIds($user)));
+
+            return;
+        }
+        if ($user->hasPermissionTo('payment_clarifications.view_assigned')) {
+            $query->whereIn('distributor_id', $this->assignedDistributorIds($user));
+
+            return;
+        }
+        if ($user->hasPermissionTo('payment_clarifications.view_own') && $user->distribuidora !== null) {
+            $query->where('distributor_id', $user->distribuidora->id);
+
+            return;
+        }
+
+        $query->whereRaw('1 = 0');
+    }
+
+    private function scopeManualRequests(Builder $query, User $user): void
+    {
+        if ($user->hasPermissionTo('manual_reconciliation.view_global')) {
+            return;
+        }
+        if ($user->hasPermissionTo('manual_reconciliation.view_branch')) {
+            $query->whereIn('branch_id', $this->branchIds($user));
+
+            return;
+        }
+        if ($user->hasPermissionTo('manual_reconciliation.view_assigned')) {
+            $query->whereHas('relation', fn (Builder $relation) => $relation->whereIn('distributor_id', $this->assignedDistributorIds($user)));
+
+            return;
+        }
+
+        $query->whereRaw('1 = 0');
+    }
+
+    private function branchIds(User $user)
+    {
+        return $user->roleScopes()
+            ->where('status', 'ACTIVE')
+            ->whereNull('revoked_at')
+            ->where('scope_type', 'BRANCH')
+            ->select('branch_id');
+    }
+
+    private function assignedDistributorIds(User $user)
+    {
+        return CoordinatorDistributorAssignment::query()
+            ->where('coordinator_id', $user->id)
+            ->where('status', 'ACTIVE')
+            ->whereNull('valid_to')
+            ->select('distributor_id');
     }
 }

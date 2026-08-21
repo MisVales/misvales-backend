@@ -115,7 +115,14 @@ class RolesAndPermissionsSeeder extends Seeder
             ['module' => 'bank_imports', 'action' => 'view_global', 'code' => 'bank_imports.view_global', 'description' => 'Consultar importaciones bancarias globalmente'],
             ['module' => 'bank_movements', 'action' => 'view_global', 'code' => 'bank_movements.view_global', 'description' => 'Consultar movimientos bancarios globalmente'],
             ['module' => 'payment_clarifications', 'action' => 'create_own', 'code' => 'payment_clarifications.create_own', 'description' => 'Crear aclaraciones propias con evidencia'],
+            ['module' => 'payment_clarifications', 'action' => 'view_own', 'code' => 'payment_clarifications.view_own', 'description' => 'Consultar aclaraciones propias'],
+            ['module' => 'payment_clarifications', 'action' => 'view_assigned', 'code' => 'payment_clarifications.view_assigned', 'description' => 'Consultar aclaraciones de distribuidoras asignadas'],
+            ['module' => 'payment_clarifications', 'action' => 'view_branch', 'code' => 'payment_clarifications.view_branch', 'description' => 'Consultar aclaraciones de sucursal'],
+            ['module' => 'payment_clarifications', 'action' => 'view_global', 'code' => 'payment_clarifications.view_global', 'description' => 'Consultar aclaraciones globalmente'],
             ['module' => 'manual_reconciliation', 'action' => 'request_branch', 'code' => 'manual_reconciliation.request_branch', 'description' => 'Solicitar conciliación manual en sucursal'],
+            ['module' => 'manual_reconciliation', 'action' => 'view_assigned', 'code' => 'manual_reconciliation.view_assigned', 'description' => 'Consultar conciliaciones manuales asignadas'],
+            ['module' => 'manual_reconciliation', 'action' => 'view_branch', 'code' => 'manual_reconciliation.view_branch', 'description' => 'Consultar conciliaciones manuales de sucursal'],
+            ['module' => 'manual_reconciliation', 'action' => 'view_global', 'code' => 'manual_reconciliation.view_global', 'description' => 'Consultar conciliaciones manuales globalmente'],
             ['module' => 'manual_reconciliation', 'action' => 'authorize_branch', 'code' => 'manual_reconciliation.authorize_branch', 'description' => 'Autorizar conciliación manual de sucursal'],
             ['module' => 'manual_reconciliation', 'action' => 'authorize_global', 'code' => 'manual_reconciliation.authorize_global', 'description' => 'Autorizar conciliación manual global'],
             ['module' => 'manual_reconciliation', 'action' => 'execute_branch', 'code' => 'manual_reconciliation.execute_branch', 'description' => 'Ejecutar conciliación manual autorizada'],
@@ -256,8 +263,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'vouchers.view_branch',
                     'voucher_modifications.authorize_branch',
                     'relations.view_branch', 'relations.download_branch',
-                    'bank_imports.view_branch', 'bank_movements.view_branch',
-                    'manual_reconciliation.authorize_branch',
+                    'bank_imports.view_branch', 'bank_movements.view_branch', 'payment_clarifications.view_branch',
+                    'manual_reconciliation.view_branch', 'manual_reconciliation.authorize_branch',
                     'surpluses.view_branch', 'refunds.authorize_branch',
                     'risk.view_branch', 'delinquency.decide_branch', 'delinquency_removal.decide_branch',
                     'organization_changes.view', 'organization_changes.manage_branch',
@@ -273,7 +280,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_lines.view_global', 'credit_line_movements.view_global', 'credit_increase_requests.view_global',
                     'vouchers.view_global',
                     'relations.view_global',
-                    'bank_imports.view_global', 'bank_movements.view_global',
+                    'bank_imports.view_global', 'bank_movements.view_global', 'payment_clarifications.view_global', 'manual_reconciliation.view_global',
                     'surpluses.view_global',
                     'risk.view_global',
                     'organization_changes.view',
@@ -292,8 +299,8 @@ class RolesAndPermissionsSeeder extends Seeder
                     'vouchers.view_assigned',
                     'relations.view_assigned',
                     'voucher_modifications.authorize_branch',
-                    'bank_movements.view_branch',
-                    'manual_reconciliation.authorize_branch',
+                    'bank_movements.view_branch', 'payment_clarifications.view_assigned',
+                    'manual_reconciliation.view_assigned', 'manual_reconciliation.authorize_branch',
                     'risk.view_assigned', 'delinquency_removal.request_assigned',
                     'notifications.view_own',
                     'media.upload', 'media.download_branch',
@@ -309,7 +316,7 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.create_own', 'credit_increase_requests.view_own',
                     'vouchers.create_own', 'vouchers.view_own',
                     'relations.view_own', 'relations.download_own',
-                    'payment_clarifications.create_own',
+                    'payment_clarifications.create_own', 'payment_clarifications.view_own',
                     'surpluses.view_own',
                     'risk.view_own',
                     'notifications.view_own',
@@ -318,7 +325,7 @@ class RolesAndPermissionsSeeder extends Seeder
             }
 
             if ($roleData['code'] === 'cashier') {
-                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch', 'notifications.view_own', 'media.upload', 'media.download_branch']);
+                $this->assignPerms($role, ['vouchers.view_branch', 'vouchers.cash_branch', 'relations.view_branch', 'bank_imports.create_branch', 'bank_imports.view_branch', 'bank_movements.view_branch', 'payment_clarifications.view_branch', 'manual_reconciliation.view_branch', 'manual_reconciliation.request_branch', 'manual_reconciliation.execute_branch', 'surpluses.view_branch', 'refunds.execute_branch', 'notifications.view_own', 'media.upload', 'media.download_branch']);
             }
 
             if ($roleData['code'] === 'verifier') {
