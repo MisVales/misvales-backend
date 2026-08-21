@@ -23,7 +23,7 @@ final class ValeResource extends JsonResource
             'installments' => $this->whenLoaded('parcialidades', fn () => $this->parcialidades->map(fn ($item): array => [
                 'number' => $item->number, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission,
                 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $item->distributor_profit,
-                'misvales_payment' => $item->misvales_payment, 'client_payment' => $item->client_payment,
+                'misvales_payment' => $item->misvales_payment, 'client_payment' => $item->client_payment, 'due_at' => $item->due_at?->toIso8601String(), 'status' => $item->due_at ? ($item->due_at->isPast() ? 'OVERDUE' : 'PENDING') : 'PENDING',
             ])),
             'generated_at' => $this->generated_at?->toIso8601String(), 'lock_version' => $this->lock_version,
         ];
