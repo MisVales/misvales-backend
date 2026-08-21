@@ -72,7 +72,7 @@ final class ValeController extends Controller
     public function index(Request $request)
     {
         Gate::authorize('viewAny', Vale::class);
-        $query = Vale::query()->with(['cliente', 'distribuidora.usuario', 'versionProducto']);
+        $query = Vale::query()->with(['cliente', 'distribuidora.usuario', 'versionProducto', 'parcialidades']);
         $user = $request->user();
         if (! $user->hasPermissionTo('vouchers.view_global')) {
             if ($user->hasPermissionTo('vouchers.view_own')) {
