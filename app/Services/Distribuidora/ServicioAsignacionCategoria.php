@@ -26,7 +26,7 @@ class ServicioAsignacionCategoria
                 throw new ExcepcionDistribuidora('RESOURCE_VERSION_CONFLICT', 'La distribuidora fue modificada por otra operación.', 409);
             }
 
-            $fecha = CarbonImmutable::parse($datos['starts_at']);
+            $fecha = CarbonImmutable::now();
             $version = CategoryVersion::query()->with('category')->lockForUpdate()->findOrFail($datos['category_version_id']);
             $this->validador->validarCategoriaEnFecha($version, $fecha);
 

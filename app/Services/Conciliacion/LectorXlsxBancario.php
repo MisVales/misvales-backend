@@ -18,7 +18,11 @@ final class LectorXlsxBancario
         if ($xml !== false) {
             $doc = new SimpleXMLElement($xml);
             foreach ($doc->si as $si) {
-                $shared[] = (string) ($si->t ?? $si->r->t);
+                $text = (string) ($si->t ?? '');
+                foreach ($si->r as $fragment) {
+                    $text .= (string) $fragment->t;
+                }
+                $shared[] = $text;
             }
         }$sheet = $zip->getFromName('xl/worksheets/sheet1.xml');
         $zip->close();
@@ -30,7 +34,7 @@ final class LectorXlsxBancario
             foreach ($row->c as $cell) {
                 $ref = (string) $cell['r'];
                 preg_match('/^[A-Z]+/', $ref, $m);
-                $column = $m[0];
+                $column = $this->columnIndex($m[0]);
                 $value = (string) $cell->v;
                 if ((string) $cell['t'] === 's') {
                     $value = $shared[(int) $value] ?? '';
@@ -41,5 +45,15 @@ final class LectorXlsxBancario
         }
 
         return $rows;
+    }
+
+    private function columnIndex(string $letters): int
+    {
+        $index = 0;
+        foreach (str_split($letters) as $letter) {
+            $index = ($index * 26) + (ord($letter) - 64);
+        }
+
+        return $index - 1;
     }
 }

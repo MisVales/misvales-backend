@@ -3,8 +3,10 @@
 namespace Tests\Feature\Vale;
 
 use App\Enums\EstadoVale;
+use App\Exceptions\ExcepcionConciliacion;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Models\AclaracionPago;
 use App\Models\AlertaRiesgoDistribuidora;
 use App\Models\AsignacionCategoriaDistribuidora;
 use App\Models\AsignacionClienteDistribuidora;
@@ -33,13 +35,12 @@ use App\Models\SolicitudModificacionVale;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
-use App\Services\Cliente\ProtectorDatosCliente;
-use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
 use App\Services\Riesgo\ServicioMorosidadDistribuidora;
+use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -345,7 +346,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseCount('distributor_relation_items', 1);
         $relation = RelacionDistribuidora::query()->firstOrFail();
         $this->assertSame('2975.0000', $relation->balance);
-                $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
+        $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
         $this->assertArrayHasKey('EARLY_PAYMENT_PERIOD', $relation->header_snapshot['configuration_versions']);
         $this->assertArrayNotHasKey('points', $relation->header_snapshot);
         $this->assertSame('VAL-2026-99999999', $relation->partidas()->firstOrFail()->snapshot['folio']);
@@ -378,7 +379,7 @@ final class CajaValeApiTest extends TestCase
         app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
     }
 
-    public function test_xlsx_concilia_abono_liquidacion_excedente_no_conciliado_y_rechaza_doble_archivo(): void
+    public function test_xlsx_concilia_abono_y_no_conciliado_y_reprocesa_sin_duplicar_efectos(): void
     {
         Storage::fake('local');
         $this->voucher->update(['status' => 'CASHED']);
@@ -394,8 +395,10 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('relation_payments', ['interest_applied' => '200.0000', 'insurance_applied' => '25.0000', 'commission_applied' => '250.0000', 'capital_applied' => '525.0000', 'line_recovered' => '525.0000']);
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '4475.0000']);
         $this->assertDatabaseHas('credit_line_movements', ['type' => 'PAYMENT_RECOVERY', 'amount' => '525.0000']);
-        $this->expectExceptionMessage('BANK_FILE_ALREADY_IMPORTED');
-        app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+        $replayed = app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+        $this->assertSame($import->id, $replayed->id);
+        $this->assertTrue($replayed->replayed);
+        $this->assertDatabaseCount('relation_payments', 1);
     }
 
     public function test_xlsx_sin_columna_se_rechaza_completo_y_registra_motivo(): void
@@ -405,11 +408,156 @@ final class CajaValeApiTest extends TestCase
         try {
             app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
             $this->fail('DebiÃ³ fallar');
-        } catch (\RuntimeException $e) {
-            $this->assertSame('BANK_FILE_REQUIRED_COLUMNS_MISSING', $e->getMessage());
+        } catch (ExcepcionConciliacion $e) {
+            $this->assertSame('BANK_FILE_REQUIRED_COLUMNS_MISSING', $e->errorCode);
         }
         $this->assertDatabaseHas('bank_file_imports', ['status' => 'REJECTED', 'error' => 'BANK_FILE_REQUIRED_COLUMNS_MISSING']);
         $this->assertDatabaseCount('bank_movements', 0);
+    }
+
+    public function test_xlsx_clasifica_liquidacion_excedente_y_folio_duplicado_sin_reaplicar(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        $first = app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '2975', '2026-08-12 10:00:00', 'BANK-EXACT', 'Liquidación exacta'],
+        ]), $this->cashier, $this->branch->id);
+
+        $this->assertSame(1, $first->summary['settlements']);
+        $this->assertSame('0.0000', $relation->fresh()->balance);
+        $this->assertDatabaseHas('bank_movements', [
+            'bank_folio' => 'BANK-EXACT',
+            'classification' => 'SETTLEMENT',
+            'reconciliation_status' => 'RECONCILED',
+            'balance_before' => '2975.0000',
+        ]);
+
+        $next = $this->replicatePaymentRelation($relation, 'REL-SURPLUS-001', '2000.0000');
+        $second = app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$next->payment_reference, '2500', '2026-08-12 11:00:00', 'BANK-SURPLUS-002', 'Pago con excedente'],
+            [$next->payment_reference, '2500', '2026-08-12 11:01:00', 'BANK-SURPLUS-002', 'Folio repetido'],
+        ]), $this->cashier, $this->branch->id);
+
+        $this->assertSame(1, $second->summary['surpluses']);
+        $this->assertSame(1, $second->summary['duplicates']);
+        $this->assertDatabaseHas('bank_movements', ['bank_folio' => 'BANK-SURPLUS-002', 'classification' => 'SURPLUS', 'surplus_amount' => '500.0000']);
+        $this->assertDatabaseHas('bank_movements', ['bank_folio' => 'BANK-SURPLUS-002', 'classification' => 'DUPLICATE', 'applied_amount' => '0.0000']);
+        $this->assertSame(2, MovimientoBancario::query()->where('bank_folio', 'BANK-SURPLUS-002')->count());
+        $this->assertSame(2, DB::table('relation_payments')->count());
+    }
+
+    public function test_segundo_abono_usa_el_saldo_pendiente_actualizado(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '1000', '2026-08-12 10:00:00', 'BANK-PARTIAL-1', 'Primer abono'],
+        ]), $this->cashier, $this->branch->id);
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '500', '2026-08-13 10:00:00', 'BANK-PARTIAL-2', 'Segundo abono'],
+        ]), $this->cashier, $this->branch->id);
+
+        $this->assertSame('1475.0000', $relation->fresh()->balance);
+        $this->assertDatabaseHas('bank_movements', ['bank_folio' => 'BANK-PARTIAL-2', 'balance_before' => '1975.0000', 'classification' => 'PARTIAL_PAYMENT']);
+        $this->assertSame(2, DB::table('relation_payments')->where('relation_id', $relation->id)->count());
+    }
+
+    public function test_conciliacion_manual_requiere_autorizacion_y_la_cajera_la_ejecuta(): void
+    {
+        [$relation, $movement, $clarification] = $this->prepareManualReconciliation();
+        Sanctum::actingAs($this->cashier);
+        $manual = $this->postJson("/api/v1/bank-movements/{$movement->id}/manual-reconciliation-requests", [
+            'relation_id' => $relation->id,
+            'clarification_id' => $clarification->id,
+            'reason' => 'Comprobante y referencia verificados',
+        ])->assertCreated()->json('data');
+
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manual['id']}/execute")
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'MANUAL_RECONCILIATION_NOT_AUTHORIZED');
+
+        $manager = $this->user('branch_manager', $this->branch->id);
+        Sanctum::actingAs($manager);
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manual['id']}/decision", ['decision' => 'AUTHORIZE'])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'AUTHORIZED');
+
+        Sanctum::actingAs($this->cashier);
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manual['id']}/execute")
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'EXECUTED');
+        $this->assertDatabaseHas('bank_movements', ['id' => $movement->id, 'reconciliation_status' => 'MANUALLY_RECONCILED', 'relation_id' => $relation->id]);
+        $this->assertDatabaseHas('audit_logs', ['entity_id' => $manual['id'], 'event_name' => 'MANUAL_RECONCILIATION_EXECUTED', 'authorizer_id' => $manager->id, 'executor_id' => $this->cashier->id]);
+    }
+
+    public function test_cajera_no_puede_autorizar_su_propia_solicitud_aunque_reciba_el_permiso(): void
+    {
+        [$relation, $movement, $clarification] = $this->prepareManualReconciliation();
+        Sanctum::actingAs($this->cashier);
+        $manualId = $this->postJson("/api/v1/bank-movements/{$movement->id}/manual-reconciliation-requests", [
+            'relation_id' => $relation->id,
+            'clarification_id' => $clarification->id,
+            'reason' => 'Solicitar revisión',
+        ])->assertCreated()->json('data.id');
+        $roleId = Role::query()->where('code', 'cashier')->value('id');
+        $permissionId = DB::table('permissions')->where('code', 'manual_reconciliation.authorize_branch')->value('id');
+        DB::table('role_permissions')->insert(['id' => (string) Str::uuid(), 'role_id' => $roleId, 'permission_id' => $permissionId, 'granted_at' => now()]);
+
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manualId}/decision", ['decision' => 'AUTHORIZE'])
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'MANUAL_RECONCILIATION_SELF_AUTHORIZATION_DENIED');
+        $this->assertDatabaseHas('manual_reconciliation_requests', ['id' => $manualId, 'status' => 'REQUESTED', 'authorized_by' => null]);
+    }
+
+    public function test_coordinador_ajeno_y_cajera_de_otra_sucursal_no_pueden_operar_la_conciliacion(): void
+    {
+        [$relation, $movement, $clarification] = $this->prepareManualReconciliation();
+        $otherBranch = Branch::factory()->create();
+        $otherCashier = $this->user('cashier', $otherBranch->id);
+        Sanctum::actingAs($otherCashier);
+        $this->postJson("/api/v1/bank-movements/{$movement->id}/manual-reconciliation-requests", [
+            'relation_id' => $relation->id,
+            'clarification_id' => $clarification->id,
+            'reason' => 'Intento fuera de sucursal',
+        ])->assertForbidden()->assertJsonPath('error.code', 'MANUAL_RECONCILIATION_SCOPE_DENIED');
+
+        Sanctum::actingAs($this->cashier);
+        $manualId = $this->postJson("/api/v1/bank-movements/{$movement->id}/manual-reconciliation-requests", [
+            'relation_id' => $relation->id,
+            'clarification_id' => $clarification->id,
+            'reason' => 'Solicitud válida',
+        ])->assertCreated()->json('data.id');
+        $unassignedCoordinator = $this->user('coordinator', $this->branch->id);
+        Sanctum::actingAs($unassignedCoordinator);
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manualId}/decision", ['decision' => 'AUTHORIZE'])
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'MANUAL_RECONCILIATION_AUTHORIZATION_DENIED');
+    }
+
+    public function test_coordinador_responsable_puede_autorizar_la_conciliacion_manual(): void
+    {
+        [$relation, $movement, $clarification] = $this->prepareManualReconciliation();
+        Sanctum::actingAs($this->cashier);
+        $manualId = $this->postJson("/api/v1/bank-movements/{$movement->id}/manual-reconciliation-requests", [
+            'relation_id' => $relation->id,
+            'clarification_id' => $clarification->id,
+            'reason' => 'Solicitud con comprobante',
+        ])->assertCreated()->json('data.id');
+        $coordinator = $this->user('coordinator', $this->branch->id);
+        CoordinatorDistributorAssignment::query()->create([
+            'coordinator_id' => $coordinator->id,
+            'distributor_id' => $relation->distributor_id,
+            'branch_id' => $this->branch->id,
+            'status' => 'ACTIVE',
+            'valid_from' => now()->subDay(),
+            'assigned_by' => $coordinator->id,
+        ]);
+
+        Sanctum::actingAs($coordinator);
+        $this->postJson("/api/v1/manual-reconciliation-requests/{$manualId}/decision", ['decision' => 'AUTHORIZE'])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'AUTHORIZED')
+            ->assertJsonPath('data.authorized_by', $coordinator->id);
     }
 
     public function test_recargo_es_unico_y_se_difiere_sin_archivo_bancario_valido(): void
@@ -569,6 +717,81 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('distributor_risk_alerts', ['id' => $first->id, 'status' => 'REVIEWED']);
         $this->assertDatabaseHas('distributor_risk_alerts', ['id' => $second->id, 'status' => 'REVIEWED']);
         $this->assertDatabaseCount('distributor_delinquency_decisions', 2);
+    }
+
+    private function createPaymentRelation(): RelacionDistribuidora
+    {
+        $this->voucher->update(['status' => 'CASHED']);
+        $this->voucher->parcialidades()->create([
+            'number' => 1,
+            'capital' => '2500',
+            'loan_commission' => '250',
+            'interest' => '200',
+            'insurance' => '25',
+            'distributor_profit' => '125',
+            'misvales_payment' => '2975',
+            'client_payment' => '3100',
+            'due_at' => now()->subDay(),
+        ]);
+        app(ServicioGeneracionRelacion::class)->generar(CarbonImmutable::now('America/Monterrey'));
+
+        return RelacionDistribuidora::query()->firstOrFail();
+    }
+
+    private function replicatePaymentRelation(RelacionDistribuidora $relation, string $reference, string $balance): RelacionDistribuidora
+    {
+        $copy = $relation->replicate(['id', 'payment_reference', 'cutoff_at', 'created_at', 'updated_at']);
+        $copy->forceFill([
+            'id' => (string) Str::uuid(),
+            'payment_reference' => $reference,
+            'cutoff_at' => $relation->cutoff_at->addMonth(),
+            'portfolio_total' => $balance,
+            'misvales_total' => $balance,
+            'reconciled_total' => '0.0000',
+            'balance' => $balance,
+            'financial_status' => 'PENDING',
+            'review_status' => 'NO_REVIEW',
+            'settled_at' => null,
+            'temporal_classification' => null,
+        ])->save();
+
+        return $copy;
+    }
+
+    private function prepareManualReconciliation(): array
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            ['REFERENCIA-INEXISTENTE', '1000', '2026-08-12 10:00:00', 'BANK-MANUAL-001', 'Pago por aclarar'],
+        ]), $this->cashier, $this->branch->id);
+        $movement = MovimientoBancario::query()->where('bank_folio', 'BANK-MANUAL-001')->firstOrFail();
+        $evidence = MediaFile::query()->create([
+            'file_type' => 'CLARIFICATION',
+            'disk' => 'local',
+            'path' => 'private/clarification.pdf',
+            'original_name' => 'comprobante.pdf',
+            'mime_type' => 'application/pdf',
+            'size_bytes' => 20,
+            'sha256' => hash('sha256', 'manual-evidence'),
+            'uploaded_by' => $this->distributorUser->id,
+            'validation_status' => 'VALIDATED',
+            'validated_at' => now(),
+        ]);
+        MediaFileBinding::query()->create([
+            'media_file_id' => $evidence->id,
+            'owner_type' => 'distributor_relation',
+            'owner_id' => $relation->id,
+            'purpose' => 'CLARIFICATION',
+            'created_by' => $this->distributorUser->id,
+        ]);
+        Sanctum::actingAs($this->distributorUser);
+        $clarificationId = $this->postJson("/api/v1/relations/{$relation->id}/clarifications", [
+            'evidence_media_id' => $evidence->id,
+            'reason' => 'El pago corresponde a esta relación.',
+        ])->assertCreated()->json('data.id');
+
+        return [$relation, $movement, AclaracionPago::query()->findOrFail($clarificationId)];
     }
 
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
