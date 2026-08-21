@@ -15,7 +15,6 @@ class AsignarCategoriaRequest extends FormRequest
     {
         return [
             'category_version_id' => ['required', 'uuid', 'exists:category_versions,id'],
-            'starts_at' => ['required', 'date'],
             'reason' => ['nullable', 'string', 'max:255'],
             'lock_version' => ['required', 'integer', 'min:1'],
         ];
