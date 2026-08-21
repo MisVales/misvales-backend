@@ -69,6 +69,57 @@ final class RiesgoDistribuidoraController extends Controller
         return response()->json(['data' => $q->get()]);
     }
 
+    public function delinquencyBlocks(Request $r)
+    {
+        $u = $r->user();
+        abort_unless($u->hasPermissionTo('risk.view_global') || $u->hasPermissionTo('risk.view_branch') || $u->hasPermissionTo('risk.view_assigned'), 403);
+
+        $q = BloqueoOperativoDistribuidora::query()
+            ->where('type', 'DELINQUENCY')
+            ->where('status', 'ACTIVE')
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'creadoPor'])
+            ->latest('starts_at');
+
+        if (! $u->hasPermissionTo('risk.view_global')) {
+            $branches = $u->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
+            $q->whereHas('distribuidora', fn ($d) => $d->whereIn('branch_id', $branches));
+            if ($u->hasPermissionTo('risk.view_assigned')) {
+                $assignedDistributors = CoordinatorDistributorAssignment::where('coordinator_id', $u->id)->where('status', 'ACTIVE')->pluck('distributor_id');
+                $q->whereIn('distributor_id', $assignedDistributors);
+            }
+        }
+
+        $blocks = $q->get()->map(function (BloqueoOperativoDistribuidora $block) {
+            $overdueRelations = \App\Models\RelacionDistribuidora::where('distributor_id', $block->distributor_id)
+                ->where('payment_deadline_at', '<', now())
+                ->where('balance', '>', 0)
+                ->get();
+
+            $overdueBalance = $overdueRelations->reduce(fn ($sum, $rel) => bcadd($sum, (string) $rel->balance, 4), '0.0000');
+            $pendingRequest = SolicitudRetiroMorosidad::where('distributor_id', $block->distributor_id)
+                ->where('status', 'REQUESTED')
+                ->first();
+
+            return [
+                'id' => $block->id,
+                'distributor_id' => $block->distributor_id,
+                'type' => $block->type,
+                'status' => $block->status,
+                'reason' => $block->reason,
+                'starts_at' => $block->starts_at?->toIso8601String(),
+                'distribuidora' => $block->distribuidora,
+                'creado_por' => $block->creadoPor,
+                'overdue_balance' => $overdueBalance,
+                'overdue_count' => $overdueRelations->count(),
+                'is_regularized' => bccomp($overdueBalance, '0', 4) === 0,
+                'has_pending_request' => (bool) $pendingRequest,
+                'pending_request_id' => $pendingRequest?->id,
+            ];
+        });
+
+        return response()->json(['data' => $blocks]);
+    }
+
     public function decideRemoval(SolicitudRetiroMorosidad $solicitud, Request $r, ServicioMorosidadDistribuidora $s)
     {
         $d = $r->validate(['decision' => ['required', 'in:AUTHORIZE,REJECT'], 'reason' => ['required', 'string', 'max:1000']]);

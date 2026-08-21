@@ -335,6 +335,7 @@ Route::prefix('v1')->group(function () {
 
         // Módulo 16 - Riesgo y morosidad exclusiva de distribuidora
         Route::get('risk-alerts', [RiesgoDistribuidoraController::class, 'alerts']);
+        Route::get('delinquency-blocks', [RiesgoDistribuidoraController::class, 'delinquencyBlocks']);
         Route::get('me/delinquency-status', [RiesgoDistribuidoraController::class, 'me']);
         Route::post('risk-alerts/{alerta}/decision', [RiesgoDistribuidoraController::class, 'decide'])->middleware('idempotency');
         Route::post('distributors/{distribuidora}/delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'requestRemoval'])->middleware('idempotency');

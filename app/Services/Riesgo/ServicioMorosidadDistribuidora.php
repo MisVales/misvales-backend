@@ -86,20 +86,41 @@ final class ServicioMorosidadDistribuidora
         });
     }
 
-    public function solicitarRetiro(Distribuidora $d, User $coordinator, string $reason): SolicitudRetiroMorosidad
+    public function solicitarRetiro(Distribuidora $d, User $actor, string $reason): SolicitudRetiroMorosidad
     {
-        abort_unless($coordinator->hasPermissionTo('delinquency_removal.request_assigned'), 403);
-        $assignment = $d->coordinadorVigente;
-        abort_unless($assignment?->coordinator_id === $coordinator->id, 403);
-        $overdue = RelacionDistribuidora::where('distributor_id', $d->id)->where('payment_deadline_at', '<', now())->where('balance', '>', 0)->exists();
+        $isGlobal = $actor->hasPermissionTo('delinquency_removal.decide_global');
+        $isBranch = $actor->hasPermissionTo('delinquency_removal.decide_branch') && $actor->hasScopeForBranch($d->branch_id);
+        $isCoord = $actor->hasPermissionTo('delinquency_removal.request_assigned') && $d->coordinadorVigente?->coordinator_id === $actor->id;
+        $isOwn = $actor->distribuidora?->id === $d->id;
+
+        abort_unless($isGlobal || $isBranch || $isCoord || $isOwn, 403);
+
+        $overdue = RelacionDistribuidora::where('distributor_id', $d->id)
+            ->where('payment_deadline_at', '<', now())
+            ->where('balance', '>', 0)
+            ->exists();
+
         if ($overdue) {
             throw new RuntimeException('DISTRIBUTOR_NOT_REGULARIZED');
-        }$block = DB::table('distributor_operational_blocks')->where('distributor_id', $d->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->first();
+        }
+
+        $block = DB::table('distributor_operational_blocks')
+            ->where('distributor_id', $d->id)
+            ->where('type', 'DELINQUENCY')
+            ->where('status', 'ACTIVE')
+            ->first();
+
         if (! $block) {
             throw new RuntimeException('DELINQUENCY_BLOCK_NOT_FOUND');
         }
 
-        return SolicitudRetiroMorosidad::create(['distributor_id' => $d->id, 'block_id' => $block->id, 'branch_id' => $d->branch_id, 'reason' => $reason, 'requested_by' => $coordinator->id]);
+        return SolicitudRetiroMorosidad::create([
+            'distributor_id' => $d->id,
+            'block_id' => $block->id,
+            'branch_id' => $d->branch_id,
+            'reason' => $reason,
+            'requested_by' => $actor->id,
+        ]);
     }
 
     public function decidirRetiro(SolicitudRetiroMorosidad $request, User $actor, bool $approve, string $reason): void
