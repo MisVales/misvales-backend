@@ -84,22 +84,25 @@ final class ConciliacionBancariaController extends Controller
         return response()->json(['data' => $solicitud->fresh()]);
     }
 
-    public function executeManual(SolicitudConciliacionManual $solicitud, Request $request)
+    public function executeManual(SolicitudConciliacionManual $solicitud, Request $request, \App\Services\Pago\ServicioAplicacionPago $servicioPago)
     {
         abort_unless($request->user()->hasPermissionTo('manual_reconciliation.execute_branch') && $request->user()->hasScopeForBranch($solicitud->branch_id), 403);
         abort_unless($solicitud->status === 'AUTHORIZED', 409);
-        DB::transaction(function () use ($solicitud, $request) {
+        DB::transaction(function () use ($solicitud, $request, $servicioPago) {
             $relation = RelacionDistribuidora::whereKey($solicitud->relation_id)->lockForUpdate()->firstOrFail();
             $movement = MovimientoBancario::whereKey($solicitud->bank_movement_id)->lockForUpdate()->firstOrFail();
             $before = ['balance' => $relation->balance, 'reconciled_total' => $relation->reconciled_total];
-            $applied = bccomp($movement->amount, $relation->balance, 4) > 0 ? $relation->balance : $movement->amount;
-            $surplus = bcsub($movement->amount, $applied, 4);
-            $relation->reconciled_total = bcadd($relation->reconciled_total, $applied, 4);
-            $relation->balance = bcsub($relation->balance, $applied, 4);
-            $relation->financial_status = bccomp($relation->balance, '0', 4) === 0 ? 'SETTLED' : 'PARTIALLY_PAID';
-            $relation->save();
-            $movement->update(['relation_id' => $relation->id, 'classification' => bccomp($surplus, '0', 4) > 0 ? 'SURPLUS' : (bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT'), 'applied_amount' => $applied, 'surplus_amount' => $surplus]);
-            $solicitud->update(['status' => 'EXECUTED', 'executed_by' => $request->user()->id, 'executed_at' => now(), 'before_snapshot' => $before, 'after_snapshot' => ['balance' => $relation->balance, 'reconciled_total' => $relation->reconciled_total]]);
+            
+            $servicioPago->aplicar($movement, $relation);
+            $relation->refresh();
+
+            $solicitud->update([
+                'status' => 'EXECUTED',
+                'executed_by' => $request->user()->id,
+                'executed_at' => now(),
+                'before_snapshot' => $before,
+                'after_snapshot' => ['balance' => $relation->balance, 'reconciled_total' => $relation->reconciled_total],
+            ]);
         });
 
         return response()->json(['data' => $solicitud->fresh()]);

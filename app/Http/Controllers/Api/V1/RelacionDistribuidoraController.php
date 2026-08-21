@@ -13,7 +13,9 @@ final class RelacionDistribuidoraController extends Controller
 {
     public function index(Request $request)
     {
-        $query = RelacionDistribuidora::query()->with('distribuidora.usuario')->latest('cutoff_at');
+        $query = RelacionDistribuidora::query()
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos'])
+            ->latest('cutoff_at');
         $this->scope($query, $request);
         if ($request->filled('cutoff')) {
             $query->whereDate('cutoff_at', $request->date('cutoff'));
@@ -21,15 +23,28 @@ final class RelacionDistribuidoraController extends Controller
         if ($request->filled('status')) {
             $query->where('financial_status', $request->string('status'));
         }
+        if ($request->filled('search')) {
+            $search = $request->string('search');
+            $query->where(function (Builder $q) use ($search) {
+                $q->where('payment_reference', 'like', "%{$search}%")
+                    ->orWhereHas('distribuidora.usuario', function ($u) use ($search) {
+                        $u->where('name', 'like', "%{$search}%")
+                            ->orWhere('email', 'like', "%{$search}%");
+                    })
+                    ->orWhereHas('distribuidora', function ($d) use ($search) {
+                        $d->where('distributor_number', 'like', "%{$search}%");
+                    });
+            });
+        }
 
-        return response()->json(['data' => $query->paginate(25)]);
+        return response()->json(['data' => $query->paginate($request->integer('per_page', 25))]);
     }
 
     public function show(RelacionDistribuidora $relacion, Request $request)
     {
         $this->authorizeView($relacion, $request);
 
-        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'pagos'])]);
+        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos'])]);
     }
 
     public function download(RelacionDistribuidora $relacion, Request $request): Response
