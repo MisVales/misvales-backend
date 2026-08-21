@@ -85,7 +85,7 @@ final class ServicioGeneracionVale
 
             $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
             $calculo = $contexto['calculation'];
-            $tipo = $this->esValeDigital($clienteId) ? TipoVale::VALE_DIGITAL : TipoVale::PREVALE;
+            $tipo = $this->esValeDigital($distribuidora->id) ? TipoVale::VALE_DIGITAL : TipoVale::PREVALE;
             $folio = $this->siguienteFolio();
 
             $snapshot = [
@@ -218,7 +218,7 @@ final class ServicioGeneracionVale
         $condiciones = $contexto['financial_conditions'];
 
         return [
-            'voucher_type' => $this->esValeDigital($contexto['client']->id) ? TipoVale::VALE_DIGITAL->value : TipoVale::PREVALE->value,
+            'voucher_type' => $this->esValeDigital($contexto['distributor']->id) ? TipoVale::VALE_DIGITAL->value : TipoVale::PREVALE->value,
             'client' => ['id' => $contexto['client']->id, 'client_number' => $contexto['client']->client_number, 'full_name' => trim($contexto['client']->first_name.' '.$contexto['client']->first_last_name.' '.$contexto['client']->second_last_name)],
             'product' => ['id' => $contexto['product']->id, 'version_id' => $contexto['product_version']->id, 'code' => $contexto['product']->code, 'name' => $contexto['product_version']->name],
             'credit' => ['total_authorized' => $contexto['credit']->total_authorized, 'used_balance' => $contexto['credit']->used_balance, 'available_balance' => $contexto['credit']->available_balance, 'has_active_restriction' => $contexto['credit']->has_active_restriction, 'lower_limit' => $contexto['credit']->lower_limit, 'upper_limit' => $contexto['credit']->upper_limit],
@@ -244,8 +244,8 @@ final class ServicioGeneracionVale
         return sprintf('VAL-%s-%08d', now()->format('Y'), $secuencia);
     }
 
-    private function esValeDigital(string $clienteId): bool
+    private function esValeDigital(string $distribuidoraId): bool
     {
-        return Vale::query()->where('client_id', $clienteId)->exists();
+        return Vale::query()->where('distributor_id', $distribuidoraId)->exists();
     }
 }
