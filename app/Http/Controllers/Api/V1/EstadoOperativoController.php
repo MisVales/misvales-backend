@@ -47,9 +47,10 @@ final class EstadoOperativoController extends Controller
     {
         $path = 'health/'.Str::uuid();
         try {
-            Storage::disk('private')->put($path, 'ok');
+            $disk = config('filesystems.default');
+            Storage::disk($disk)->put($path, 'ok');
 
-            return Storage::disk('private')->delete($path);
+            return Storage::disk($disk)->delete($path);
         } catch (\Throwable) {
             return false;
         }

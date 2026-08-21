@@ -198,6 +198,7 @@ Route::prefix('v1')->group(function () {
         Route::get('configurations/{key}', [ConfiguracionController::class, 'show']);
         Route::get('configurations/{key}/versions', [ConfiguracionController::class, 'getVersionsByKey']);
         Route::post('configurations/{key}/versions', [ConfiguracionController::class, 'storeVersionByKey']);
+        Route::put('configurations/{key}/current', [ConfiguracionController::class, 'updateCurrent']);
         Route::get('configuration-versions/{id}', [ConfiguracionController::class, 'showVersion']);
         Route::patch('configuration-versions/{id}', [ConfiguracionController::class, 'updateVersion']);
         Route::post('configuration-versions/{id}/publish', [ConfiguracionController::class, 'publishVersion']);
@@ -264,6 +265,7 @@ Route::prefix('v1')->group(function () {
         // Módulo 7 - Clientes finales y cartera informativa
         Route::get('clients', [ClienteController::class, 'index'])->middleware('permission:clients.view');
         Route::post('clients', [ClienteController::class, 'store'])->middleware(['permission:clients.create', 'idempotency']);
+        Route::post('voucher-clients', [ClienteController::class, 'storeForVoucher'])->middleware(['permission:clients.create', 'idempotency']);
         Route::get('clients/{client}', [ClienteController::class, 'show'])->middleware('permission:clients.view');
         Route::get('clients/{client}/bank-accounts', [CuentaBancariaClienteController::class, 'index'])
             ->middleware('permission:clients.view_bank_accounts');
@@ -292,6 +294,7 @@ Route::prefix('v1')->group(function () {
         // Módulo 09 - Prevales, vales digitales y motor financiero
         Route::get('voucher-products', [ValeController::class, 'products']);
         Route::get('vouchers/eligible-clients', [ValeController::class, 'eligibleClients']);
+        Route::get('vouchers/financial-context', [ValeController::class, 'financialContext']);
         Route::post('vouchers/preview', [ValeController::class, 'preview']);
         Route::post('vouchers', [ValeController::class, 'store'])->middleware('idempotency');
         Route::get('vouchers', [ValeController::class, 'index']);

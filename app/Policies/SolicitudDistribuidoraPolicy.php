@@ -77,7 +77,7 @@ final class SolicitudDistribuidoraPolicy
 
         return $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'branch_manager'
             && $asignacion->branch_id === $solicitud->branch_id)
-            || ($solicitud->coordinator_id === $user->id
+            || (($solicitud->coordinator_id === $user->id || $solicitud->created_by === $user->id)
                 && $asignaciones->contains(fn ($asignacion): bool => $asignacion->role_code === 'coordinator'
                     && $asignacion->branch_id === $solicitud->branch_id));
     }

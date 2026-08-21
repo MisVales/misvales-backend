@@ -70,6 +70,56 @@ class ConfiguracionServicio
         ]);
     }
 
+    /**
+     * Actualiza una configuración operativa en una sola acción. La versión
+     * anterior queda cerrada para conservar la bitácora, sin exponer el flujo
+     * técnico de borrador/publicación a quien administra la configuración.
+     */
+    public function actualizarValorActual(ConfigurationDefinition $configuracion, array $datos, string $usuarioId): ConfigurationVersion
+    {
+        return DB::transaction(function () use ($configuracion, $datos, $usuarioId): ConfigurationVersion {
+            $now = now();
+            $previa = $configuracion->versions()
+                ->where('status', VersionStatus::PUBLISHED)
+                ->where('effective_from', '<=', $now)
+                ->where(function ($query) use ($now): void {
+                    $query->whereNull('effective_to')->orWhere('effective_to', '>', $now);
+                })
+                ->orderByDesc('effective_from')
+                ->lockForUpdate()
+                ->first();
+
+            if ($previa !== null) {
+                $previa->effective_to = $now;
+                $previa->status = VersionStatus::INACTIVE;
+                $previa->save();
+            }
+
+            $actual = ConfigurationVersion::query()->create([
+                'configuration_definition_id' => $configuracion->id,
+                'version' => ($configuracion->versions()->max('version') ?? 0) + 1,
+                'value' => $this->normalizarValor($datos['value'], $configuracion->value_type),
+                'status' => VersionStatus::PUBLISHED,
+                'effective_from' => $now,
+                'reason' => $datos['reason'],
+                'created_by' => $usuarioId,
+                'published_by' => $usuarioId,
+                'published_at' => $now,
+                'lock_version' => 0,
+            ]);
+
+            OutboxService::publish('ConfigurationPublished', [
+                'configuration_key' => $configuracion->key,
+                'version_id' => $actual->id,
+                'published_by' => $usuarioId,
+            ]);
+            Cache::forget('configuraciones:todas_vigentes');
+            Cache::forget("configuracion:{$configuracion->key}");
+
+            return $actual;
+        });
+    }
+
     public function actualizarVersion(ConfigurationVersion $version, array $datos): ConfigurationVersion
     {
         // Punto 32: Impedir modificar directamente una versión publicada.

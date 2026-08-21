@@ -20,10 +20,6 @@ final class ValeController extends Controller
         Gate::authorize('create', Vale::class);
         $productos = ProductVersion::query()->with('product')->where('status', 'PUBLISHED')->where('effective_from', '<=', now())
             ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
-            ->whereNotNull('loan_commission_percentage')
-            ->whereNotNull('simple_interest_percentage')
-            ->whereNotNull('insurance_amount')
-            ->whereNotNull('fortnights_count')
             ->whereHas('product', fn ($query) => $query->where('status', 'ACTIVE'))->orderBy('nominal_amount')->get();
 
         return response()->json(['data' => $productos->map(fn (ProductVersion $version): array => [
@@ -46,14 +42,31 @@ final class ValeController extends Controller
         ])->values()]);
     }
 
+    public function financialContext(Request $request, ServicioGeneracionVale $servicio)
+    {
+        Gate::authorize('create', Vale::class);
+
+        return response()->json(['data' => $servicio->contextoFinanciero($request->user())]);
+    }
+
     public function preview(PrevisualizarValeRequest $request, ServicioGeneracionVale $servicio)
     {
-        return response()->json(['data' => $servicio->previsualizar($request->user(), $request->validated('client_id'), $request->validated('product_version_id'))]);
+        return response()->json(['data' => $servicio->previsualizar(
+            $request->user(),
+            $request->validated('client_id'),
+            $request->validated('product_version_id'),
+            $request->validated('installment_count'),
+        )]);
     }
 
     public function store(PrevisualizarValeRequest $request, ServicioGeneracionVale $servicio): ValeResource
     {
-        return new ValeResource($servicio->generar($request->user(), $request->validated('client_id'), $request->validated('product_version_id')));
+        return new ValeResource($servicio->generar(
+            $request->user(),
+            $request->validated('client_id'),
+            $request->validated('product_version_id'),
+            $request->validated('installment_count'),
+        ));
     }
 
     public function index(Request $request)

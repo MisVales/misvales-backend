@@ -11,6 +11,8 @@ final class LocalDevSeeder extends Seeder
 {
     public function run(): void
     {
-        $this->call(LocalTestingUsersSeeder::class);
+        $this->call([
+            LocalTestingUsersSeeder::class,
+        ]);
     }
 }

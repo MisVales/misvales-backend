@@ -2,11 +2,29 @@
 
 namespace Tests;
 
+use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
+use RuntimeException;
 
 abstract class TestCase extends BaseTestCase
 {
     use DatabaseTransactions;
+
+    public function createApplication(): Application
+    {
+        $app = parent::createApplication();
+        $connection = $app['config']->get('database.default');
+        $database = $app['config']->get("database.connections.{$connection}.database");
+
+        if (! $app->environment('testing') || $database !== 'misvales_testing') {
+            throw new RuntimeException(sprintf(
+                'Pruebas bloqueadas: la base de datos debe ser misvales_testing; se recibió %s.',
+                $database ?? '(sin configurar)',
+            ));
+        }
+
+        return $app;
+    }
 
 }

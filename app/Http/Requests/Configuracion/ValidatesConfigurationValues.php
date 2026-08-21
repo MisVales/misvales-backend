@@ -64,7 +64,6 @@ trait ValidatesConfigurationValues
                 $specific = match ($key) {
                     'CUT_DAY_OF_MONTH' => ['between:1,28'],
                     'PAYMENT_DAYS_AFTER_CUT' => ['min:1'],
-                    'MODIFICATION_TOKEN_TTL' => ['min:1', 'max:1440'],
                     'CREDIT_TOLERANCE_AMOUNT', 'LATE_FEE_AMOUNT' => ['min:0', 'max:99999999.9999'],
                     default => [],
                 };

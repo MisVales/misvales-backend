@@ -25,10 +25,10 @@ final class ConfiguracionFinancieraVale
             'type' => 'DECIMAL',
             'label' => 'seguro del vale',
         ],
-        'fortnights_count' => [
-            'key' => 'VOUCHER_FORTNIGHTS_COUNT',
-            'type' => 'INTEGER',
-            'label' => 'número de quincenas',
+        'late_fee_amount' => [
+            'key' => 'LATE_FEE_AMOUNT',
+            'type' => 'DECIMAL',
+            'label' => 'recargo por falta de pago',
         ],
     ];
 
@@ -36,7 +36,7 @@ final class ConfiguracionFinancieraVale
 
     /**
      * @return array{
-     *     values: array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, fortnights_count: int},
+     *     values: array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, late_fee_amount: string},
      *     versions: array<string, array{version_id: string, version: int, value: mixed}>
      * }
      */
@@ -92,7 +92,7 @@ final class ConfiguracionFinancieraVale
             );
         }
 
-        /** @var array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, fortnights_count: int} $values */
+        /** @var array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, late_fee_amount: string} $values */
         return ['values' => $values, 'versions' => $versions];
     }
 
@@ -102,8 +102,7 @@ final class ConfiguracionFinancieraVale
 
         return match ($campo) {
             'loan_commission_percentage', 'simple_interest_percentage' => $this->porcentaje($texto),
-            'insurance_amount' => $this->monto($texto),
-            'fortnights_count' => $this->quincenas($texto),
+            'insurance_amount', 'late_fee_amount' => $this->monto($texto),
             default => throw new \InvalidArgumentException('Campo financiero no reconocido.'),
         };
     }
@@ -126,12 +125,4 @@ final class ConfiguracionFinancieraVale
         return bcadd($valor, '0', 4);
     }
 
-    private function quincenas(string $valor): int
-    {
-        if (! preg_match('/^[1-9]\d*$/', $valor)) {
-            throw new \InvalidArgumentException('Número de quincenas inválido.');
-        }
-
-        return (int) $valor;
-    }
 }

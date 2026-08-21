@@ -17,13 +17,14 @@ final class ServicioArchivosPrivados
 {
     private const PURPOSES = [
         'PHOTO' => ['jpg', 'jpeg', 'png', 'webp'],
-        'IDENTIFICATION' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'ASSET_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'COMMERCIAL_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'RECEIPT' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'CLARIFICATION' => ['jpg', 'jpeg', 'png', 'pdf'],
-        'REFUND_EVIDENCE' => ['jpg', 'jpeg', 'png', 'pdf'],
+        'IDENTIFICATION' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'ADDRESS_PROOF' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'ASSET_EVIDENCE' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'COMMERCIAL_EVIDENCE' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'RECEIPT' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'CLARIFICATION' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'REFUND_EVIDENCE' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
         'BANK_XLSX' => ['xlsx'],
         'GENERATED_DOCUMENT' => ['pdf'],
     ];
@@ -57,13 +58,14 @@ final class ServicioArchivosPrivados
         $hash = hash_file('sha256', $file->getRealPath());
 
         return DB::transaction(function () use ($file, $ownerType, $ownerId, $purpose, $actor, $extension, $mime, $hash): MediaFile {
+            $disk = config('filesystems.default');
             $temporary = 'tmp/'.Str::uuid();
-            Storage::disk('private')->putFileAs('tmp', $file, basename($temporary));
+            Storage::disk($disk)->putFileAs('tmp', $file, basename($temporary));
             $destination = 'media/'.now()->format('Y/m').'/'.Str::uuid().'.'.$extension;
-            if (! Storage::disk('private')->move($temporary, $destination)) {
+            if (! Storage::disk($disk)->move($temporary, $destination)) {
                 throw ValidationException::withMessages(['file' => ['No fue posible finalizar el almacenamiento privado.']]);
             }
-            $media = MediaFile::query()->create(['file_type' => $purpose, 'disk' => 'private', 'path' => $destination, 'original_name' => basename($file->getClientOriginalName()), 'mime_type' => $mime, 'size_bytes' => $file->getSize(), 'sha256' => $hash, 'uploaded_by' => $actor->id, 'validation_status' => 'VALIDATED', 'validated_at' => now()]);
+            $media = MediaFile::query()->create(['file_type' => $purpose, 'disk' => $disk, 'path' => $destination, 'original_name' => basename($file->getClientOriginalName()), 'mime_type' => $mime, 'size_bytes' => $file->getSize(), 'sha256' => $hash, 'uploaded_by' => $actor->id, 'validation_status' => 'VALIDATED', 'validated_at' => now()]);
             MediaFileBinding::query()->create(['media_file_id' => $media->id, 'owner_type' => $ownerType, 'owner_id' => $ownerId, 'purpose' => $purpose, 'created_by' => $actor->id]);
             AuditHelper::log('PRIVATE_MEDIA_STORED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, ['owner_type' => $ownerType, 'owner_id' => $ownerId, 'purpose' => $purpose, 'sha256' => $hash, 'size_bytes' => $file->getSize()]);
 

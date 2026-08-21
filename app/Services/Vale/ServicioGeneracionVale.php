@@ -26,6 +26,7 @@ final class ServicioGeneracionVale
     public function __construct(
         private readonly CalculadorFinancieroVale $calculador,
         private readonly VerificadorDisponibilidadCredito $credito,
+        private readonly ConfiguracionFinancieraVale $configuracionFinanciera,
     ) {}
 
     /** @return Collection<int, Cliente> */
@@ -51,20 +52,38 @@ final class ServicioGeneracionVale
             ->get();
     }
 
-    public function previsualizar(User $actor, string $clienteId, string $versionProductoId): array
+    /** @return array{category: array{name: string, percentage: string}, conditions: array{commission_rate: string, interest_rate: string, insurance_amount: string, late_fee_amount: string}} */
+    public function contextoFinanciero(User $actor): array
     {
-        $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId);
+        $distribuidora = $this->resolverDistribuidoraActiva($actor);
+        $categoria = $this->resolverCategoriaVigente($distribuidora);
+        $configuracion = $this->configuracionFinanciera->resolver()['values'];
+
+        return [
+            'category' => ['name' => $categoria->name, 'percentage' => (string) $categoria->profit_percentage],
+            'conditions' => [
+                'commission_rate' => $configuracion['loan_commission_percentage'],
+                'interest_rate' => $configuracion['simple_interest_percentage'],
+                'insurance_amount' => $configuracion['insurance_amount'],
+                'late_fee_amount' => $configuracion['late_fee_amount'],
+            ],
+        ];
+    }
+
+    public function previsualizar(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): array
+    {
+        $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
 
         return $this->respuestaPrevisualizacion($contexto);
     }
 
-    public function generar(User $actor, string $clienteId, string $versionProductoId): Vale
+    public function generar(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): Vale
     {
-        return DB::transaction(function () use ($actor, $clienteId, $versionProductoId): Vale {
+        return DB::transaction(function () use ($actor, $clienteId, $versionProductoId, $installmentCount): Vale {
             $distribuidora = Distribuidora::query()->where('user_id', $actor->id)->firstOrFail();
             LineaCredito::query()->where('distributor_id', $distribuidora->id)->lockForUpdate()->firstOrFail();
 
-            $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId);
+            $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
             $calculo = $contexto['calculation'];
             $tipo = $this->esValeDigital($clienteId) ? TipoVale::VALE_DIGITAL : TipoVale::PREVALE;
             $folio = $this->siguienteFolio();
@@ -75,6 +94,8 @@ final class ServicioGeneracionVale
                 'category_version' => ['id' => $contexto['category_version']->id, 'version' => $contexto['category_version']->version, 'name' => $contexto['category_version']->name],
                 'credit' => $contexto['credit'],
                 'calculation' => collect($calculo)->except('installments')->all(),
+                'financial_conditions' => $contexto['financial_conditions'],
+                'financial_configuration_versions' => $contexto['financial_configuration_versions'],
                 'generated_at' => now()->toIso8601String(),
             ];
 
@@ -90,7 +111,14 @@ final class ServicioGeneracionVale
                 'product_version_id' => $contexto['product_version']->id,
                 'category_version_id' => $contexto['category_version']->id,
                 'credit_restriction_id' => $contexto['credit']->restriction_id,
-                ...collect($calculo)->except('installments')->all(),
+                ...collect($calculo)->only([
+                    'capital', 'loan_commission_percentage', 'loan_commission_amount',
+                    'simple_interest_percentage', 'fortnights_count', 'insurance_amount',
+                    'interest_total', 'misvales_total', 'misvales_payment_per_fortnight',
+                    'distributor_profit_percentage', 'distributor_profit_total',
+                    'distributor_profit_per_fortnight', 'client_payment_per_fortnight',
+                    'client_total',
+                ])->all(),
                 'financial_snapshot' => $snapshot,
                 'created_by' => $actor->id,
                 'generated_at' => now(),
@@ -107,7 +135,7 @@ final class ServicioGeneracionVale
         }, 3);
     }
 
-    private function resolverContexto(User $actor, string $clienteId, string $versionProductoId): array
+    private function resolverContexto(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): array
     {
         $distribuidora = $this->resolverDistribuidoraActiva($actor);
         if (BloqueoOperativoDistribuidora::query()->where('distributor_id', $distribuidora->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->exists()) {
@@ -127,33 +155,25 @@ final class ServicioGeneracionVale
             throw new ExcepcionVale('PRODUCT_NOT_AVAILABLE', 'El producto no está activo y publicado.', 409);
         }
 
-        $asignacionCategoria = AsignacionCategoriaDistribuidora::query()->with('versionCategoria')
-            ->where('distributor_id', $distribuidora->id)->where('starts_at', '<=', now())
-            ->where(fn ($consulta) => $consulta->whereNull('ends_at')->orWhere('ends_at', '>', now()))->latest('starts_at')->first();
-        if (! $asignacionCategoria || $asignacionCategoria->versionCategoria->status->value !== 'PUBLISHED') {
-            throw new ExcepcionVale('DISTRIBUTOR_CATEGORY_NOT_AVAILABLE', 'La distribuidora no tiene una categoría publicada vigente.', 409);
-        }
+        $categoria = $this->resolverCategoriaVigente($distribuidora);
 
-        if (
-            $versionProducto->loan_commission_percentage === null
-            || $versionProducto->simple_interest_percentage === null
-            || $versionProducto->insurance_amount === null
-            || $versionProducto->fortnights_count === null
-        ) {
-            throw new ExcepcionVale(
-                'PRODUCT_FINANCIAL_CONFIGURATION_MISSING',
-                'El producto publicado no tiene completas sus condiciones financieras. Solicita que se publique una versión completa del producto.',
-                409,
-            );
-        }
-
+        $configuracion = $this->configuracionFinanciera->resolver();
+        $valoresGlobales = $configuracion['values'];
+        $condiciones = [
+            'commission_rate' => $valoresGlobales['loan_commission_percentage'],
+            'interest_rate' => $valoresGlobales['simple_interest_percentage'],
+            'insurance_amount' => $valoresGlobales['insurance_amount'],
+            'installment_count' => $installmentCount,
+            'late_fee_amount' => $valoresGlobales['late_fee_amount'],
+            'category_rate' => (string) $categoria->profit_percentage,
+        ];
         $calculo = $this->calculador->calcular(
             (string) $versionProducto->nominal_amount,
-            (string) $versionProducto->loan_commission_percentage,
-            (string) $versionProducto->simple_interest_percentage,
-            (int) $versionProducto->fortnights_count,
-            (string) $versionProducto->insurance_amount,
-            (string) $asignacionCategoria->versionCategoria->profit_percentage,
+            $condiciones['commission_rate'],
+            $condiciones['interest_rate'],
+            $condiciones['installment_count'],
+            $condiciones['insurance_amount'],
+            $condiciones['category_rate'],
         );
         $credito = $this->credito->evaluar($distribuidora->id, $calculo['capital']);
         if (! $credito->capital_is_available) {
@@ -163,7 +183,19 @@ final class ServicioGeneracionVale
             throw new ExcepcionVale('CREDIT_50_PERCENT_RULE_NOT_SATISFIED', 'El producto no está dentro del rango permitido por la restricción vigente.', 409, ['lower_limit' => $credito->lower_limit, 'upper_limit' => $credito->upper_limit]);
         }
 
-        return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $asignacionCategoria->versionCategoria, 'calculation' => $calculo, 'credit' => $credito];
+        return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $categoria, 'calculation' => $calculo, 'credit' => $credito, 'financial_conditions' => $condiciones, 'financial_configuration_versions' => $configuracion['versions']];
+    }
+
+    private function resolverCategoriaVigente(Distribuidora $distribuidora): \App\Models\CategoryVersion
+    {
+        $asignacionCategoria = AsignacionCategoriaDistribuidora::query()->with('versionCategoria')
+            ->where('distributor_id', $distribuidora->id)->where('starts_at', '<=', now())
+            ->where(fn ($consulta) => $consulta->whereNull('ends_at')->orWhere('ends_at', '>', now()))->latest('starts_at')->first();
+        if (! $asignacionCategoria || $asignacionCategoria->versionCategoria->status->value !== 'PUBLISHED') {
+            throw new ExcepcionVale('DISTRIBUTOR_CATEGORY_NOT_AVAILABLE', 'La distribuidora no tiene una categoría publicada vigente.', 409);
+        }
+
+        return $asignacionCategoria->versionCategoria;
     }
 
     private function resolverDistribuidoraActiva(User $actor): Distribuidora
@@ -182,12 +214,26 @@ final class ServicioGeneracionVale
 
     private function respuestaPrevisualizacion(array $contexto): array
     {
+        $calculo = $contexto['calculation'];
+        $condiciones = $contexto['financial_conditions'];
+
         return [
             'voucher_type' => $this->esValeDigital($contexto['client']->id) ? TipoVale::VALE_DIGITAL->value : TipoVale::PREVALE->value,
             'client' => ['id' => $contexto['client']->id, 'client_number' => $contexto['client']->client_number, 'full_name' => trim($contexto['client']->first_name.' '.$contexto['client']->first_last_name.' '.$contexto['client']->second_last_name)],
             'product' => ['id' => $contexto['product']->id, 'version_id' => $contexto['product_version']->id, 'code' => $contexto['product']->code, 'name' => $contexto['product_version']->name],
             'credit' => ['total_authorized' => $contexto['credit']->total_authorized, 'used_balance' => $contexto['credit']->used_balance, 'available_balance' => $contexto['credit']->available_balance, 'has_active_restriction' => $contexto['credit']->has_active_restriction, 'lower_limit' => $contexto['credit']->lower_limit, 'upper_limit' => $contexto['credit']->upper_limit],
-            'calculation' => $contexto['calculation'],
+            'financial_conditions' => [
+                'commission_rate' => $condiciones['commission_rate'],
+                'interest_rate' => $condiciones['interest_rate'],
+                'insurance_amount' => $condiciones['insurance_amount'],
+                'installment_count' => $condiciones['installment_count'],
+                'category_rate' => $condiciones['category_rate'],
+                'late_fee_amount' => $condiciones['late_fee_amount'],
+            ],
+            'calculation' => $calculo + [
+                'payment_with_late_fee' => bcadd($calculo['misvales_payment_per_fortnight'], $condiciones['late_fee_amount'], 4),
+                'two_payments_with_late_fee' => bcmul(bcadd($calculo['misvales_payment_per_fortnight'], $condiciones['late_fee_amount'], 4), '2', 4),
+            ],
         ];
     }
 

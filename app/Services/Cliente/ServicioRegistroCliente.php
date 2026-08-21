@@ -167,6 +167,46 @@ final class ServicioRegistroCliente
         }
     }
 
+    /** @param array{first_name: string, first_last_name: string, second_last_name?: string|null} $datos */
+    public function registrarBasicoParaVale(array $datos, User $actor): Cliente
+    {
+        $distribuidora = $this->resolverDistribuidora($actor);
+
+        return DB::transaction(function () use ($datos, $actor, $distribuidora): Cliente {
+            $distribuidora = Distribuidora::query()->lockForUpdate()->find($distribuidora->id);
+            if ($distribuidora === null || $distribuidora->status !== EstadoDistribuidora::ACTIVA) {
+                throw new ExcepcionCliente('CLIENT_ASSIGNMENT_NOT_ACTIVE', 'La distribuidora no tiene una asignación activa.', 409);
+            }
+
+            $cliente = Cliente::query()->create([
+                'client_number' => $this->generadorNumero->generar(),
+                'first_name' => trim($datos['first_name']),
+                'first_last_name' => trim($datos['first_last_name']),
+                'second_last_name' => $this->nuloSiVacio($datos['second_last_name'] ?? null),
+                'created_by' => $actor->id,
+                'lock_version' => 1,
+            ]);
+            $ahora = now();
+
+            AsignacionClienteDistribuidora::query()->create([
+                'client_id' => $cliente->id,
+                'distributor_id' => $distribuidora->id,
+                'branch_id' => $distribuidora->branch_id,
+                'starts_at' => $ahora,
+                'assigned_by' => $actor->id,
+                'reason' => 'Registro básico para otorgamiento de vale',
+            ]);
+            OutboxEvent::query()->create([
+                'event_type' => 'CLIENT_CREATED',
+                'payload' => ['client_id' => $cliente->id, 'client_number' => $cliente->client_number, 'distributor_id' => $distribuidora->id, 'branch_id' => $distribuidora->branch_id],
+                'status' => 'PENDING',
+            ]);
+            $this->auditor->registrar('CLIENT_CREATED', $cliente->id, $actor, $distribuidora->branch_id, $distribuidora->id, nuevos: ['client_number' => $cliente->client_number]);
+
+            return $cliente->load(['asignacionVigente.distribuidora', 'asignacionVigente.sucursal']);
+        }, 3);
+    }
+
     private function resolverDistribuidora(User $actor): Distribuidora
     {
         $scopeIds = $actor->roleScopes()
