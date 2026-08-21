@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\RegistroOperacional;
 use App\Services\Observabilidad\SanitizadorDatos;
+use App\Services\Operaciones\ServicioCorteManual;
 use App\Services\Reportes\ServicioReportes;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -112,6 +113,29 @@ final class CentroOperacionController extends Controller
         }
 
         return response()->json(['data' => $query->paginate(min($request->integer('per_page', 50), 100))]);
+    }
+
+    public function currentCutoffSummary(Request $request, ServicioCorteManual $corteManual): JsonResponse
+    {
+        abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
+
+        return response()->json(['data' => $corteManual->obtenerResumenCorteActual()]);
+    }
+
+    public function forceCutoff(Request $request, ServicioCorteManual $corteManual): JsonResponse
+    {
+        abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
+        
+        $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
+
+        try {
+            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
+        } catch (\RuntimeException $e) {
+            if ($e->getMessage() === 'RELATION_CONFIGURATION_INCOMPLETE') {
+                return response()->json(['message' => 'Falta configuración en el sistema (horarios/días) para poder generar el corte.'], 422);
+            }
+            throw $e;
+        }
     }
 
     private function authorizeNotifications(Request $request): void

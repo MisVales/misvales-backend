@@ -346,6 +346,10 @@ Route::prefix('v1')->group(function () {
         Route::get('notifications/unread-count', [CentroOperacionController::class, 'unreadCount']);
         Route::patch('notifications/{notification}/read', [CentroOperacionController::class, 'markNotification']);
         Route::post('notifications/read-all', [CentroOperacionController::class, 'markAllNotifications'])->middleware('idempotency');
+
+        Route::get('operations/current-cutoff', [CentroOperacionController::class, 'currentCutoffSummary']);
+        Route::post('operations/force-cutoff', [CentroOperacionController::class, 'forceCutoff'])->middleware('idempotency');
+
         Route::get('reports/points-balance/export', [ReportesExportController::class, 'pointsBalance']);
         Route::get('reports/pre-requests/export', [ReportesExportController::class, 'preRequests']);
         Route::get('reports', [CentroOperacionController::class, 'reports']);
