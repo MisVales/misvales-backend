@@ -13,7 +13,7 @@ final class RelacionDistribuidoraController extends Controller
 {
     public function index(Request $request)
     {
-        $query = RelacionDistribuidora::query()->with('distribuidora.usuario')->latest('cutoff_at');
+        $query = RelacionDistribuidora::query()->with(['distribuidora.usuario', 'partidas'])->latest('cutoff_at');
         $this->scope($query, $request);
         if ($request->filled('cutoff')) {
             $query->whereDate('cutoff_at', $request->date('cutoff'));
