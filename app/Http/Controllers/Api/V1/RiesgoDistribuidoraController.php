@@ -25,7 +25,9 @@ final class RiesgoDistribuidoraController extends Controller
     {
         $u = $r->user();
         abort_unless($u->hasPermissionTo('risk.view_global') || $u->hasPermissionTo('risk.view_branch') || $u->hasPermissionTo('risk.view_assigned'), 403);
-        $q = AlertaRiesgoDistribuidora::query()->latest();
+        $q = AlertaRiesgoDistribuidora::query()
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal'])
+            ->latest();
         if (! $u->hasPermissionTo('risk.view_global')) {
             $branches = $u->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
             $q->whereIn('branch_id', $branches);
@@ -42,7 +44,7 @@ final class RiesgoDistribuidoraController extends Controller
         $d = $r->validate(['decision' => ['required', 'in:APPLY,DO_NOT_APPLY'], 'reason' => ['required', 'string', 'max:1000']]);
         $s->decidir($alerta, $r->user(), $d['decision'] === 'APPLY', $d['reason']);
 
-        return response()->json(['data' => $alerta->fresh()]);
+        return response()->json(['data' => $alerta->fresh(['distribuidora.usuario', 'distribuidora.sucursal'])]);
     }
 
     public function requestRemoval(Distribuidora $distribuidora, Request $r, ServicioMorosidadDistribuidora $s)
@@ -56,7 +58,9 @@ final class RiesgoDistribuidoraController extends Controller
     {
         $u = $r->user();
         abort_unless($u->hasPermissionTo('delinquency_removal.decide_global') || $u->hasPermissionTo('delinquency_removal.decide_branch'), 403);
-        $q = SolicitudRetiroMorosidad::query()->latest();
+        $q = SolicitudRetiroMorosidad::query()
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'solicitante', 'decididoPor'])
+            ->latest();
         if (! $u->hasPermissionTo('delinquency_removal.decide_global')) {
             $branches = $u->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
             $q->whereIn('branch_id', $branches);

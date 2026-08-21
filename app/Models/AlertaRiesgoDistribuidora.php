@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 final class AlertaRiesgoDistribuidora extends Model
 {
@@ -17,7 +18,21 @@ final class AlertaRiesgoDistribuidora extends Model
 
     protected function casts(): array
     {
-        return ['relation_ids' => 'array', 'overdue_balance' => 'decimal:4', 'consecutive_defaults' => 'integer'];
+        return [
+            'relation_ids' => 'array',
+            'overdue_balance' => 'decimal:4',
+            'consecutive_defaults' => 'integer',
+        ];
+    }
+
+    public function distribuidora(): BelongsTo
+    {
+        return $this->belongsTo(Distribuidora::class, 'distributor_id');
+    }
+
+    public function sucursal(): BelongsTo
+    {
+        return $this->belongsTo(Branch::class, 'branch_id');
     }
 
     public function getRelationDetailsAttribute(): array
