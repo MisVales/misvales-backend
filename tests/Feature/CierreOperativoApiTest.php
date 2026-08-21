@@ -66,12 +66,12 @@ final class CierreOperativoApiTest extends TestCase
     {
         Storage::fake('private');
         $redis = Mockery::mock();
-        $redis->shouldReceive('ping')->once()->andReturn(true);
-        Redis::shouldReceive('connection')->once()->with('health')->andReturn($redis);
+        $redis->shouldReceive('ping')->twice()->andReturn(true);
+        Redis::shouldReceive('connection')->twice()->with('health')->andReturn($redis);
         $this->artisan('operations:heartbeat')->assertSuccessful();
-        $this->getJson('/api/v1/health/readiness')->assertOk()->assertJsonPath('status', 'ready')->assertJsonPath('checks.postgresql', true)->assertJsonPath('checks.private_storage', true)->assertJsonPath('checks.scheduler', true);
+        $this->getJson('/api/v1/health/readiness')->assertOk()->assertJsonPath('status', 'ready')->assertJsonMissingPath('checks');
         $metrics = $this->get('/api/v1/metrics')->assertOk()->assertHeader('content-type', 'text/plain; version=0.0.4; charset=UTF-8')->getContent();
-        self::assertStringContainsString('misvales_failed_jobs', $metrics);
+        self::assertStringContainsString('misvales_service_ready 1', $metrics);
         self::assertStringNotContainsString('password', strtolower($metrics));
     }
 
@@ -87,7 +87,7 @@ final class CierreOperativoApiTest extends TestCase
         $this->getJson('/api/v1/health/readiness')
             ->assertServiceUnavailable()
             ->assertJsonPath('status', 'not_ready')
-            ->assertJsonPath('checks.redis', false);
+            ->assertJsonMissingPath('checks');
 
         self::assertLessThan(1.0, microtime(true) - $startedAt);
     }

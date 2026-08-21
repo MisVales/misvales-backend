@@ -17,17 +17,21 @@ final class EstadoOperativoController extends Controller
         $checks = ['postgresql' => $this->check(fn () => DB::selectOne('SELECT 1')), 'redis' => $this->check(fn () => Redis::connection('health')->ping()), 'private_storage' => $this->storage(), 'scheduler' => $this->scheduler()];
         $ready = ! in_array(false, $checks, true);
 
-        return response()->json(['status' => $ready ? 'ready' : 'not_ready', 'checks' => $checks, 'failed_jobs' => DB::table('failed_jobs')->count(), 'queued_jobs' => config('queue.default') === 'database' ? DB::table('jobs')->count() : null, 'checked_at' => now()->toIso8601String()], $ready ? 200 : 503);
+        return response()->json([
+            'status' => $ready ? 'ready' : 'not_ready',
+            'checked_at' => now()->toIso8601String(),
+        ], $ready ? 200 : 503);
     }
 
     public function metrics(): Response
     {
-        $lines = [
-            '# TYPE misvales_failed_jobs gauge', 'misvales_failed_jobs '.DB::table('failed_jobs')->count(),
-            '# TYPE misvales_outbox_pending gauge', 'misvales_outbox_pending '.DB::table('outbox_events')->where('status', 'PENDING')->count(),
-            '# TYPE misvales_unprocessed_notifications gauge', 'misvales_unprocessed_notifications '.DB::table('notification_deliveries')->where('status', '<>', 'SENT')->count(),
-            '# TYPE misvales_http_errors_total gauge', 'misvales_http_errors_total '.DB::table('operational_logs')->where('status_code', '>=', 500)->count(),
-        ];
+        $ready = ! in_array(false, [
+            $this->check(fn () => DB::selectOne('SELECT 1')),
+            $this->check(fn () => Redis::connection('health')->ping()),
+            $this->storage(),
+            $this->scheduler(),
+        ], true);
+        $lines = ['# TYPE misvales_service_ready gauge', 'misvales_service_ready '.($ready ? '1' : '0')];
 
         return response(implode("\n", $lines)."\n", 200, ['Content-Type' => 'text/plain; version=0.0.4']);
     }
