@@ -128,7 +128,7 @@ final class CentroOperacionController extends Controller
         
         $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
 
-        return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->string('motivo'))]);
+        return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
     }
 
     private function authorizeNotifications(Request $request): void
