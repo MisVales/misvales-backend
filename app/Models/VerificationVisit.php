@@ -18,7 +18,7 @@ class VerificationVisit extends Model
     protected $table = 'verification_visits';
 
     protected $fillable = [
-        'application_id', 'verifier_id', 'assigned_by', 'assigned_at',
+        'application_id', 'verifier_id', 'assigned_by', 'assigned_at', 'scheduled_for',
         'started_at', 'completed_at', 'visited_at',
         'observations', 'differences_payload', 'latitude', 'longitude', 'location_accuracy_meters',
     ];
@@ -27,6 +27,7 @@ class VerificationVisit extends Model
         'status' => VerificationVisitStatus::class,
         'result' => VerificationVisitResult::class,
         'assigned_at' => 'datetime',
+        'scheduled_for' => 'datetime',
         'started_at' => 'datetime',
         'completed_at' => 'datetime',
         'visited_at' => 'datetime',

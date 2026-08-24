@@ -16,6 +16,7 @@ class ApplicationCorrection extends Model
 
     protected $fillable = [
         'application_id', 'verification_visit_id', 'section', 'field_path',
+        'target_record_id', 'difference_index',
         'previous_value_payload', 'new_value_payload', 'reason',
         'corrected_by', 'corrected_at',
     ];

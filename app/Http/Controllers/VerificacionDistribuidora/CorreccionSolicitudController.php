@@ -31,10 +31,10 @@ class CorreccionSolicitudController extends Controller
             $data['visit_id'] ?? $visitId ?? throw new \InvalidArgumentException('Visit ID missing'),
             ApplicationCorrectionSection::from($data['section']),
             $data['field_path'],
-            $data['new_value'],
-            $data['reason'],
             auth()->id(),
-            (int) $data['lock_version']
+            (int) $data['lock_version'],
+            $data['record_id'] ?? null,
+            (int) ($data['difference_index'] ?? 0),
         );
 
         return (new ApplicationCorrectionResource($correction))->additional(['message' => 'Corrección aplicada.']);

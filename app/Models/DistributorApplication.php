@@ -8,8 +8,10 @@ use App\Models\Concerns\HasOptimisticLocking;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 
 class DistributorApplication extends Model
 {
@@ -86,6 +88,11 @@ class DistributorApplication extends Model
     public function coordinator(): BelongsTo
     {
         return $this->belongsTo(User::class, 'coordinator_id');
+    }
+
+    public function branch(): BelongsTo
+    {
+        return $this->belongsTo(BranchRecord::class, 'branch_id');
     }
 
     public function transitionTo(ApplicationStatus $newStatus, string $userId, ?string $reason = null): void

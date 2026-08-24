@@ -5,6 +5,7 @@ namespace App\Http\Controllers\VerificacionDistribuidora;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\VerificacionDistribuidora\ActualizarVisitaRequest;
 use App\Http\Requests\VerificacionDistribuidora\AsignarVerificadorRequest;
+use App\Http\Requests\VerificacionDistribuidora\ConsultarAgendaVerificadorRequest;
 use App\Http\Requests\VerificacionDistribuidora\DevolverSolicitudCapturaRequest;
 use App\Http\Requests\VerificacionDistribuidora\FinalizarVisitaRequest;
 use App\Http\Requests\VerificacionDistribuidora\IniciarVisitaRequest;
@@ -34,7 +35,7 @@ class VerificacionDistribuidoraController extends Controller
     public function asignarVerificador(AsignarVerificadorRequest $request, string $applicationId)
     {
         $data = $request->validated();
-        $this->revisionService->asignarVerificador($applicationId, auth()->id(), $data['verifier_id'], (int) $data['lock_version']);
+        $this->revisionService->asignarVerificador($applicationId, auth()->id(), $data['verifier_id'], $data['scheduled_for'], (int) $data['lock_version']);
 
         return response()->json(['message' => 'Verificador asignado exitosamente.'], 200);
     }
@@ -42,6 +43,19 @@ class VerificacionDistribuidoraController extends Controller
     public function listarVerificadoresDisponibles(string $applicationId): JsonResponse
     {
         return response()->json(['data' => $this->revisionService->listarVerificadoresDisponibles($applicationId, auth()->id())]);
+    }
+
+    public function consultarAgendaVerificador(ConsultarAgendaVerificadorRequest $request, string $applicationId, string $verifierId): JsonResponse
+    {
+        $range = $request->validated();
+
+        return response()->json(['data' => $this->revisionService->consultarAgendaVerificador(
+            $applicationId,
+            auth()->id(),
+            $verifierId,
+            $range['from'],
+            $range['to'],
+        )]);
     }
 
     // ---- Métodos de Verificador ----
@@ -56,6 +70,7 @@ class VerificacionDistribuidoraController extends Controller
     public function consultarVisita(string $visitId)
     {
         $visit = $this->verificacionService->consultarVisita($visitId, auth()->id());
+        request()->attributes->set('verification_sensitive_application_id', $visit->application_id);
 
         return new VerificationVisitResource($visit);
     }

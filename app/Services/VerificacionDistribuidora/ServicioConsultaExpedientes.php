@@ -29,7 +29,7 @@ class ServicioConsultaExpedientes
         if (! empty($filters['buscar'])) {
             $term = mb_strtolower($filters['buscar']);
             $query->where(function (Builder $search) use ($term): void {
-                $search->whereRaw('LOWER(id::text) LIKE ?', ["%{$term}%"])
+                $search->whereRaw('LOWER(CAST(id AS CHAR)) LIKE ?', ["%{$term}%"])
                     ->orWhereHas('datosPersonales', function (Builder $personal) use ($term): void {
                         $personal->whereRaw('LOWER(first_name) LIKE ?', ["%{$term}%"])
                             ->orWhereRaw('LOWER(first_last_name) LIKE ?', ["%{$term}%"])

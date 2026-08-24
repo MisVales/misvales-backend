@@ -9,10 +9,17 @@ use App\Helpers\AuditHelper;
 use App\Models\DistributorApplication;
 use App\Models\User;
 use App\Models\VerificationVisit;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 class ServicioRevisionCoordinador
 {
+    private const VISIT_DURATION_MINUTES = 30;
+
+    private const ARRIVAL_BUFFER_BEFORE_MINUTES = 15;
+
+    private const TRAVEL_BUFFER_AFTER_MINUTES = 30;
+
     public function listarVerificadoresDisponibles(string $applicationId, string $coordinatorId): array
     {
         $application = DistributorApplication::find($applicationId);
@@ -68,9 +75,51 @@ class ServicioRevisionCoordinador
         });
     }
 
-    public function asignarVerificador(string $applicationId, string $coordinatorId, string $verifierId, int $lockVersion): VerificationVisit
+    public function consultarAgendaVerificador(string $applicationId, string $coordinatorId, string $verifierId, string $from, string $to): array
     {
-        return DB::transaction(function () use ($applicationId, $coordinatorId, $verifierId, $lockVersion) {
+        $application = DistributorApplication::find($applicationId);
+        if (! $application) {
+            throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        }
+        if (! $this->puedeRevisarSolicitud($application, $coordinatorId)) {
+            throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
+        }
+
+        $isVerifierInApplicationBranch = User::query()
+            ->whereKey($verifierId)
+            ->where('state', 'ACTIVE')
+            ->whereHas('roleScopes', fn ($scopes) => $scopes
+                ->where('branch_id', $application->branch_id)
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereHas('role', fn ($roles) => $roles->where('code', 'verifier')))
+            ->exists();
+        if (! $isVerifierInApplicationBranch) {
+            throw new BusinessException('VERIFIER_BRANCH_MISMATCH', 'El verificador no está disponible para esta sucursal.', 403);
+        }
+
+        return VerificationVisit::query()
+            ->select(['id', 'application_id', 'scheduled_for', 'status'])
+            ->with('application:id,application_number')
+            ->where('verifier_id', $verifierId)
+            ->whereIn('status', [VerificationVisitStatus::ASSIGNED, VerificationVisitStatus::IN_PROGRESS])
+            ->whereBetween('scheduled_for', [CarbonImmutable::parse($from), CarbonImmutable::parse($to)])
+            ->orderBy('scheduled_for')
+            ->get()
+            ->map(fn (VerificationVisit $visit): array => [
+                'id' => $visit->id,
+                'scheduled_for' => $visit->scheduled_for?->toIso8601String(),
+                'status' => $visit->status->value,
+                'application_number' => $visit->application?->application_number,
+                'reserved_from' => $visit->scheduled_for?->copy()->subMinutes(self::ARRIVAL_BUFFER_BEFORE_MINUTES)->toIso8601String(),
+                'reserved_until' => $visit->scheduled_for?->copy()->addMinutes(self::VISIT_DURATION_MINUTES + self::TRAVEL_BUFFER_AFTER_MINUTES)->toIso8601String(),
+            ])
+            ->all();
+    }
+
+    public function asignarVerificador(string $applicationId, string $coordinatorId, string $verifierId, string $scheduledFor, int $lockVersion): VerificationVisit
+    {
+        return DB::transaction(function () use ($applicationId, $coordinatorId, $verifierId, $scheduledFor, $lockVersion) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
             if (! $application) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
@@ -88,12 +137,15 @@ class ServicioRevisionCoordinador
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_READY_FOR_VERIFICATION', 'La solicitud no está lista para verificación.', 409);
             }
 
-            $verifier = User::find($verifierId);
+            $verifier = User::query()->lockForUpdate()->find($verifierId);
             if (! $verifier) {
                 throw new BusinessException('VERIFIER_NOT_FOUND', 'Verificador no encontrado.', 404);
             }
             if (! $verifier->is_active) {
                 throw new BusinessException('VERIFIER_INACTIVE', 'Verificador inactivo.', 409);
+            }
+            if ($verifier->id === $application->created_by) {
+                throw new BusinessException('SEGREGATION_OF_DUTIES_VIOLATION', 'Quien capturó la solicitud no puede verificarla.', 403);
             }
             if (! method_exists($verifier, 'hasRole') || ! $verifier->hasRole('verifier')) {
                 throw new BusinessException('VERIFIER_ROLE_INVALID', 'Rol de verificador inválido.', 403);
@@ -112,6 +164,24 @@ class ServicioRevisionCoordinador
                 throw new BusinessException('VERIFICATION_VISIT_ALREADY_STARTED', 'Ya existe una visita activa.', 409);
             }
 
+            $scheduled = CarbonImmutable::parse($scheduledFor);
+            $separationMinutes = self::ARRIVAL_BUFFER_BEFORE_MINUTES
+                + self::VISIT_DURATION_MINUTES
+                + self::TRAVEL_BUFFER_AFTER_MINUTES;
+            $hasScheduleConflict = VerificationVisit::query()
+                ->where('verifier_id', $verifierId)
+                ->whereIn('status', [VerificationVisitStatus::ASSIGNED, VerificationVisitStatus::IN_PROGRESS])
+                ->where('scheduled_for', '>', $scheduled->subMinutes($separationMinutes))
+                ->where('scheduled_for', '<', $scheduled->addMinutes($separationMinutes))
+                ->exists();
+            if ($hasScheduleConflict) {
+                throw new BusinessException(
+                    'VERIFIER_SCHEDULE_CONFLICT',
+                    'Ese horario se cruza con otra visita. Deja al menos 75 minutos entre inicios para validar y trasladarse.',
+                    409,
+                );
+            }
+
             $application->transitionTo(ApplicationStatus::VERIFIER_ASSIGNED, $coordinatorId, 'Verificador asignado');
 
             $visit = new VerificationVisit([
@@ -119,6 +189,7 @@ class ServicioRevisionCoordinador
                 'verifier_id' => $verifierId,
                 'assigned_by' => $coordinatorId,
                 'assigned_at' => now(),
+                'scheduled_for' => $scheduledFor,
             ]);
             $visit->forceFill(['status' => VerificationVisitStatus::ASSIGNED])->save();
 

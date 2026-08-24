@@ -20,10 +20,12 @@ class AplicarCorreccionSolicitudRequest extends FormRequest
         return [
             'section' => ['required', Rule::enum(ApplicationCorrectionSection::class)],
             'field_path' => 'required|string|max:100',
-            'new_value' => 'required',
-            'reason' => 'required|string|max:255',
+            'new_value' => 'sometimes|nullable',
+            'reason' => 'sometimes|nullable|string|max:255',
             'lock_version' => 'required|integer|min:1',
             'visit_id' => 'required|uuid',
+            'record_id' => 'nullable|uuid',
+            'difference_index' => 'sometimes|integer|min:0|max:99',
         ];
     }
 

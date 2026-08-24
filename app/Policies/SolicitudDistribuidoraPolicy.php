@@ -14,10 +14,6 @@ final class SolicitudDistribuidoraPolicy
             return false;
         }
 
-        if ($user->hasRole('general_manager')) {
-            return true;
-        }
-
         return null;
     }
 
@@ -28,12 +24,8 @@ final class SolicitudDistribuidoraPolicy
 
     public function create(User $user): bool
     {
-        // CAJERA -> crear solicitud DENEGADO
-        if ($user->hasRole('cashier')) {
-            return false;
-        }
-
-        return $user->hasPermissionTo('distributor_applications.create');
+        return $user->hasRole('coordinator')
+            && $user->hasPermissionTo('distributor_applications.create');
     }
 
     public function view(User $user, SolicitudDistribuidora $solicitud): bool

@@ -8,18 +8,24 @@ use App\Enums\VerificationVisitStatus;
 use App\Exceptions\BusinessException;
 use App\Helpers\AuditHelper;
 use App\Models\DistributorApplication;
+use App\Models\MediaFileBinding;
 use App\Models\SolicitudDistribuidora;
 use App\Models\VerificationVisit;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
+use Carbon\CarbonImmutable;
 
 class ServicioVerificacionDistribuidora
 {
     public function consultarAsignadas(string $verifierId): Collection
     {
-        return VerificationVisit::with('application')
+        return VerificationVisit::with([
+            'application.datosPersonales',
+            'application.branch:id,name',
+            'application.coordinator:id,name',
+        ])
             ->where('verifier_id', $verifierId)
-            ->whereIn('status', [VerificationVisitStatus::ASSIGNED, VerificationVisitStatus::IN_PROGRESS])
+            ->orderByDesc('scheduled_for')
             ->get();
     }
 
@@ -38,6 +44,30 @@ class ServicioVerificacionDistribuidora
             'vehiculos', 'patrimonio', 'empleos', 'creditosComerciales',
         ])->findOrFail($visit->application_id);
         $visit->setRelation('application', $application);
+        $ownerIds = [
+            'application_vehicle' => $application->vehiculos->modelKeys(),
+            'application_asset_liability' => $application->patrimonio->modelKeys(),
+            'application_commercial_credit' => $application->creditosComerciales->modelKeys(),
+        ];
+        $bindings = MediaFileBinding::query()
+            ->with('mediaFile')
+            ->where(function ($query) use ($application, $ownerIds): void {
+                $query->where(function ($query) use ($application): void {
+                    $query->where('owner_type', 'distributor_application')
+                        ->where('owner_id', $application->id)
+                        ->whereIn('purpose', ['IDENTIFICATION', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE']);
+                });
+                foreach ($ownerIds as $ownerType => $ids) {
+                    if ($ids !== []) {
+                        $query->orWhere(function ($query) use ($ownerType, $ids): void {
+                            $query->where('owner_type', $ownerType)->whereIn('owner_id', $ids);
+                        });
+                    }
+                }
+            })
+            ->get();
+        $declaredMedia = $bindings->pluck('mediaFile')->filter()->unique('id')->values();
+        $visit->setRelation('declaredMediaFiles', $declaredMedia);
 
         return $visit;
     }
@@ -67,6 +97,20 @@ class ServicioVerificacionDistribuidora
             }
             if ($visit->status !== VerificationVisitStatus::ASSIGNED) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_INVALID_STATE', 'La visita no está asignada.', 409);
+            }
+
+            $timezone = 'America/Monterrey';
+            $now = CarbonImmutable::now($timezone);
+            $scheduled = $visit->scheduled_for?->toImmutable()->setTimezone($timezone);
+            if ($scheduled === null) {
+                throw new BusinessException('VERIFICATION_VISIT_NOT_SCHEDULED', 'La visita no tiene fecha y hora programadas.', 409);
+            }
+            if (! $now->isSameDay($scheduled) || $now->lessThan($scheduled->subMinutes(15))) {
+                throw new BusinessException(
+                    'VERIFICATION_VISIT_OUTSIDE_SCHEDULE',
+                    'La visita puede iniciarse desde 15 minutos antes de la hora programada o más tarde durante ese mismo día.',
+                    409
+                );
             }
 
             $application->transitionTo(ApplicationStatus::PHYSICAL_VERIFICATION, $verifierId, 'Inicio de visita');

@@ -49,6 +49,10 @@ class ServicioAutorizacionSolicitud
             $isGeneralManager = method_exists($manager, 'hasRole') ? $manager->hasRole('general_manager') : false;
             $isBranchManager = method_exists($manager, 'hasRole') ? $manager->hasRole('branch_manager') : true;
 
+            if (! $isGeneralManager && in_array($managerId, [$application->coordinator_id, $application->created_by], true)) {
+                throw new BusinessException('SEGREGATION_OF_DUTIES_VIOLATION', 'Quien participó en la solicitud no puede autorizarla.', 403);
+            }
+
             $creator = User::find($application->created_by);
             $creatorIsBranchManager = $creator && method_exists($creator, 'hasRole') && $creator->hasRole('branch_manager') && ! $creator->hasRole('general_manager');
 

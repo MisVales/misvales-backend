@@ -3,6 +3,7 @@
 namespace App\Http\Resources\VerificacionDistribuidora;
 
 use App\Http\Resources\Api\V1\SolicitudDistribuidora\SolicitudDistribuidoraDetalleResource;
+use App\Models\SolicitudDistribuidora;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -23,19 +24,21 @@ class VerificationVisitResource extends JsonResource
             'location_accuracy_meters' => $this->location_accuracy_meters,
             'differences_payload' => $this->differences_payload,
             'assigned_at' => $this->assigned_at?->toIso8601String(),
+            'scheduled_for' => $this->scheduled_for?->toIso8601String(),
             'started_at' => $this->started_at?->toIso8601String(),
             'visited_at' => $this->visited_at?->toIso8601String(),
             'completed_at' => $this->completed_at?->toIso8601String(),
             'lock_version' => $this->lock_version,
             'created_at' => $this->created_at?->toIso8601String(),
             'application' => $this->whenLoaded('application', function () {
-                if ($this->application->relationLoaded('datosPersonales')) {
+                if ($this->application instanceof SolicitudDistribuidora) {
                     return new SolicitudDistribuidoraDetalleResource($this->application);
                 }
 
                 return new DistributorApplicationResource($this->application);
             }),
             'media_files' => MediaFileResource::collection($this->whenLoaded('mediaFiles')),
+            'declared_media_files' => MediaFileResource::collection($this->whenLoaded('declaredMediaFiles')),
         ];
     }
 }
