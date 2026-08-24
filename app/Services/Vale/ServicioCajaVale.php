@@ -10,7 +10,6 @@ use App\Helpers\AuditHelper;
 use App\Models\Cliente;
 use App\Models\CuentaBancariaDistribuidora;
 use App\Models\Distribuidora;
-use App\Services\Cliente\ProtectorDatosCliente;
 use App\Models\LineaCredito;
 use App\Models\MediaFileBinding;
 use App\Models\MovimientoLineaCredito;
@@ -19,13 +18,16 @@ use App\Models\RestriccionUsoCredito;
 use App\Models\TransaccionCajaVale;
 use App\Models\User;
 use App\Models\Vale;
+use App\Services\Cliente\ProtectorDatosCliente;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 
 final class ServicioCajaVale
 {
     public function __construct(
         private readonly VerificadorDisponibilidadCredito $credito,
-        private readonly ProtectorDatosCliente $protector
+        private readonly ProtectorDatosCliente $protector,
+        private readonly ServicioCalendarioParcialidadesVale $calendarioParcialidades,
     ) {}
 
     public function liberar(Vale $vale, User $cajera, int $version, ?string $bankName = null, ?string $clabe = null): Vale
@@ -121,8 +123,10 @@ final class ServicioCajaVale
             if ($resultado->restriction_id) {
                 RestriccionUsoCredito::query()->whereKey($resultado->restriction_id)->whereIn('status', ['ACTIVE', 'RESERVED'])->update(['status' => 'CONSUMED', 'reserved_voucher_id' => $vale->id, 'reserved_at' => DB::raw('COALESCE(reserved_at, NOW())'), 'consumed_at' => now(), 'lock_version' => DB::raw('lock_version + 1')]);
             }
-            TransaccionCajaVale::query()->create(['voucher_id' => $vale->id, 'bank_transaction_number' => $numeroTransaccion, 'cashier_id' => $cajera->id, 'branch_id' => $vale->branch_id, 'cashed_at' => now()]);
-            $vale->forceFill(['status' => EstadoVale::FERIADO, 'cashed_by' => $cajera->id, 'cashed_at' => now(), 'lock_version' => $vale->lock_version + 1])->save();
+            $cashedAt = CarbonImmutable::now();
+            TransaccionCajaVale::query()->create(['voucher_id' => $vale->id, 'bank_transaction_number' => $numeroTransaccion, 'cashier_id' => $cajera->id, 'branch_id' => $vale->branch_id, 'cashed_at' => $cashedAt]);
+            $vale->forceFill(['status' => EstadoVale::FERIADO, 'cashed_by' => $cajera->id, 'cashed_at' => $cashedAt, 'lock_version' => $vale->lock_version + 1])->save();
+            $this->calendarioParcialidades->programar($vale, $cashedAt);
             AuditHelper::log('VOUCHER_CASHED', 'vouchers', $vale->id, $cajera->id, $vale->branch_id, ['status' => EstadoVale::LIBERADO->value, 'used_balance' => $usadoAntes], ['status' => EstadoVale::FERIADO->value, 'used_balance' => $usadoDespues]);
             OutboxEvent::query()->create(['event_type' => 'VoucherCashed', 'payload' => ['voucher_id' => $vale->id, 'distributor_id' => $vale->distributor_id, 'branch_id' => $vale->branch_id], 'status' => 'PENDING']);
 

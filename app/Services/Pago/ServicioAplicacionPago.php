@@ -8,6 +8,7 @@ use App\Models\MovimientoBancario;
 use App\Models\MovimientoLineaCredito;
 use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
+use App\Services\Excedente\AuditorExcedente;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -15,6 +16,8 @@ use RuntimeException;
 
 final class ServicioAplicacionPago
 {
+    public function __construct(private readonly AuditorExcedente $auditor) {}
+
     public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation): PagoRelacion
     {
         return $this->distribuir($movement, $relation, 'BANK_MOVEMENT', $movement->id);
@@ -73,7 +76,9 @@ final class ServicioAplicacionPago
             if (bccomp($relation->balance, '0', 4) === 0) {
                 $relation->financial_status = 'SETTLED';
                 $relation->settled_at = $movement->paid_at;
-                $relation->temporal_classification = $movement->paid_at->lt($relation->advance_period_end) ? 'EARLY' : ($movement->paid_at->lte($relation->payment_deadline_at) ? 'ON_TIME' : 'LATE');
+                $relation->temporal_classification = $movement->paid_at->gte($relation->advance_period_start) && $movement->paid_at->lte($relation->advance_period_end)
+                    ? 'EARLY'
+                    : ($movement->paid_at->lte($relation->payment_deadline_at) ? 'ON_TIME' : 'LATE');
             } else {
                 $relation->financial_status = 'PARTIALLY_PAID';
             }$relation->save();
@@ -85,7 +90,30 @@ final class ServicioAplicacionPago
                 $movement->update(['relation_id' => $relation->id, 'classification' => bccomp($surplus, '0', 4) > 0 ? 'SURPLUS' : (bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT'), 'applied_amount' => $applied, 'surplus_amount' => $surplus]);
             }
             if ($movement->exists && bccomp($surplus, '0', 4) > 0) {
-                ExcedenteDistribuidora::firstOrCreate(['bank_movement_id' => $movement->id], ['distributor_id' => $relation->distributor_id, 'original_amount' => $surplus, 'available_amount' => $surplus, 'status' => 'PENDING_DECISION']);
+                $excess = ExcedenteDistribuidora::firstOrCreate(
+                    ['bank_movement_id' => $movement->id],
+                    [
+                        'distributor_id' => $relation->distributor_id,
+                        'branch_id' => $relation->branch_id,
+                        'origin_relation_id' => $relation->id,
+                        'original_amount' => $surplus,
+                        'available_amount' => $surplus,
+                        'status' => 'PENDING_DECISION',
+                    ],
+                );
+                if ($excess->wasRecentlyCreated) {
+                    $payload = [
+                        'distributor_id' => $relation->distributor_id,
+                        'branch_id' => $relation->branch_id,
+                        'relation_id' => $relation->id,
+                        'bank_movement_id' => $movement->id,
+                        'amount' => $surplus,
+                        'available_amount' => $surplus,
+                        'status' => 'PENDING_DECISION',
+                    ];
+                    $this->auditor->registrar('PAYMENT_SURPLUS_DETECTED', 'distributor_surplus', $excess->id, $movement->reconciled_by, $relation->branch_id, $payload);
+                    $this->auditor->registrar('EXCESS_CREATED', 'distributor_surplus', $excess->id, $movement->reconciled_by, $relation->branch_id, $payload);
+                }
             }
 
             return $payment->fresh();

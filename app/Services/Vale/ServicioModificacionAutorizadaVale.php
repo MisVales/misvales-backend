@@ -20,19 +20,23 @@ final class ServicioModificacionAutorizadaVale
 
     public function __construct(private readonly ProtectorDatosCliente $protector, private readonly NormalizadorDomicilio $normalizador, private readonly GeneradorHuellaDomicilio $huella) {}
 
-    public function solicitar(Vale $vale, User $cajera, array $campos, string $motivo): SolicitudModificacionVale
+    public function solicitar(Vale $vale, User $cajera, array $campos, array $cambios, string $motivo): SolicitudModificacionVale
     {
         $this->validarCajera($cajera, $vale);
         $campos = array_values(array_unique($campos));
         if ($campos === [] || array_diff($campos, self::CAMPOS) !== []) {
             throw new ExcepcionVale('MODIFICATION_FIELDS_INVALID', 'Solo pueden solicitarse campos corregibles autorizados.', 422);
         }
+        if (array_diff(array_keys($cambios), $campos) !== [] || array_diff($campos, array_keys($cambios)) !== []) {
+            throw new ExcepcionVale('MODIFICATION_FIELDS_INVALID', 'Captura exactamente los campos seleccionados para corrección.', 422);
+        }
         if (! in_array($vale->status->value, ['GENERATED', 'CORRECTION_PENDING'], true)) {
             throw new ExcepcionVale('VOUCHER_STATUS_INVALID', 'El estado del vale no permite solicitar corrección.', 409);
         }
+        $this->validarCambiosReales($vale, $cambios);
 
-        return DB::transaction(function () use ($vale, $cajera, $campos, $motivo): SolicitudModificacionVale {
-            $solicitud = SolicitudModificacionVale::query()->create(['voucher_id' => $vale->id, 'client_id' => $vale->client_id, 'branch_id' => $vale->branch_id, 'requested_by' => $cajera->id, 'requested_fields' => $campos, 'reason' => $motivo]);
+        return DB::transaction(function () use ($vale, $cajera, $campos, $cambios, $motivo): SolicitudModificacionVale {
+            $solicitud = SolicitudModificacionVale::query()->create(['voucher_id' => $vale->id, 'client_id' => $vale->client_id, 'branch_id' => $vale->branch_id, 'requested_by' => $cajera->id, 'requested_fields' => $campos, 'requested_changes' => $cambios, 'reason' => $motivo]);
             $vale->forceFill(['status' => 'CORRECTION_PENDING', 'lock_version' => $vale->lock_version + 1])->save();
             AuditHelper::log('VOUCHER_MODIFICATION_REQUESTED', 'voucher_modification_requests', $solicitud->id, $cajera->id, $vale->branch_id, null, ['fields' => $campos], $motivo);
 
@@ -51,17 +55,31 @@ final class ServicioModificacionAutorizadaVale
             if ($solicitud->status !== 'REQUESTED') {
                 throw new ExcepcionVale('MODIFICATION_STATUS_INVALID', 'La solicitud ya fue decidida.', 409);
             }
+            if ($autorizar && (! is_array($solicitud->requested_changes) || $solicitud->requested_changes === [])) {
+                throw new ExcepcionVale('MODIFICATION_CHANGES_MISSING', 'La solicitud no contiene una corrección capturada; debe rechazarse y solicitarse nuevamente.', 409);
+            }
             $token = $autorizar ? strtoupper(bin2hex(random_bytes(4))) : null;
             $solicitud->forceFill(['status' => $autorizar ? 'AUTHORIZED' : 'REJECTED', 'decided_by' => $autoridad->id, 'decision_reason' => $motivo, 'decided_at' => now(), 'token_hash' => $token ? hash('sha256', $token) : null, 'token_expires_at' => $token ? now()->addMinutes(5) : null, 'lock_version' => $solicitud->lock_version + 1])->save();
+            if (! $autorizar) {
+                $vale = Vale::query()->lockForUpdate()->findOrFail($solicitud->voucher_id);
+                $tieneOtraSolicitudActiva = SolicitudModificacionVale::query()
+                    ->where('voucher_id', $vale->id)
+                    ->whereKeyNot($solicitud->id)
+                    ->whereIn('status', ['REQUESTED', 'AUTHORIZED'])
+                    ->exists();
+                if (! $tieneOtraSolicitudActiva) {
+                    $vale->forceFill(['status' => 'GENERATED', 'lock_version' => $vale->lock_version + 1])->save();
+                }
+            }
             AuditHelper::log($autorizar ? 'VOUCHER_MODIFICATION_AUTHORIZED' : 'VOUCHER_MODIFICATION_REJECTED', 'voucher_modification_requests', $solicitud->id, $autoridad->id, $solicitud->branch_id, ['status' => 'REQUESTED'], ['status' => $solicitud->status, 'fields' => $solicitud->requested_fields], $motivo);
 
             return ['request' => $solicitud, 'token' => $token, 'expires_at' => $solicitud->token_expires_at?->toIso8601String()];
         });
     }
 
-    public function aplicar(SolicitudModificacionVale $solicitud, User $cajera, string $token, array $cambios, int $version): SolicitudModificacionVale
+    public function aplicar(SolicitudModificacionVale $solicitud, User $cajera, string $token, int $version): SolicitudModificacionVale
     {
-        return DB::transaction(function () use ($solicitud, $cajera, $token, $cambios, $version): SolicitudModificacionVale {
+        return DB::transaction(function () use ($solicitud, $cajera, $token, $version): SolicitudModificacionVale {
             $solicitud = SolicitudModificacionVale::query()->lockForUpdate()->findOrFail($solicitud->id);
             $vale = Vale::query()->lockForUpdate()->findOrFail($solicitud->voucher_id);
             $this->validarCajera($cajera, $vale);
@@ -80,6 +98,10 @@ final class ServicioModificacionAutorizadaVale
             }
             if (! hash_equals((string) $solicitud->token_hash, hash('sha256', strtoupper(trim($token))))) {
                 throw new ExcepcionVale('MODIFICATION_TOKEN_INVALID', 'El token no es válido.', 422);
+            }
+            $cambios = $solicitud->requested_changes;
+            if (! is_array($cambios) || $cambios === []) {
+                throw new ExcepcionVale('MODIFICATION_CHANGES_MISSING', 'La solicitud no contiene una corrección capturada.', 409);
             }
             if (array_diff(array_keys($cambios), $solicitud->requested_fields) !== []) {
                 throw new ExcepcionVale('MODIFICATION_FIELD_NOT_AUTHORIZED', 'Se intentó modificar un campo no autorizado.', 403);
@@ -103,9 +125,9 @@ final class ServicioModificacionAutorizadaVale
                 if (DomicilioCliente::query()->where('normalized_fingerprint_hmac', $huella)->where('is_current', true)->whereNull('ends_at')->where('client_id', '<>', $cliente->id)->exists()) {
                     throw new ExcepcionVale('CLIENT_ADDRESS_EXISTS', 'El domicilio ya pertenece a otro cliente.', 409);
                 }
-                $actual = DomicilioCliente::query()->where('client_id', $cliente->id)->where('is_current', true)->whereNull('ends_at')->lockForUpdate()->firstOrFail();
-                $anteriores['address_id'] = $actual->id;
-                $actual->update(['is_current' => false, 'ends_at' => now(), 'change_reason' => $solicitud->reason]);
+                $actual = DomicilioCliente::query()->where('client_id', $cliente->id)->where('is_current', true)->whereNull('ends_at')->lockForUpdate()->first();
+                $anteriores['address_id'] = $actual?->id;
+                $actual?->update(['is_current' => false, 'ends_at' => now(), 'change_reason' => $solicitud->reason]);
                 $nuevo = new DomicilioCliente([...$cambios['address'], 'client_id' => $cliente->id, 'is_current' => true, 'country' => $normalizado['country'], 'starts_at' => now(), 'created_by' => $cajera->id, 'change_reason' => $solicitud->reason]);
                 $nuevo->forceFill(['normalized_fingerprint_hmac' => $huella])->save();
                 $nuevos['address_id'] = $nuevo->id;
@@ -122,6 +144,26 @@ final class ServicioModificacionAutorizadaVale
     {
         if (! $actor->hasPermissionTo('vouchers.cash_branch') || ! $actor->hasScopeForBranch($vale->branch_id)) {
             throw new ExcepcionVale('VOUCHER_BRANCH_FORBIDDEN', 'Fuera del alcance de caja.', 404);
+        }
+    }
+
+    private function validarCambiosReales(Vale $vale, array $cambios): void
+    {
+        $cliente = Cliente::query()->with('domicilioVigente')->findOrFail($vale->client_id);
+        $camposSinCambio = [];
+
+        if (array_key_exists('curp', $cambios) && $cliente->curp_hmac !== null
+            && hash_equals((string) $cliente->curp_hmac, $this->protector->hmacCurp($cambios['curp']))) {
+            $camposSinCambio[] = 'CURP';
+        }
+
+        if (array_key_exists('address', $cambios) && $cliente->domicilioVigente !== null
+            && $this->normalizador->serializar($cliente->domicilioVigente->toArray()) === $this->normalizador->serializar($cambios['address'])) {
+            $camposSinCambio[] = 'domicilio';
+        }
+
+        if ($camposSinCambio !== []) {
+            throw new ExcepcionVale('MODIFICATION_NO_CHANGES', 'No se detectaron cambios en: '.implode(', ', $camposSinCambio).'. Captura un valor diferente al actual.', 422);
         }
     }
 

@@ -14,21 +14,44 @@ final class ServicioEvaluacionRecargo
 
     public function evaluar(CarbonImmutable $now): array
     {
-        $config = $this->configuracion->resolver(CarbonImmutable::now('UTC'));
+        return $this->evaluarInterno($now);
+    }
+
+    /** @param list<string> $relationIds */
+    public function evaluarRelacionesSimuladas(CarbonImmutable $now, array $relationIds, CarbonImmutable $importsSince): array
+    {
+        return $this->evaluarInterno($now, $relationIds, $importsSince);
+    }
+
+    /** @param list<string>|null $relationIds */
+    private function evaluarInterno(CarbonImmutable $now, ?array $relationIds = null, ?CarbonImmutable $importsSince = null): array
+    {
+        $config = $this->configuracion->resolver($now->utc());
         $tz = $config['timezone'];
         $now = $now->setTimezone($tz);
         $result = ['applied' => 0, 'deferred' => 0];
-        $relations = RelacionDistribuidora::where('balance', '>', 0)->where('payment_deadline_at', '<', $now->utc())->get();
+        $relations = RelacionDistribuidora::query()
+            ->where('balance', '>', 0)
+            ->where('payment_deadline_at', '<=', $now)
+            ->when($relationIds !== null, fn ($query) => $query->whereIn('id', $relationIds))
+            ->get();
+
         foreach ($relations as $relation) {
             [$deadlineHour, $deadlineMinute] = array_map('intval', explode(':', $config['bank_deadline_time']));
-            $hasFile = DB::table('bank_file_imports')->where('branch_id', $relation->branch_id)->where('status', 'PROCESSED')->whereBetween('created_at', [$relation->payment_deadline_at, $relation->payment_deadline_at->addDay()->setTimezone($tz)->setTime($deadlineHour, $deadlineMinute)->utc()])->exists();
+            $imports = DB::table('bank_file_imports')->where('branch_id', $relation->branch_id)->where('status', 'PROCESSED');
+            $hasFile = $importsSince === null
+                ? $imports->whereBetween('created_at', [$relation->payment_deadline_at, $relation->payment_deadline_at->addDay()->setTimezone($tz)->setTime($deadlineHour, $deadlineMinute)->utc()])->exists()
+                : $imports->where('created_at', '>=', $importsSince->setTimezone($tz))->where('created_at', '<=', CarbonImmutable::now($tz))->exists();
+
             if (! $hasFile) {
                 $result['deferred']++;
                 AuditLog::firstOrCreate(['entity_type' => 'distributor_relation', 'entity_id' => $relation->id, 'event_name' => 'LateFeeDeferredMissingBankFile'], ['result' => 'DEFERRED', 'new_value' => ['evaluated_at' => $now->toIso8601String()]]);
 
                 continue;
-            }DB::transaction(function () use ($relation, $now, $config, &$result) {
-                $created = DB::table('relation_late_fees')->insertOrIgnore(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'type' => 'LATE_FEE', 'amount' => $config['amount'], 'applied_at' => $now->utc(), 'configuration_snapshot' => json_encode($config), 'created_at' => now(), 'updated_at' => now()]);
+            }
+
+            DB::transaction(function () use ($relation, $now, $config, &$result) {
+                $created = DB::table('relation_late_fees')->insertOrIgnore(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'type' => 'LATE_FEE', 'amount' => $config['amount'], 'applied_at' => $now, 'configuration_snapshot' => json_encode($config), 'created_at' => now(), 'updated_at' => now()]);
                 if ($created) {
                     $locked = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
                     $locked->surcharge_total = bcadd($locked->surcharge_total, $config['amount'], 4);

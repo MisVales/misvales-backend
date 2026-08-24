@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\CoordinatorDistributorAssignment;
 use App\Models\RelacionDistribuidora;
+use App\Services\Relacion\ServicioPdfRelacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -14,7 +15,7 @@ final class RelacionDistribuidoraController extends Controller
     public function index(Request $request)
     {
         $query = RelacionDistribuidora::query()
-            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos', 'partidas'])
+            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio', 'partidas'])
             ->latest('cutoff_at');
         $this->scope($query, $request);
         if ($request->filled('cutoff')) {
@@ -44,18 +45,18 @@ final class RelacionDistribuidoraController extends Controller
     {
         $this->authorizeView($relacion, $request);
 
-        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos'])]);
+        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio'])]);
     }
 
-    public function download(RelacionDistribuidora $relacion, Request $request): Response
+    public function download(RelacionDistribuidora $relacion, Request $request, ServicioPdfRelacion $pdf): Response
     {
         $this->authorizeView($relacion, $request);
         abort_unless($request->user()->hasPermissionTo('relations.download_own') || $request->user()->hasPermissionTo('relations.download_branch') || $request->user()->hasPermissionTo('relations.download_global'), 403);
-        $relacion->load('partidas');
-        $rows = $relacion->partidas->map(fn ($item) => '<tr><td>'.e($item->snapshot['folio']).'</td><td>'.e($item->snapshot['installment']).'</td><td>'.e($item->portfolio_amount).'</td><td>'.e($item->misvales_amount).'</td></tr>')->implode('');
-        $html = '<!doctype html><meta charset="utf-8"><h1>Relación '.e($relacion->payment_reference).'</h1><p>Distribuidora: '.e($relacion->header_snapshot['name'] ?? '').'</p><p>Fecha límite: '.e($relacion->payment_deadline_at->toIso8601String()).'</p><p>Total a pagar: '.e($relacion->balance).'</p><table><thead><tr><th>Folio</th><th>Parcialidad</th><th>Total cliente</th><th>Exigible MisVales</th></tr></thead><tbody>'.$rows.'</tbody></table><p>Banco: '.e($relacion->bank_snapshot['name']).' · Beneficiario: '.e($relacion->bank_snapshot['beneficiary']).' · CLABE: '.e($relacion->bank_snapshot['clabe']).'</p>';
 
-        return response($html, 200, ['Content-Type' => 'text/html; charset=UTF-8', 'Content-Disposition' => 'attachment; filename="relacion-'.$relacion->payment_reference.'.html"']);
+        return response($pdf->generar($relacion), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="relacion-'.$relacion->payment_reference.'.pdf"',
+        ]);
     }
 
     private function scope(Builder $query, Request $request): void

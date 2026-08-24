@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources\Api\V1\Vale;
 
+use App\Models\SolicitudModificacionVale;
 use App\Services\Cliente\ProtectorDatosCliente;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use Illuminate\Http\Request;
@@ -24,7 +25,15 @@ final class ValeCajaResource extends JsonResource
         $numeroIdentificacion = $datosPersonales?->official_id_number_ciphertext === null
             ? null
             : $protectorSolicitud->descifrar($datosPersonales->official_id_number_ciphertext);
+        $solicitudModificacion = $this->resource->relationLoaded('solicitudesModificacion')
+            ? $this->resource->solicitudesModificacion->first()
+            : null;
+        $solicitudPropia = $solicitudModificacion instanceof SolicitudModificacionVale
+            && $solicitudModificacion->requested_by === $request->user()?->id
+            && in_array($solicitudModificacion->status, ['REQUESTED', 'AUTHORIZED'], true)
+                ? ['id' => $solicitudModificacion->id, 'lock_version' => $solicitudModificacion->lock_version, 'status' => $solicitudModificacion->status]
+                : null;
 
-        return [...(new ValeResource($this->resource))->toArray($request), 'document_owner' => $solicitud === null ? null : ['owner_type' => 'distributor_application', 'owner_id' => $solicitud->id], 'identity' => ['official_id_type' => $datosPersonales?->official_id_type, 'official_id_number' => $numeroIdentificacion, 'official_id_number_masked' => $numeroIdentificacion === null ? null : $protectorSolicitud->enmascarar($numeroIdentificacion, 2, 2), 'official_id_media_id' => $identificacionAdjunta?->media_file_id], 'address' => ($domicilio || $comprobanteAdjunto) ? ['street' => $domicilio?->street, 'exterior_number' => $domicilio?->exterior_number, 'interior_number' => $domicilio?->interior_number, 'neighborhood' => $domicilio?->neighborhood, 'postal_code' => $domicilio?->postal_code, 'municipality' => $domicilio?->municipality, 'city' => $domicilio?->city, 'state' => $domicilio?->state, 'country' => $domicilio?->country, 'address_proof_media_id' => $comprobanteAdjunto?->media_file_id] : null, 'bank_account' => $cuenta?->clabe_ciphertext === null ? null : ['bank_name' => $cuenta->bank_name, 'account_holder_name' => $cuenta->account_holder_name, 'clabe_masked' => $protector->ultimosCuatro($protector->descifrar($cuenta->clabe_ciphertext))], 'released_at' => $this->released_at?->toIso8601String(), 'cashed_at' => $this->cashed_at?->toIso8601String()];
+        return [...(new ValeResource($this->resource))->toArray($request), 'document_owner' => $solicitud === null ? null : ['owner_type' => 'distributor_application', 'owner_id' => $solicitud->id], 'identity' => ['official_id_type' => $datosPersonales?->official_id_type, 'official_id_number' => $numeroIdentificacion, 'official_id_number_masked' => $numeroIdentificacion === null ? null : $protectorSolicitud->enmascarar($numeroIdentificacion, 2, 2), 'official_id_media_id' => $identificacionAdjunta?->media_file_id], 'address' => ($domicilio || $comprobanteAdjunto) ? ['street' => $domicilio?->street, 'exterior_number' => $domicilio?->exterior_number, 'interior_number' => $domicilio?->interior_number, 'neighborhood' => $domicilio?->neighborhood, 'postal_code' => $domicilio?->postal_code, 'municipality' => $domicilio?->municipality, 'city' => $domicilio?->city, 'state' => $domicilio?->state, 'country' => $domicilio?->country, 'address_proof_media_id' => $comprobanteAdjunto?->media_file_id] : null, 'bank_account' => $cuenta?->clabe_ciphertext === null ? null : ['bank_name' => $cuenta->bank_name, 'account_holder_name' => $cuenta->account_holder_name, 'clabe_masked' => $protector->ultimosCuatro($protector->descifrar($cuenta->clabe_ciphertext))], 'modification_request' => $solicitudPropia, 'released_at' => $this->released_at?->toIso8601String(), 'cashed_at' => $this->cashed_at?->toIso8601String()];
     }
 }

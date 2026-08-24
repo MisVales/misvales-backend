@@ -8,16 +8,41 @@ use App\Http\Requests\Api\V1\Vale\AplicarModificacionValeRequest;
 use App\Http\Requests\Api\V1\Vale\DecidirModificacionValeRequest;
 use App\Http\Requests\Api\V1\Vale\FeriarValeRequest;
 use App\Http\Requests\Api\V1\Vale\LiberarValeRequest;
+use App\Http\Requests\Api\V1\Vale\ListarValesCajaRequest;
 use App\Http\Requests\Api\V1\Vale\SolicitarModificacionValeRequest;
 use App\Http\Resources\Api\V1\Vale\ValeCajaResource;
 use App\Models\SolicitudModificacionVale;
+use App\Models\User;
 use App\Models\Vale;
 use App\Services\Vale\ServicioCajaVale;
 use App\Services\Vale\ServicioModificacionAutorizadaVale;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 
 final class CajaValeController extends Controller
 {
+    public function index(ListarValesCajaRequest $request)
+    {
+        $data = $request->validated();
+        $user = $request->user();
+        $branches = $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->select('branch_id');
+        $statuses = $data['scope'] === 'pending'
+            ? ['GENERATED', 'CASH_VALIDATION', 'RELEASED', 'CORRECTION_PENDING']
+            : ['CASHED', 'REJECTED', 'CANCELLED'];
+
+        $query = $this->cashierVoucherQuery($user)
+            ->whereIn('branch_id', $branches)
+            ->whereIn('status', $statuses)
+            ->when($data['search'] ?? null, function ($query, string $term): void {
+                $query->where(function ($nested) use ($term): void {
+                    $nested->where('folio', 'like', '%'.$term.'%')
+                        ->orWhereHas('cliente', fn ($client) => $client->whereRaw("concat_ws(' ', first_name, first_last_name, second_last_name) LIKE ?", ['%'.$term.'%']));
+                });
+            });
+
+        return ValeCajaResource::collection($query->latest('generated_at')->paginate($data['per_page'] ?? 50));
+    }
+
     public function search(Request $request)
     {
         $request->validate(['search' => ['required', 'string', 'min:2', 'max:100']]);
@@ -27,11 +52,25 @@ final class CajaValeController extends Controller
         }
         $branches = $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->pluck('branch_id');
         $term = $request->string('search')->toString();
-        $query = Vale::query()->with(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto'])->whereIn('branch_id', $branches)->where(function ($query) use ($term): void {
-            $query->where('folio', 'ilike', '%'.$term.'%')->orWhereHas('cliente', fn ($client) => $client->whereRaw("concat_ws(' ', first_name, first_last_name, second_last_name) ilike ?", ['%'.$term.'%']));
+        $query = $this->cashierVoucherQuery($user)->whereIn('branch_id', $branches)->where(function ($query) use ($term): void {
+            $query->where('folio', 'like', '%'.$term.'%')->orWhereHas('cliente', fn ($client) => $client->whereRaw("concat_ws(' ', first_name, first_last_name, second_last_name) LIKE ?", ['%'.$term.'%']));
         });
 
         return ValeCajaResource::collection($query->latest('generated_at')->limit(25)->get());
+    }
+
+    private function cashierVoucherQuery(User $user): Builder
+    {
+        return Vale::query()->with([
+            'cliente',
+            'distribuidora.cuentaBancariaVigente',
+            'distribuidora.usuario',
+            'distribuidora.solicitud.datosPersonales',
+            'distribuidora.solicitud.domicilioActual',
+            'distribuidora.archivosSolicitud',
+            'versionProducto',
+            'solicitudesModificacion' => fn ($query) => $query->where('requested_by', $user->id)->whereIn('status', ['REQUESTED', 'AUTHORIZED'])->latest(),
+        ]);
     }
 
     public function show(Vale $vale, Request $request): ValeCajaResource
@@ -40,7 +79,7 @@ final class CajaValeController extends Controller
             throw new ExcepcionVale('VOUCHER_BRANCH_FORBIDDEN', 'Vale fuera de sucursal.', 404);
         }
 
-        return new ValeCajaResource($vale->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto', 'parcialidades']));
+        return new ValeCajaResource($vale->load(['cliente', 'distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto', 'parcialidades', 'solicitudesModificacion' => fn ($query) => $query->where('requested_by', $request->user()->id)->whereIn('status', ['REQUESTED', 'AUTHORIZED'])->latest()]));
     }
 
     public function release(Vale $vale, LiberarValeRequest $request, ServicioCajaVale $service): ValeCajaResource
@@ -51,17 +90,17 @@ final class CajaValeController extends Controller
             $request->integer('lock_version'),
             $request->validated('bank_name'),
             $request->validated('clabe')
-        )->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
+        )->load(['cliente', 'distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
     }
 
     public function cash(Vale $vale, FeriarValeRequest $request, ServicioCajaVale $service): ValeCajaResource
     {
-        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->string('bank_transaction_number')->toString(), $request->integer('lock_version'))->load(['distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
+        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->string('bank_transaction_number')->toString(), $request->integer('lock_version'))->load(['cliente', 'distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
     }
 
     public function requestModification(Vale $vale, SolicitarModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)
     {
-        return response()->json(['data' => $service->solicitar($vale, $request->user(), $request->validated('fields'), $request->validated('reason'))], 201);
+        return response()->json(['data' => $service->solicitar($vale, $request->user(), $request->validated('fields'), $request->validated('changes'), $request->validated('reason'))], 201);
     }
 
     public function listModifications(Request $request)
@@ -87,6 +126,6 @@ final class CajaValeController extends Controller
     {
         $validated = $request->validated();
 
-        return response()->json(['data' => $service->aplicar($solicitud, $request->user(), $validated['token'], $validated['changes'], $request->integer('lock_version'))]);
+        return response()->json(['data' => $service->aplicar($solicitud, $request->user(), $validated['token'], $request->integer('lock_version'))]);
     }
 }

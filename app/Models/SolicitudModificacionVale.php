@@ -18,7 +18,7 @@ final class SolicitudModificacionVale extends Model
 
     protected function casts(): array
     {
-        return ['requested_fields' => 'array', 'changes_before' => 'array', 'changes_after' => 'array', 'decided_at' => 'immutable_datetime', 'token_expires_at' => 'immutable_datetime', 'token_used_at' => 'immutable_datetime', 'lock_version' => 'integer'];
+        return ['requested_fields' => 'array', 'requested_changes' => 'encrypted:array', 'changes_before' => 'array', 'changes_after' => 'array', 'decided_at' => 'immutable_datetime', 'token_expires_at' => 'immutable_datetime', 'token_used_at' => 'immutable_datetime', 'lock_version' => 'integer'];
     }
 
     public function vale(): BelongsTo

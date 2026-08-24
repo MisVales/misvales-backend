@@ -49,6 +49,11 @@ final class Vale extends Model
         return $this->hasMany(ParcialidadVale::class, 'voucher_id')->orderBy('number');
     }
 
+    public function solicitudesModificacion(): HasMany
+    {
+        return $this->hasMany(SolicitudModificacionVale::class, 'voucher_id');
+    }
+
     public function cliente(): BelongsTo
     {
         return $this->belongsTo(Cliente::class, 'client_id');

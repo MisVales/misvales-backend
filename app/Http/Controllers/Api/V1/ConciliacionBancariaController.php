@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Exceptions\ExcepcionConciliacion;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Api\V1\Conciliacion\CrearAclaracionPagoRequest;
+use App\Http\Requests\Api\V1\Conciliacion\CrearTransferenciaBancariaSimuladaRequest;
 use App\Http\Requests\Api\V1\Conciliacion\DecidirConciliacionManualRequest;
 use App\Http\Requests\Api\V1\Conciliacion\ImportarArchivoBancarioRequest;
 use App\Http\Requests\Api\V1\Conciliacion\ListarFlujoConciliacionRequest;
@@ -20,22 +21,32 @@ use App\Models\ImportacionArchivoBancario;
 use App\Models\MovimientoBancario;
 use App\Models\RelacionDistribuidora;
 use App\Models\SolicitudConciliacionManual;
+use App\Models\TransferenciaBancariaSimulada;
 use App\Models\User;
 use App\Services\Conciliacion\ServicioConciliacionManual;
+use App\Services\Conciliacion\ServicioDisponibilidadConciliacion;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
+use App\Services\Conciliacion\ServicioTicketPagoSimulado;
+use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
+use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
 use Illuminate\Database\Eloquent\Builder;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\BinaryFileResponse;
+use Symfony\Component\HttpFoundation\Response;
 
 final class ConciliacionBancariaController extends Controller
 {
-    public function import(ImportarArchivoBancarioRequest $request, ServicioImportacionBancaria $service)
+    public function import(ImportarArchivoBancarioRequest $request, ServicioImportacionBancaria $service, ServicioDisponibilidadConciliacion $availability, ServicioFinPeriodoPagoManual $paymentPeriod)
     {
         $branchId = $request->user()->branch_id;
         if (! $request->user()->hasRole('cashier') || $branchId === null || ! $request->user()->hasScopeForBranch($branchId)) {
             throw new ExcepcionConciliacion('BANK_IMPORT_SCOPE_DENIED', 'La cajera no tiene una sucursal operativa autorizada.', 403);
         }
+        $availability->asegurarCorteVencido();
 
         $import = $service->importar($request->file('file'), $request->user(), $branchId);
+        $paymentPeriod->forzar($request->user(), 'Cierre automático después de procesar el archivo bancario final');
 
         return (new ImportacionBancariaResource($import))
             ->response()
@@ -56,6 +67,59 @@ final class ConciliacionBancariaController extends Controller
         }
 
         return ImportacionBancariaResource::collection($query->paginate(25));
+    }
+
+    public function simulate(CrearTransferenciaBancariaSimuladaRequest $request, ServicioTransferenciasBancariasSimuladas $service): JsonResponse
+    {
+        $relation = RelacionDistribuidora::query()->whereKey($request->validated('relation_id'))->firstOrFail();
+        $user = $request->user();
+        if ($user->hasPermissionTo('bank_imports.create_branch')) {
+            $branchId = $this->cashierBranchId($user);
+        } elseif ($user->hasPermissionTo('relations.view_own') && $user->distribuidora?->id === $relation->distributor_id) {
+            $branchId = $relation->branch_id;
+        } else {
+            throw new ExcepcionConciliacion('BANK_SIMULATION_SCOPE_DENIED', 'No tienes autorización para simular una transferencia de esta relación.', 403);
+        }
+
+        $transfer = $service->registrar($request->validated(), $request->user(), $branchId);
+
+        return response()->json(['data' => $transfer], 201);
+    }
+
+    public function simulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): JsonResponse
+    {
+        $processRunId = $availability->asegurarCorteVencido();
+        $branchId = $this->cashierBranchId($request->user());
+
+        return response()->json(['data' => $service->listar($branchId, $processRunId)]);
+    }
+
+    public function exportSimulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): BinaryFileResponse
+    {
+        $processRunId = $availability->asegurarCorteVencido();
+        $branchId = $this->cashierBranchId($request->user());
+        $path = $service->exportar($branchId, $processRunId);
+
+        return response()->download(
+            $path,
+            'movimientos-bancarios-simulados-'.now()->format('Ymd-His').'.xlsx',
+            ['Content-Type' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet']
+        )->deleteFileAfterSend(true);
+    }
+
+    public function downloadSimulationTicket(TransferenciaBancariaSimulada $transferencia, Request $request, ServicioTicketPagoSimulado $ticket): Response
+    {
+        $user = $request->user();
+        $ownsTransfer = $transferencia->created_by === $user->id;
+        $cashierCanPrint = $user->hasRole('cashier')
+            && $user->hasPermissionTo('bank_imports.view_branch')
+            && $user->hasScopeForBranch($transferencia->branch_id);
+        abort_unless($ownsTransfer || $cashierCanPrint, 403);
+
+        return response($ticket->generar($transferencia), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="ticket-'.$transferencia->bank_folio.'.pdf"',
+        ]);
     }
 
     public function movements(ListarMovimientosBancariosRequest $request)
@@ -83,7 +147,7 @@ final class ConciliacionBancariaController extends Controller
 
     public function clarifications(ListarFlujoConciliacionRequest $request)
     {
-        $query = AclaracionPago::query()->with(['relation', 'distributor'])->latest();
+        $query = AclaracionPago::query()->with(['relation', 'distributor.usuario'])->latest();
         $this->scopeClarifications($query, $request->user());
         $query->when($request->validated('status'), fn (Builder $builder, string $status) => $builder->where('status', $status));
 
@@ -93,7 +157,7 @@ final class ConciliacionBancariaController extends Controller
     public function manualRequests(ListarFlujoConciliacionRequest $request)
     {
         $query = SolicitudConciliacionManual::query()
-            ->with(['movement', 'relation', 'clarification', 'requester', 'authorizer', 'executor'])
+            ->with(['movement', 'relation.distribuidora.usuario', 'clarification', 'requester', 'authorizer', 'executor'])
             ->latest();
         $this->scopeManualRequests($query, $request->user());
         $query->when($request->validated('status'), fn (Builder $builder, string $status) => $builder->where('status', $status));
@@ -184,5 +248,15 @@ final class ConciliacionBancariaController extends Controller
             ->where('status', 'ACTIVE')
             ->whereNull('valid_to')
             ->select('distributor_id');
+    }
+
+    private function cashierBranchId(User $user): string
+    {
+        $branchId = $user->branch_id;
+        if (! $user->hasRole('cashier') || $branchId === null || ! $user->hasScopeForBranch($branchId)) {
+            throw new ExcepcionConciliacion('BANK_SIMULATION_SCOPE_DENIED', 'La cajera no tiene una sucursal operativa autorizada.', 403);
+        }
+
+        return $branchId;
     }
 }

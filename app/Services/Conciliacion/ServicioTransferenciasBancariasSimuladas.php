@@ -1,0 +1,135 @@
+<?php
+
+namespace App\Services\Conciliacion;
+
+use App\Exceptions\ExcepcionConciliacion;
+use App\Models\RelacionDistribuidora;
+use App\Models\TransferenciaBancariaSimulada;
+use App\Models\User;
+use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Str;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Common\Entity\Style\Color;
+use OpenSpout\Common\Entity\Style\Style;
+use OpenSpout\Writer\XLSX\Writer;
+
+final class ServicioTransferenciasBancariasSimuladas
+{
+    public function registrar(array $data, User $actor, string $branchId): TransferenciaBancariaSimulada
+    {
+        if (! in_array($data['payment_type'], ['TRANSFER', 'ONLINE_BANKING', 'COUNTER'], true)) {
+            throw new ExcepcionConciliacion(
+                'BANK_SIMULATION_TYPE_INVALID',
+                'Solo se pueden simular transferencias y pagos por banca en línea.',
+                422,
+            );
+        }
+
+        if ($data['payment_type'] === 'COUNTER' && ! $actor->hasRole('cashier')) {
+            throw new ExcepcionConciliacion('COUNTER_PAYMENT_ROLE_DENIED', 'Solo una cajera puede registrar pagos en ventanilla.', 403);
+        }
+
+        if ($data['payment_type'] !== 'COUNTER' && $actor->hasRole('cashier')) {
+            throw new ExcepcionConciliacion('CASHIER_PAYMENT_TYPE_INVALID', 'Caja solo registra pagos recibidos en ventanilla.', 422);
+        }
+
+        $relation = RelacionDistribuidora::query()->whereKey($data['relation_id'])->firstOrFail();
+        if ($relation->branch_id !== $branchId) {
+            throw new ExcepcionConciliacion('BANK_SIMULATION_SCOPE_DENIED', 'La relación no pertenece a la sucursal autorizada.', 403);
+        }
+
+        $paidAt = isset($data['paid_at'])
+            ? CarbonImmutable::parse($data['paid_at'], config('app.timezone'))
+            : CarbonImmutable::now(config('app.timezone'));
+        $concept = Str::squish((string) ($data['concept'] ?? ''));
+
+        return TransferenciaBancariaSimulada::query()->create([
+            'branch_id' => $branchId,
+            'relation_id' => $relation->id,
+            'created_by' => $actor->id,
+            'concept' => $concept !== '' ? $concept : 'Abono a referencia '.$relation->payment_reference,
+            'payment_reference' => $relation->payment_reference,
+            'amount' => $data['amount'],
+            'bank_folio' => 'SIM-'.$paidAt->format('YmdHis').'-'.Str::upper(Str::random(8)),
+            'paid_at' => $paidAt,
+            'payment_type' => $data['payment_type'],
+        ]);
+    }
+
+    public function listar(string $branchId, string $processRunId): Collection
+    {
+        return TransferenciaBancariaSimulada::query()
+            ->with('relation:id,payment_reference,process_run_id')
+            ->where('branch_id', $branchId)
+            ->whereHas('relation', fn ($query) => $query->where('process_run_id', $processRunId))
+            ->latest('paid_at')
+            ->limit(100)
+            ->get();
+    }
+
+    public function exportar(string $branchId, string $processRunId): string
+    {
+        $transfers = TransferenciaBancariaSimulada::query()
+            ->where('branch_id', $branchId)
+            ->whereHas('relation', fn ($query) => $query->where('process_run_id', $processRunId))
+            ->oldest('paid_at')
+            ->get();
+
+        return $this->crearArchivo($transfers);
+    }
+
+    public function crearArchivo(Collection $transfers): string
+    {
+        $path = tempnam(sys_get_temp_dir(), 'bank_simulations_').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $sheet = $writer->getCurrentSheet();
+        $sheet->setColumnWidth(8, 1);
+        $sheet->setColumnWidth(34, 2);
+        $sheet->setColumnWidth(20, 3);
+        $sheet->setColumnWidth(14, 4);
+        $sheet->setColumnWidth(22, 5);
+        $sheet->setColumnWidth(16, 6);
+        $sheet->setColumnWidth(12, 7);
+        $sheet->setColumnWidth(22, 8);
+        $headerStyle = new Style(fontBold: true, fontColor: Color::WHITE, backgroundColor: '0B6B3A');
+        $moneyStyle = new Style(format: '$#,##0.00');
+        $writer->addRow(Row::fromValuesWithStyle([
+            'item',
+            'Concepto',
+            'Referencia',
+            'Pago',
+            'Folio de pago',
+            'Fecha de pago',
+            'Hora',
+            'tipo de pago',
+        ], $headerStyle, 24));
+
+        foreach ($transfers->values() as $index => $transfer) {
+            $writer->addRow(Row::fromValuesWithStyles([
+                $index + 1,
+                $transfer->concept,
+                $transfer->payment_reference,
+                (float) $transfer->amount,
+                $transfer->bank_folio,
+                $transfer->paid_at->format('d/m/Y'),
+                $transfer->paid_at->format('H:i'),
+                $this->paymentTypeLabel($transfer->payment_type),
+            ], [3 => $moneyStyle]));
+        }
+
+        $writer->close();
+
+        return $path;
+    }
+
+    private function paymentTypeLabel(string $type): string
+    {
+        return match ($type) {
+            'ONLINE_BANKING' => 'Banca en línea',
+            'COUNTER' => 'Pago en ventanilla',
+            default => 'Transferencia',
+        };
+    }
+}

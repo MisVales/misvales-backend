@@ -41,10 +41,10 @@ final class ServicioGeneracionVale
                 ->where('distributor_id', $distribuidora->id)
                 ->where('branch_id', $distribuidora->branch_id))
             ->where(function ($consulta) use ($termino): void {
-                $consulta->where('client_number', 'ilike', "%{$termino}%")
-                    ->orWhere('first_name', 'ilike', "%{$termino}%")
-                    ->orWhere('first_last_name', 'ilike', "%{$termino}%")
-                    ->orWhere('second_last_name', 'ilike', "%{$termino}%");
+                $consulta->where('client_number', 'like', "%{$termino}%")
+                    ->orWhere('first_name', 'like', "%{$termino}%")
+                    ->orWhere('first_last_name', 'like', "%{$termino}%")
+                    ->orWhere('second_last_name', 'like', "%{$termino}%");
             })
             ->orderBy('first_name')
             ->orderBy('first_last_name')
@@ -239,7 +239,7 @@ final class ServicioGeneracionVale
 
     private function siguienteFolio(): string
     {
-        $secuencia = (int) DB::selectOne("SELECT nextval('voucher_folio_seq') AS value")->value;
+        $secuencia = (int) DB::scalar('SELECT NEXT VALUE FOR voucher_folio_seq');
 
         return sprintf('VAL-%s-%08d', now()->format('Y'), $secuencia);
     }

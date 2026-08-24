@@ -19,7 +19,14 @@ use Throwable;
 
 final class ServicioImportacionBancaria
 {
-    private const HEADERS = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto'];
+    private const HEADER_ALIASES = [
+        'reference' => ['referencia de pago', 'referencia'],
+        'amount' => ['monto', 'pago'],
+        'date' => ['fecha', 'fecha de pago'],
+        'folio' => ['folio bancario', 'folio de pago'],
+        'concept' => ['concepto'],
+        'time' => ['hora'],
+    ];
 
     public function __construct(
         private LectorXlsxBancario $reader,
@@ -110,7 +117,12 @@ final class ServicioImportacionBancaria
             fn ($value): string => Str::of((string) $value)->squish()->lower()->toString(),
             array_values($rows[0] ?? [])
         );
-        $missing = array_values(array_diff(self::HEADERS, $headers));
+        $map = $this->resolverColumnas($headers);
+        $missing = collect(['reference', 'amount', 'date', 'folio', 'concept'])
+            ->reject(fn (string $key): bool => array_key_exists($key, $map))
+            ->map(fn (string $key): string => self::HEADER_ALIASES[$key][0])
+            ->values()
+            ->all();
         if ($missing !== []) {
             throw new ExcepcionConciliacion(
                 'BANK_FILE_REQUIRED_COLUMNS_MISSING',
@@ -121,7 +133,6 @@ final class ServicioImportacionBancaria
             );
         }
 
-        $map = array_flip($headers);
         $movements = [];
         $rowErrors = [];
         foreach (array_slice($rows, 1) as $offset => $raw) {
@@ -133,11 +144,14 @@ final class ServicioImportacionBancaria
             }
 
             $rowNumber = $offset + 2;
-            $reference = trim((string) Arr::get($values, $map['referencia de pago'], ''));
-            $folio = trim((string) Arr::get($values, $map['folio bancario'], ''));
-            $concept = trim((string) Arr::get($values, $map['concepto'], ''));
-            $amount = $this->normalizarMonto(Arr::get($values, $map['monto']));
-            $date = $this->normalizarFecha(Arr::get($values, $map['fecha']));
+            $reference = trim((string) Arr::get($values, $map['reference'], ''));
+            $folio = trim((string) Arr::get($values, $map['folio'], ''));
+            $concept = trim((string) Arr::get($values, $map['concept'], ''));
+            $amount = $this->normalizarMonto(Arr::get($values, $map['amount']));
+            $date = $this->normalizarFecha(
+                Arr::get($values, $map['date']),
+                isset($map['time']) ? Arr::get($values, $map['time']) : null
+            );
             $errors = [];
 
             if ($reference === '' || Str::length($reference) > 64) {
@@ -181,11 +195,14 @@ final class ServicioImportacionBancaria
 
     private function procesarFila(array $values, int $rowNumber, array $map, ImportacionArchivoBancario $import, User $actor): MovimientoBancario
     {
-        $folio = trim((string) Arr::get($values, $map['folio bancario']));
-        $reference = trim((string) Arr::get($values, $map['referencia de pago']));
-        $amount = $this->normalizarMonto(Arr::get($values, $map['monto']));
-        $date = $this->normalizarFecha(Arr::get($values, $map['fecha']));
-        $concept = trim((string) Arr::get($values, $map['concepto']));
+        $folio = trim((string) Arr::get($values, $map['folio']));
+        $reference = trim((string) Arr::get($values, $map['reference']));
+        $amount = $this->normalizarMonto(Arr::get($values, $map['amount']));
+        $date = $this->normalizarFecha(
+            Arr::get($values, $map['date']),
+            isset($map['time']) ? Arr::get($values, $map['time']) : null
+        );
+        $concept = trim((string) Arr::get($values, $map['concept']));
         $rowData = compact('reference', 'amount', 'date', 'concept');
         $existingMovement = MovimientoBancario::query()->where('idempotency_bank_folio', $folio)->first();
 
@@ -287,20 +304,58 @@ final class ServicioImportacionBancaria
         return $normalized === '' || ! is_numeric($normalized) ? null : bcadd($normalized, '0', 4);
     }
 
-    private function normalizarFecha(mixed $value): ?CarbonImmutable
+    private function normalizarFecha(mixed $value, mixed $time = null): ?CarbonImmutable
     {
         try {
             if (is_numeric($value) && (float) $value > 0) {
-                return CarbonImmutable::create(1899, 12, 30, 0, 0, 0, config('app.timezone'))
-                    ->addSeconds((int) round(((float) $value) * 86400));
+                $date = CarbonImmutable::create(1899, 12, 30, 0, 0, 0, config('app.timezone'))
+                    ->addDays((int) floor((float) $value));
+
+                return $this->aplicarHora($date, $time ?? ((float) $value - floor((float) $value)));
             }
 
             $raw = trim((string) $value);
+            if ($raw === '') {
+                return null;
+            }
+            $date = preg_match('/^\d{1,2}\/\d{1,2}\/\d{4}$/', $raw) === 1
+                ? CarbonImmutable::createFromFormat('!d/m/Y', $raw, config('app.timezone'))
+                : CarbonImmutable::parse($raw, config('app.timezone'))->startOfDay();
 
-            return $raw === '' ? null : CarbonImmutable::parse($raw, config('app.timezone'));
+            return $this->aplicarHora($date, $time);
         } catch (Throwable) {
             return null;
         }
+    }
+
+    private function resolverColumnas(array $headers): array
+    {
+        $available = array_flip($headers);
+        $map = [];
+        foreach (self::HEADER_ALIASES as $key => $aliases) {
+            foreach ($aliases as $alias) {
+                if (array_key_exists($alias, $available)) {
+                    $map[$key] = $available[$alias];
+                    break;
+                }
+            }
+        }
+
+        return $map;
+    }
+
+    private function aplicarHora(CarbonImmutable $date, mixed $time): CarbonImmutable
+    {
+        if ($time === null || trim((string) $time) === '') {
+            return $date;
+        }
+        if (is_numeric($time)) {
+            return $date->addSeconds((int) round(((float) $time) * 86400));
+        }
+
+        $parsed = CarbonImmutable::parse((string) $time, config('app.timezone'));
+
+        return $date->setTime($parsed->hour, $parsed->minute, $parsed->second);
     }
 
     private function summaryKey(string $classification): string

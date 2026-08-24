@@ -12,8 +12,8 @@ final class CalculadorFinancieroVale
             throw new InvalidArgumentException('Capital y quincenas deben ser positivos.');
         }
 
-        $capital = $this->normalizar($capital);
-        $seguro = $this->normalizar($seguro);
+        $capital = $this->piso($capital);
+        $seguro = $this->piso($seguro);
         $comisionMonto = $this->redondear(bcmul($capital, $comision, 10));
         $interesQuincena = $this->redondear(bcmul($capital, $interes, 10));
         $interesTotal = $this->redondear(bcmul(bcmul($capital, $interes, 10), (string) $quincenas, 10));
@@ -59,7 +59,7 @@ final class CalculadorFinancieroVale
 
     private function distribuir(string $total, int $partes): array
     {
-        $base = bcdiv($total, (string) $partes, 4);
+        $base = $this->piso(bcdiv($total, (string) $partes, 10));
         $valores = array_fill(0, $partes, $base);
         $valores[$partes - 1] = bcsub($total, bcmul($base, (string) ($partes - 1), 4), 4);
 
@@ -71,11 +71,6 @@ final class CalculadorFinancieroVale
         return array_reduce($valores, static fn (string $total, string $valor): string => bcadd($total, $valor, 4), '0.0000');
     }
 
-    private function normalizar(string $valor): string
-    {
-        return bcadd($valor, '0.0000', 4);
-    }
-
     private function tasa(string $valor): string
     {
         return bcadd($valor, '0.000000', 6);
@@ -83,6 +78,11 @@ final class CalculadorFinancieroVale
 
     private function redondear(string $valor): string
     {
-        return bcdiv(bcadd($valor, '0.00005', 5), '1', 4);
+        return $this->piso($valor);
+    }
+
+    private function piso(string $valor): string
+    {
+        return bcadd(bcdiv($valor, '1', 0), '0.0000', 4);
     }
 }
