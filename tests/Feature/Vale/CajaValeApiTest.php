@@ -1673,7 +1673,7 @@ final class CajaValeApiTest extends TestCase
                 'version' => 1,
                 'value' => $value,
                 'status' => 'PUBLISHED',
-                'effective_from' => now()->subDay(),
+                'effective_from' => now()->subYear(),
                 'reason' => 'Configuración de prueba',
                 'created_by' => $this->distributorUser->id,
                 'published_by' => $this->distributorUser->id,
