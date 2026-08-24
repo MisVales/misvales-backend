@@ -46,7 +46,7 @@ class SolicitudIncrementoLineaConsultaController extends Controller
 
         // 2. Filtros
         if ($request->filled('request_number')) {
-            $query->where('request_number', 'ilike', '%'.$request->input('request_number').'%');
+            $query->where('request_number', 'like', '%'.$request->input('request_number').'%');
         }
         if ($request->filled('distributor_id')) {
             $query->where('distributor_id', $request->input('distributor_id'));

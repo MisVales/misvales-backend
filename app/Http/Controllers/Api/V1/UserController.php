@@ -86,7 +86,11 @@ class UserController extends Controller
      * POST /api/v1/users
      * Crea el usuario y opcionalmente le asigna un rol y envía la invitación.
      */
-    public function store(Request $request, RoleAssignmentPolicyService $policyService)
+    public function store(
+        Request $request,
+        RoleAssignmentPolicyService $policyService,
+        OrganizationScopeResolver $scopeResolver,
+    )
     {
         Gate::authorize('create', User::class);
 
@@ -97,6 +101,14 @@ class UserController extends Controller
             'branch_id' => 'nullable|uuid',
             'send_invitation' => 'nullable|boolean',
         ]);
+
+        $actorScope = $scopeResolver->resolve((string) $request->user()->id);
+        $requestedBranchId = $request->input('branch_id');
+
+        if (! $actorScope->isGlobal()
+            && (! is_string($requestedBranchId) || ! $actorScope->allows($requestedBranchId))) {
+            throw new OrganizationScopeDenied;
+        }
 
         return DB::transaction(function () use ($request, $policyService) {
             $email = trim(strtolower($request->email));

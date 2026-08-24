@@ -8,6 +8,7 @@ use App\Models\DatosPersonalesSolicitud;
 use App\Models\DomicilioSolicitud;
 use App\Models\EmpleoSolicitud;
 use App\Models\FamiliarSolicitud;
+use App\Models\MediaFileBinding;
 use App\Models\PatrimonioSolicitud;
 use App\Models\SolicitudDistribuidora;
 use App\Models\User;
@@ -112,6 +113,28 @@ final class ServicioSolicitudDistribuidora
         if ($permitida === null) {
             throw new AuthorizationException('La solicitud no está dentro del alcance autorizado.');
         }
+
+        $ownerIds = [
+            'application_vehicle' => $permitida->vehiculos->modelKeys(),
+            'application_asset_liability' => $permitida->patrimonio->modelKeys(),
+            'application_commercial_credit' => $permitida->creditosComerciales->modelKeys(),
+        ];
+        $bindings = MediaFileBinding::query()
+            ->with('mediaFile')
+            ->where(function ($query) use ($permitida, $ownerIds): void {
+                $query->where(function ($query) use ($permitida): void {
+                    $query->where('owner_type', 'distributor_application')
+                        ->where('owner_id', $permitida->id)
+                        ->whereIn('purpose', ['IDENTIFICATION', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE']);
+                });
+                foreach ($ownerIds as $ownerType => $ids) {
+                    if ($ids !== []) {
+                        $query->orWhere(fn ($query) => $query->where('owner_type', $ownerType)->whereIn('owner_id', $ids));
+                    }
+                }
+            })
+            ->get();
+        $permitida->setRelation('declaredMediaFiles', $bindings->pluck('mediaFile')->filter()->unique('id')->values());
 
         return $permitida;
     }
@@ -473,7 +496,25 @@ final class ServicioSolicitudDistribuidora
     {
         $this->asegurarConsultaEnAlcance($actor, $solicitud);
 
-        return $solicitud->{$relacion}()->orderBy('created_at')->get();
+        $registros = $solicitud->{$relacion}()->orderBy('created_at')->get();
+        $ownerType = match ($relacion) {
+            'vehiculos' => 'application_vehicle',
+            'patrimonio' => 'application_asset_liability',
+            'creditosComerciales' => 'application_commercial_credit',
+            default => null,
+        };
+
+        if ($ownerType !== null && $registros->isNotEmpty()) {
+            $conEvidencia = MediaFileBinding::query()
+                ->where('owner_type', $ownerType)
+                ->whereIn('owner_id', $registros->modelKeys())
+                ->pluck('owner_id')
+                ->all();
+
+            $registros->each(fn (Model $registro) => $registro->setAttribute('has_evidence', in_array($registro->getKey(), $conEvidencia, true)));
+        }
+
+        return $registros;
     }
 
     private function guardarRegistro(User $actor, SolicitudDistribuidora $solicitud, array $datos, Model $registro): Model

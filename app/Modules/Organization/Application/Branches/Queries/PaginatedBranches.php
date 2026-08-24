@@ -13,7 +13,7 @@ final readonly class PaginatedBranches
         public int $lastPage,
     ) {}
 
-    /** @return array{data: list<array<string, bool|int|string|null>>, meta: array<string, int>} */
+    /** @return array{data: list<array<string, bool|float|int|string|null>>, meta: array<string, int>} */
     public function toArray(): array
     {
         return [

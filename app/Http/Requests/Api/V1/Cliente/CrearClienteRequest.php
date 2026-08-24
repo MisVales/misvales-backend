@@ -41,7 +41,7 @@ class CrearClienteRequest extends FormRequest
             ]),
             'bank_account' => $this->input('bank_account', [
                 'bank_name' => 'N/A',
-                'account_holder_name' => $this->input('first_name') . ' ' . $this->input('first_last_name'),
+                'account_holder_name' => $this->input('first_name').' '.$this->input('first_last_name'),
                 'clabe' => '000000000000000000',
             ]),
         ]);
@@ -92,7 +92,9 @@ class CrearClienteRequest extends FormRequest
 
     public function messages(): array
     {
-        return [];
+        return [
+            'curp.regex' => 'La CURP no tiene un formato válido.',
+        ];
     }
 
     protected function failedValidation(Validator $validator): void

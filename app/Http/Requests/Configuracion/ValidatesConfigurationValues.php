@@ -43,19 +43,7 @@ trait ValidatesConfigurationValues
         }
 
         if ($key) {
-            if ($key === 'EARLY_PAYMENT_PERIOD') {
-                $rules['value.start'] = ['required', 'integer', 'min:0'];
-                $rules['value.end'] = [
-                    'required',
-                    'integer',
-                    function (string $attribute, mixed $value, \Closure $fail): void {
-                        $start = $this->input('value.start');
-                        if (is_numeric($start) && is_numeric($value) && (int) $value <= (int) $start) {
-                            $fail('El fin del periodo debe ser mayor que el inicio.');
-                        }
-                    },
-                ];
-            } elseif ($key === 'RELATION_PAYMENT_BANK') {
+            if ($key === 'RELATION_PAYMENT_BANK') {
                 $rules['value.name'] = ['required', 'string', 'max:160'];
                 $rules['value.beneficiary'] = ['required', 'string', 'max:255'];
                 $rules['value.agreement'] = ['required', 'string', 'max:100'];

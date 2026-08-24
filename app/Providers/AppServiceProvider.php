@@ -46,12 +46,20 @@ use App\Services\Credito\GeneradorFolioIncremento;
 use App\Services\Credito\ServicioEstadoIncremento;
 use App\Services\Credito\ServicioVerificadorDisponibilidadCredito;
 use App\Services\Distribuidora\AuditorDistribuidora;
+use App\Services\Observabilidad\MonitorConsultas;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Console\Events\ScheduledTaskFailed;
 use Illuminate\Database\Eloquent\Relations\Relation;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobFailed;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Str;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -88,8 +96,42 @@ class AppServiceProvider extends ServiceProvider
     /**
      * Bootstrap any application services.
      */
-    public function boot(): void
+    public function boot(MonitorConsultas $monitorConsultas): void
     {
+        $monitorConsultas->register();
+
+        Event::listen(JobFailed::class, static function (JobFailed $event): void {
+            Log::error('QUEUE_JOB_FAILED', [
+                'connection' => $event->connectionName,
+                'queue' => $event->job->getQueue(),
+                'job' => $event->job->resolveName(),
+                'exception' => $event->exception::class,
+            ]);
+        });
+        Event::listen(ScheduledTaskFailed::class, static function (ScheduledTaskFailed $event): void {
+            Log::critical('SCHEDULED_TASK_FAILED', [
+                'command' => $event->task->command,
+                'exception' => $event->exception::class,
+            ]);
+            try {
+                if (Schema::hasTable('operational_logs')) {
+                    DB::table('operational_logs')->insert([
+                        'id' => (string) Str::uuid(),
+                        'channel' => 'ERROR',
+                        'level' => 'CRITICAL',
+                        'event' => 'SCHEDULED_TASK_FAILED',
+                        'context' => json_encode([
+                            'command' => $event->task->command,
+                            'exception' => $event->exception::class,
+                        ], JSON_THROW_ON_ERROR),
+                        'occurred_at' => now(),
+                    ]);
+                }
+            } catch (\Throwable) {
+                // El log estructurado anterior sigue disponible aunque MariaDB falle.
+            }
+        });
+
         Relation::morphMap([
             'verification_visit' => VerificationVisit::class,
         ]);
@@ -129,6 +171,19 @@ class AppServiceProvider extends ServiceProvider
 
         RateLimiter::for('recovery_code', function (Request $request) use ($configuredLimit) {
             return $configuredLimit(Limit::perMinute(3)->by($request->user()?->id ?: $request->ip()));
+        });
+
+        RateLimiter::for('broadcasting', function (Request $request) use ($configuredLimit) {
+            return $configuredLimit(
+                Limit::perMinute(config('ratelimit.broadcasting_auth_per_minute', 30))
+                    ->by($request->user()?->id ?: $request->ip())
+            );
+        });
+
+        RateLimiter::for('realtime_reads', function (Request $request) use ($configuredLimit) {
+            return $configuredLimit(
+                Limit::perMinute(120)->by($request->user()?->id ?: $request->ip())
+            );
         });
 
         RateLimiter::for('inspect_invitation', function (Request $request) use ($configuredLimit) {

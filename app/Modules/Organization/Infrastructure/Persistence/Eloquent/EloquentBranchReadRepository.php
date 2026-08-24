@@ -40,6 +40,12 @@ final class EloquentBranchReadRepository implements BranchReadRepository
                 code: $record->getAttribute('code'),
                 name: $record->getAttribute('name'),
                 address: $record->getAttribute('address'),
+                latitude: $record->getAttribute('address_latitude') === null
+                    ? null
+                    : (float) $record->getAttribute('address_latitude'),
+                longitude: $record->getAttribute('address_longitude') === null
+                    ? null
+                    : (float) $record->getAttribute('address_longitude'),
                 isHeadquarters: (bool) $record->getAttribute('is_headquarters'),
                 status: $record->getAttribute('status'),
                 lockVersion: (int) $record->getAttribute('lock_version'),

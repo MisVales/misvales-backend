@@ -13,14 +13,15 @@ class DistribuidoraResource extends JsonResource
         $coordinador = $this->coordinadorVigente?->coordinator;
         $datos = $this->solicitud?->datosPersonales;
 
+        $nombreCompleto = trim(implode(' ', array_filter([
+            $datos?->first_name,
+            $datos?->first_last_name,
+            $datos?->second_last_name,
+        ])));
+
         return [
             'id' => $this->id,
-            'distributor_number' => $this->distributor_number,
-            'full_name' => trim(implode(' ', array_filter([
-                $datos?->first_name,
-                $datos?->first_last_name,
-                $datos?->second_last_name,
-            ]))),
+            'full_name' => $nombreCompleto !== '' ? $nombreCompleto : trim((string) $this->usuario?->name),
             'branch' => $this->sucursal ? ['id' => $this->sucursal->id, 'name' => $this->sucursal->name] : null,
             'coordinator' => $coordinador ? ['id' => $coordinador->id, 'name' => $coordinador->name] : null,
             'category' => $categoria ? [

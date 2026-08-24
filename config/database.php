@@ -17,7 +17,7 @@ return [
     |
     */
 
-    'default' => env('DB_CONNECTION', 'mysql'),
+    'default' => 'mysql',
 
     /*
     |--------------------------------------------------------------------------
@@ -46,12 +46,11 @@ return [
 
         'mysql' => [
             'driver' => 'mysql',
-            'url' => env('DB_URL'),
             'read' => [
-                'host' => [env('DB_REPLICA_HOST', env('DB_PRIMARY_HOST', '127.0.0.1'))],
-                'port' => env('DB_REPLICA_PORT', '63306'),
-                'username' => env('DB_REPLICA_USERNAME', env('DB_PRIMARY_USERNAME')),
-                'password' => env('DB_REPLICA_PASSWORD', env('DB_PRIMARY_PASSWORD', '')),
+                'host' => [env('MARIADB_REPLICA_HOST') ?: env('MARIADB_PRIMARY_HOST') ?: env('MARIADB_HOST', '127.0.0.1')],
+                'port' => env('MARIADB_REPLICA_PORT') ?: env('MARIADB_PRIMARY_PORT') ?: env('MARIADB_PORT', '3306'),
+                'username' => env('DB_REPLICA_USERNAME') ?: env('DB_PRIMARY_USERNAME') ?: env('DB_USERNAME'),
+                'password' => env('DB_REPLICA_PASSWORD') ?: env('DB_PRIMARY_PASSWORD') ?: env('DB_PASSWORD', ''),
                 'options' => extension_loaded('pdo_mysql') ? array_filter([
                     Mysql::ATTR_SSL_CA => env('DB_REPLICA_SSL_CA'),
                     Mysql::ATTR_SSL_CERT => env('DB_REPLICA_SSL_CERT'),
@@ -60,10 +59,10 @@ return [
                 ], static fn (mixed $value): bool => $value !== null && $value !== '') : [],
             ],
             'write' => [
-                'host' => [env('DB_PRIMARY_HOST', '127.0.0.1')],
-                'port' => env('DB_PRIMARY_PORT', '63306'),
-                'username' => env('DB_PRIMARY_USERNAME'),
-                'password' => env('DB_PRIMARY_PASSWORD', ''),
+                'host' => [env('MARIADB_PRIMARY_HOST') ?: env('MARIADB_HOST', '127.0.0.1')],
+                'port' => env('MARIADB_PRIMARY_PORT') ?: env('MARIADB_PORT', '3306'),
+                'username' => env('DB_PRIMARY_USERNAME') ?: env('DB_USERNAME'),
+                'password' => env('DB_PRIMARY_PASSWORD') ?: env('DB_PASSWORD', ''),
                 'options' => extension_loaded('pdo_mysql') ? array_filter([
                     Mysql::ATTR_SSL_CA => env('DB_PRIMARY_SSL_CA'),
                     Mysql::ATTR_SSL_CERT => env('DB_PRIMARY_SSL_CERT'),
@@ -82,20 +81,8 @@ return [
             'engine' => 'InnoDB',
         ],
 
-        'pgsql' => [
-            'driver' => 'pgsql',
-            'url' => env('DB_URL'),
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '5432'),
-            'database' => env('DB_DATABASE', 'misvales'),
-            'username' => env('DB_USERNAME', 'postgres'),
-            'password' => env('DB_PASSWORD', ''),
-            'charset' => env('DB_CHARSET', 'utf8'),
-            'prefix' => '',
-            'prefix_indexes' => true,
-            'search_path' => 'public',
-            'sslmode' => env('DB_SSLMODE', 'prefer'),
-        ],
+        // Impide que el framework reactive la conexión retirada.
+        'pgsql' => null,
 
         'sqlsrv' => [
             'driver' => 'sqlsrv',
@@ -143,7 +130,7 @@ return [
 
     'redis' => [
 
-        'client' => env('REDIS_CLIENT', 'predis'),
+        'client' => env('REDIS_CLIENT', 'phpredis'),
 
         'options' => [
             'cluster' => env('REDIS_CLUSTER', 'redis'),

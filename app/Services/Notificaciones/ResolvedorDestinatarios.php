@@ -45,6 +45,13 @@ final class ResolvedorDestinatarios
             });
         })->pluck('id');
 
+        if (($contexto['event_type'] ?? null) === 'REFUND_AUTHORIZED' && $branchId) {
+            $cashiers = User::query()->where('state', 'ACTIVE')->whereHas('roleScopes', function ($query) use ($branchId): void {
+                $query->where('status', 'ACTIVE')->whereNull('revoked_at')->where('branch_id', $branchId)->whereHas('role', fn ($role) => $role->where('code', 'cashier'));
+            })->pluck('id');
+            $roles = $roles->merge($cashiers);
+        }
+
         return User::query()->where('state', 'ACTIVE')->whereIn('id', $userIds->merge($roles)->filter()->unique())->get();
     }
 

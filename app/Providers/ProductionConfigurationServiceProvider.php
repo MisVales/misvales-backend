@@ -27,8 +27,11 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
             'database.default' => 'mysql',
             'cache.default' => 'redis',
             'queue.default' => 'redis',
+            'database.redis.client' => 'phpredis',
             'session.driver' => 'redis',
             'filesystems.default' => 's3',
+            'broadcasting.default' => 'reverb',
+            'broadcasting.queue' => 'broadcasts',
         ];
 
         foreach ($expected as $key => $value) {
@@ -39,6 +42,23 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
 
         if ((bool) config('app.debug')) {
             throw new RuntimeException('APP_DEBUG must be false in production.');
+        }
+
+        if (config('broadcasting.connections.reverb.options.scheme') !== 'https'
+            || config('broadcasting.connections.reverb.options.useTLS') !== true) {
+            throw new RuntimeException('Reverb broadcasting must use HTTPS/WSS in production.');
+        }
+
+        if (config('reverb.servers.reverb.scaling.enabled') !== true) {
+            throw new RuntimeException('Reverb Redis scaling must be enabled in production.');
+        }
+
+        $reverbApp = config('reverb.apps.apps.0');
+        if (! is_array($reverbApp)
+            || ($reverbApp['accept_client_events_from'] ?? null) !== 'none'
+            || ($reverbApp['rate_limiting']['enabled'] ?? false) !== true
+            || $this->hasUnsafeRealtimeOrigins($reverbApp['allowed_origins'] ?? null)) {
+            throw new RuntimeException('Reverb application security configuration is unsafe.');
         }
 
         foreach (['db_primary_host', 'db_replica_host', 'redis_host'] as $name) {
@@ -57,5 +77,17 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
                 throw new RuntimeException('Configured database TLS paths must reference readable files.');
             }
         }
+    }
+
+    private function hasUnsafeRealtimeOrigins(mixed $origins): bool
+    {
+        return ! is_array($origins)
+            || $origins === []
+            || collect($origins)->contains(
+                static fn (mixed $origin): bool => ! is_string($origin)
+                    || str_contains($origin, '*')
+                    || str_contains($origin, '://')
+                    || in_array(strtolower($origin), ['localhost', '127.0.0.1', '::1'], true)
+            );
     }
 }

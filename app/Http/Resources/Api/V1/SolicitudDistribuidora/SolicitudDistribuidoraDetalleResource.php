@@ -6,6 +6,7 @@ use App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResourc
 use App\Http\Resources\VerificacionDistribuidora\ApplicationCorrectionResource;
 use App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource;
 use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
+use App\Http\Resources\VerificacionDistribuidora\MediaFileResource;
 use App\Models\MediaFileBinding;
 use Illuminate\Http\Request;
 
@@ -22,6 +23,7 @@ final class SolicitudDistribuidoraDetalleResource extends SolicitudDistribuidora
             'assets_liabilities' => PatrimonioSolicitudResource::collection($this->whenLoaded('patrimonio')),
             'employments' => EmpleoSolicitudResource::collection($this->whenLoaded('empleos')),
             'commercial_credits' => CreditoComercialSolicitudResource::collection($this->whenLoaded('creditosComerciales')),
+            'declared_media_files' => MediaFileResource::collection($this->whenLoaded('declaredMediaFiles')),
             'verification_visits' => VerificationVisitResource::collection($this->whenLoaded('verificationVisits')),
             'corrections' => ApplicationCorrectionResource::collection($this->whenLoaded('corrections')),
             'evaluations' => ApplicationEvaluationResource::collection($this->whenLoaded('evaluations')),

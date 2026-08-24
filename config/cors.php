@@ -32,7 +32,7 @@ return [
 
     'allowed_headers' => ['*'],
 
-    'exposed_headers' => [],
+    'exposed_headers' => ['X-Request-Id', 'X-Correlation-Id', 'X-Trace-Id'],
 
     'max_age' => (int) env('CORS_MAX_AGE', 0),
 

@@ -8,7 +8,7 @@ class GeneradorNumeroDistribuidora
 {
     public function generar(?int $anio = null): string
     {
-        $consecutivo = (int) DB::scalar("SELECT nextval('distributor_number_seq')");
+        $consecutivo = (int) DB::scalar('SELECT NEXT VALUE FOR distributor_number_seq');
 
         return sprintf('DIS-%d-%06d', $anio ?? now()->year, $consecutivo);
     }

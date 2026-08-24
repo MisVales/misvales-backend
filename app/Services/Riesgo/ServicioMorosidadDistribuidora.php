@@ -7,18 +7,20 @@ use App\Models\Distribuidora;
 use App\Models\RelacionDistribuidora;
 use App\Models\SolicitudRetiroMorosidad;
 use App\Models\User;
-use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Cache;
-use Illuminate\Support\Facades\Notification;
 use App\Notifications\NotificacionEventoDominio;
+use Carbon\CarbonImmutable;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Str;
 use RuntimeException;
 
 final class ServicioMorosidadDistribuidora
 {
-    public function evaluar(Distribuidora $d): ?AlertaRiesgoDistribuidora
+    public function evaluar(Distribuidora $d, ?CarbonImmutable $asOf = null): ?AlertaRiesgoDistribuidora
     {
-        $overdue = RelacionDistribuidora::where('distributor_id', $d->id)->where('payment_deadline_at', '<', now())->latest('cutoff_at')->get();
+        $evaluationTime = ($asOf ?? CarbonImmutable::now('UTC'))->setTimezone(config('relations.timezone'));
+        $overdue = RelacionDistribuidora::where('distributor_id', $d->id)->where('payment_deadline_at', '<=', $evaluationTime)->latest('cutoff_at')->get();
         $consecutive = $overdue->takeUntil(fn ($r) => bccomp($r->balance, '0', 4) === 0)->filter(fn ($r) => bccomp($r->balance, '0', 4) > 0);
 
         $consecutiveCount = $consecutive->count();
@@ -29,15 +31,15 @@ final class ServicioMorosidadDistribuidora
             ->where('status', 'ACTIVE')
             ->exists();
 
-        if ($consecutiveCount >= 1 && !$isMorosa) {
+        if ($consecutiveCount >= 1 && ! $isMorosa) {
             $balance = $consecutive->reduce(fn (string $s, $r) => bcadd($s, $r->balance, 4), '0.0000');
             $cacheKey = "notified_delinquency_{$d->id}_{$consecutiveCount}";
-            
-            if (!Cache::has($cacheKey)) {
+
+            if (! Cache::has($cacheKey)) {
                 $d->usuario->notify(new NotificacionEventoDominio([
                     'title' => "{$consecutiveCount} faltas de pago consecutivas",
-                    'description' => "Tienes un adeudo pendiente de $" . number_format((float)$balance, 2) . ". Recuerda que al llegar a 3 faltas tu cuenta puede ser bloqueada.",
-                    'deep_link' => '/cartera'
+                    'description' => 'Tienes un adeudo pendiente de $'.number_format((float) $balance, 2).'. Recuerda que al llegar a 3 faltas tu cuenta puede ser bloqueada.',
+                    'deep_link' => '/cartera',
                 ]));
                 Cache::put($cacheKey, true, now()->addDays(7));
             }
@@ -52,22 +54,22 @@ final class ServicioMorosidadDistribuidora
 
             return null;
         }
-        
+
         $balance = $consecutive->reduce(fn (string $s, $r) => bcadd($s, $r->balance, 4), '0.0000');
 
         $alerta = AlertaRiesgoDistribuidora::firstOrCreate(
-            ['distributor_id' => $d->id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'status' => 'OPEN'], 
+            ['distributor_id' => $d->id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'status' => 'OPEN'],
             ['branch_id' => $d->branch_id, 'consecutive_defaults' => 3, 'relation_ids' => $consecutive->pluck('id')->all(), 'overdue_balance' => $balance]
         );
 
         if ($alerta->wasRecentlyCreated) {
             $managers = User::whereHas('roleScopes.role', fn ($q) => $q->whereIn('code', ['general_manager', 'branch_manager']))->get();
             $managers = $managers->filter(fn ($m) => $m->hasPermissionTo('delinquency.decide_global') || ($m->hasPermissionTo('delinquency.decide_branch') && $m->hasScopeForBranch($d->branch_id)));
-            
+
             Notification::send($managers, new NotificacionEventoDominio([
                 'title' => "Alerta de Morosidad: {$d->distributor_number}",
-                'description' => "La distribuidora ha sumado 3 cortes consecutivos sin pagar. Saldo vencido: $" . number_format((float)$balance, 2),
-                'deep_link' => '/riesgo'
+                'description' => 'La distribuidora ha sumado 3 cortes consecutivos sin pagar. Saldo vencido: $'.number_format((float) $balance, 2),
+                'deep_link' => '/riesgo',
             ], true));
         }
 
@@ -132,7 +134,7 @@ final class ServicioMorosidadDistribuidora
                 throw new RuntimeException('REMOVAL_ALREADY_DECIDED');
             }$r->update(['status' => $approve ? 'AUTHORIZED' : 'REJECTED', 'decided_by' => $actor->id, 'decision_reason' => $reason, 'decided_at' => now()]);
             if ($approve) {
-                DB::table('distributor_operational_blocks')->where('id', $r->block_id)->where('status', 'ACTIVE')->update(['status' => 'RELEASED', 'ends_at' => DB::raw("GREATEST(NOW(), starts_at + INTERVAL '1 second')"), 'updated_at' => now()]);
+                DB::table('distributor_operational_blocks')->where('id', $r->block_id)->where('status', 'ACTIVE')->update(['status' => 'RELEASED', 'ends_at' => DB::raw('GREATEST(NOW(), DATE_ADD(starts_at, INTERVAL 1 SECOND))'), 'updated_at' => now()]);
             }
         });
     }

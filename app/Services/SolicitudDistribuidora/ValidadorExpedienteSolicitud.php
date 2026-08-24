@@ -141,11 +141,11 @@ final class ValidadorExpedienteSolicitud
             'family_references' => $this->camposPresentes($solicitud->familiares(), [
                 'relationship', 'first_name', 'first_last_name',
             ], 2),
-            'vehicles' => $this->camposPresentes($solicitud->vehiculos(), ['vehicle_type']),
-            'assets' => $this->camposPresentes($solicitud->patrimonio()->where('entry_type', 'ASSET')->where('is_active', true), ['entry_type', 'name']),
-            'liabilities' => $this->camposPresentes($solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->where('is_active', true), ['entry_type', 'name']),
+            'vehicles' => $this->registrosCompletosConEvidencia($solicitud->vehiculos(), ['vehicle_type'], 'application_vehicle'),
+            'assets' => $this->registrosCompletosConEvidencia($solicitud->patrimonio()->where('entry_type', 'ASSET')->where('is_active', true), ['entry_type', 'name'], 'application_asset_liability'),
+            'liabilities' => $this->registrosCompletosConEvidencia($solicitud->patrimonio()->whereIn('entry_type', ['LIABILITY', 'ACTIVE_COMMITMENT'])->where('is_active', true), ['entry_type', 'name'], 'application_asset_liability'),
             'employment' => $this->camposPresentes($solicitud->empleos(), ['employer_name']),
-            'commercial_credits' => $this->camposPresentes($solicitud->creditosComerciales(), ['company_name', 'credit_limit']),
+            'commercial_credits' => $this->registrosCompletosConEvidencia($solicitud->creditosComerciales(), ['company_name', 'credit_limit'], 'application_commercial_credit'),
             default => false,
         };
     }
@@ -230,5 +230,29 @@ final class ValidadorExpedienteSolicitud
         }
 
         return $consulta->count() >= $minimumRecords;
+    }
+
+    /** @param \Illuminate\Database\Eloquent\Relations\Relation<*, *, *> $consulta @param array<int, string> $campos */
+    private function registrosCompletosConEvidencia($consulta, array $campos, string $ownerType): bool
+    {
+        $todosLosIds = (clone $consulta)->pluck('id');
+        if ($todosLosIds->isEmpty()) {
+            return false;
+        }
+
+        foreach ($campos as $campo) {
+            $consulta->whereNotNull($campo);
+            if (! in_array($campo, ['birth_date', 'credit_limit'], true)) {
+                $consulta->where($campo, '<>', '');
+            }
+        }
+
+        $idsCompletos = $consulta->pluck('id');
+
+        return $idsCompletos->count() === $todosLosIds->count() && MediaFileBinding::query()
+            ->where('owner_type', $ownerType)
+            ->whereIn('owner_id', $todosLosIds)
+            ->distinct('owner_id')
+            ->count('owner_id') === $todosLosIds->count();
     }
 }

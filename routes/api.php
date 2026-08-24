@@ -34,6 +34,7 @@ use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\ReportesExportController;
+use App\Http\Controllers\Api\V1\ResumenOperacionController;
 use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
@@ -49,6 +50,7 @@ use App\Http\Controllers\VerificacionDistribuidora\CorreccionSolicitudController
 use App\Http\Controllers\VerificacionDistribuidora\EvaluacionSolicitudController;
 use App\Http\Controllers\VerificacionDistribuidora\EvidenciaVerificacionController;
 use App\Http\Controllers\VerificacionDistribuidora\VerificacionDistribuidoraController;
+use App\Http\Middleware\RejectBranchManagerAdministration;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchAssignmentController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchController;
 use App\Modules\Organization\Presentation\Http\Controllers\BranchPersonnelController;
@@ -194,44 +196,47 @@ Route::prefix('v1')->group(function () {
         Route::delete('assignments/coordinator-distributor/{assignment}', [CoordinatorAssignmentController::class, 'destroy']);
 
         // Módulo 03 - Configuraciones y Catálogos
-        // Configuraciones
-        Route::get('configurations', [ConfiguracionController::class, 'index']);
-        Route::post('configurations', [ConfiguracionController::class, 'store']);
-        Route::get('configurations/{key}', [ConfiguracionController::class, 'show']);
-        Route::get('configurations/{key}/versions', [ConfiguracionController::class, 'getVersionsByKey']);
-        Route::post('configurations/{key}/versions', [ConfiguracionController::class, 'storeVersionByKey']);
-        Route::put('configurations/{key}/current', [ConfiguracionController::class, 'updateCurrent']);
-        Route::get('configuration-versions/{id}', [ConfiguracionController::class, 'showVersion']);
-        Route::patch('configuration-versions/{id}', [ConfiguracionController::class, 'updateVersion']);
-        Route::post('configuration-versions/{id}/publish', [ConfiguracionController::class, 'publishVersion']);
-        Route::post('configuration-versions/{id}/deactivate', [ConfiguracionController::class, 'deactivateVersion']);
+        Route::middleware(RejectBranchManagerAdministration::class)->group(function (): void {
+            // Configuraciones
+            Route::get('configurations', [ConfiguracionController::class, 'index']);
+            Route::post('configurations', [ConfiguracionController::class, 'store']);
+            Route::get('configurations/{key}', [ConfiguracionController::class, 'show']);
+            Route::get('configurations/{key}/versions', [ConfiguracionController::class, 'getVersionsByKey']);
+            Route::post('configurations/{key}/versions', [ConfiguracionController::class, 'storeVersionByKey']);
+            Route::put('configurations/{key}/current', [ConfiguracionController::class, 'updateCurrent']);
+            Route::get('configuration-versions/{id}', [ConfiguracionController::class, 'showVersion']);
+            Route::patch('configuration-versions/{id}', [ConfiguracionController::class, 'updateVersion']);
+            Route::post('configuration-versions/{id}/publish', [ConfiguracionController::class, 'publishVersion']);
+            Route::post('configuration-versions/{id}/deactivate', [ConfiguracionController::class, 'deactivateVersion']);
 
-        // Categorías
-        Route::get('categories', [CategoriaController::class, 'index']);
-        Route::post('categories', [CategoriaController::class, 'store']);
-        Route::get('categories/{id}', [CategoriaController::class, 'show']);
-        Route::get('categories/{id}/versions', [CategoriaController::class, 'getVersions']);
-        Route::post('categories/{id}/versions', [CategoriaController::class, 'storeVersion']);
-        Route::get('category-versions/{id}', [CategoriaController::class, 'showVersion']);
-        Route::patch('category-versions/{id}', [CategoriaController::class, 'updateVersion']);
-        Route::post('category-versions/{id}/publish', [CategoriaController::class, 'publishVersion']);
-        Route::post('categories/{id}/deactivate', [CategoriaController::class, 'deactivateCategory']);
+            // Categorías
+            Route::get('categories', [CategoriaController::class, 'index']);
+            Route::post('categories', [CategoriaController::class, 'store']);
+            Route::get('categories/{id}', [CategoriaController::class, 'show']);
+            Route::get('categories/{id}/versions', [CategoriaController::class, 'getVersions']);
+            Route::post('categories/{id}/versions', [CategoriaController::class, 'storeVersion']);
+            Route::get('category-versions/{id}', [CategoriaController::class, 'showVersion']);
+            Route::patch('category-versions/{id}', [CategoriaController::class, 'updateVersion']);
+            Route::post('category-versions/{id}/publish', [CategoriaController::class, 'publishVersion']);
+            Route::post('categories/{id}/deactivate', [CategoriaController::class, 'deactivateCategory']);
 
-        // Productos
-        Route::get('products', [ProductoController::class, 'index']);
-        Route::post('products', [ProductoController::class, 'store']);
-        Route::get('products/{id}', [ProductoController::class, 'show']);
-        Route::get('products/{id}/versions', [ProductoController::class, 'getVersions']);
-        Route::post('products/{id}/versions', [ProductoController::class, 'storeVersion']);
-        Route::get('product-versions/{id}', [ProductoController::class, 'showVersion']);
-        Route::patch('product-versions/{id}', [ProductoController::class, 'updateVersion']);
-        Route::post('product-versions/{id}/publish', [ProductoController::class, 'publishVersion']);
-        Route::post('products/{id}/deactivate', [ProductoController::class, 'deactivateProduct']);
+            // Productos
+            Route::get('products', [ProductoController::class, 'index']);
+            Route::post('products', [ProductoController::class, 'store']);
+            Route::get('products/{id}', [ProductoController::class, 'show']);
+            Route::get('products/{id}/versions', [ProductoController::class, 'getVersions']);
+            Route::post('products/{id}/versions', [ProductoController::class, 'storeVersion']);
+            Route::get('product-versions/{id}', [ProductoController::class, 'showVersion']);
+            Route::patch('product-versions/{id}', [ProductoController::class, 'updateVersion']);
+            Route::post('product-versions/{id}/publish', [ProductoController::class, 'publishVersion']);
+            Route::post('products/{id}/deactivate', [ProductoController::class, 'deactivateProduct']);
+        });
 
         // Módulo 5 - verificación, corrección, evaluación y dictamen
         Route::post('distributor-applications/{application}/return-to-draft', [VerificacionDistribuidoraController::class, 'devolverACaptura']);
         Route::post('distributor-applications/{application}/assign-verifier', [VerificacionDistribuidoraController::class, 'asignarVerificador']);
         Route::get('distributor-applications/{application}/available-verifiers', [VerificacionDistribuidoraController::class, 'listarVerificadoresDisponibles']);
+        Route::get('distributor-applications/{application}/verifiers/{verifier}/schedule', [VerificacionDistribuidoraController::class, 'consultarAgendaVerificador']);
         Route::get('verification-visits/assigned', [VerificacionDistribuidoraController::class, 'consultarAsignadas']);
         Route::get('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'consultarVisita']);
         Route::post('verification-visits/{visit}/start', [VerificacionDistribuidoraController::class, 'iniciarVisita']);
@@ -303,6 +308,8 @@ Route::prefix('v1')->group(function () {
         Route::get('vouchers/{vale}', [ValeController::class, 'show']);
 
         // Módulo 10 - Caja, modificaciones autorizadas y feriado
+        Route::get('dashboard/operations', ResumenOperacionController::class);
+        Route::get('cashier/vouchers', [CajaValeController::class, 'index']);
         Route::get('cashier/vouchers/search', [CajaValeController::class, 'search']);
         Route::get('cashier/vouchers/{vale}', [CajaValeController::class, 'show']);
         Route::post('cashier/vouchers/{vale}/release', [CajaValeController::class, 'release'])->middleware('idempotency');
@@ -320,6 +327,10 @@ Route::prefix('v1')->group(function () {
         // Módulo 12 - Archivo bancario y conciliación automática
         Route::post('bank-imports', [ConciliacionBancariaController::class, 'import']);
         Route::get('bank-imports', [ConciliacionBancariaController::class, 'imports']);
+        Route::post('bank-simulations', [ConciliacionBancariaController::class, 'simulate']);
+        Route::get('bank-simulations', [ConciliacionBancariaController::class, 'simulations']);
+        Route::get('bank-simulations/export', [ConciliacionBancariaController::class, 'exportSimulations']);
+        Route::get('bank-simulations/{transferencia}/ticket', [ConciliacionBancariaController::class, 'downloadSimulationTicket']);
         Route::get('bank-movements', [ConciliacionBancariaController::class, 'movements']);
         Route::get('payment-clarifications', [ConciliacionBancariaController::class, 'clarifications']);
         Route::get('manual-reconciliation-requests', [ConciliacionBancariaController::class, 'manualRequests']);
@@ -330,10 +341,12 @@ Route::prefix('v1')->group(function () {
 
         // Módulo 14 - Recargos, excedentes y devoluciones
         Route::get('surpluses', [ExcedenteController::class, 'index']);
+        Route::get('surpluses/{excedente}', [ExcedenteController::class, 'show']);
         Route::post('surpluses/{excedente}/credit-balance', [ExcedenteController::class, 'credit'])->middleware('idempotency');
         Route::post('surpluses/{excedente}/refund-requests', [ExcedenteController::class, 'refund'])->middleware('idempotency');
         Route::get('refund-requests', [ExcedenteController::class, 'refunds']);
         Route::post('refund-requests/{solicitud}/decision', [ExcedenteController::class, 'decide'])->middleware('idempotency');
+        Route::post('refund-requests/{solicitud}/cancel', [ExcedenteController::class, 'cancel'])->middleware('idempotency');
         Route::post('refund-requests/{solicitud}/execute', [ExcedenteController::class, 'execute'])->middleware('idempotency');
 
         // Módulo 16 - Riesgo y morosidad exclusiva de distribuidora
@@ -346,13 +359,14 @@ Route::prefix('v1')->group(function () {
         Route::post('delinquency-removal-requests/{solicitud}/decision', [RiesgoDistribuidoraController::class, 'decideRemoval'])->middleware('idempotency');
         Route::post('distributors/{distributor}/coordinator-change', [TransferenciaOrganizacionalController::class, 'changeCoordinator'])->middleware('idempotency');
         Route::get('organizational-change-history', [TransferenciaOrganizacionalController::class, 'history']);
-        Route::get('notifications', [CentroOperacionController::class, 'notifications']);
-        Route::get('notifications/unread-count', [CentroOperacionController::class, 'unreadCount']);
+        Route::get('notifications', [CentroOperacionController::class, 'notifications'])->middleware('throttle:realtime_reads');
+        Route::get('notifications/unread-count', [CentroOperacionController::class, 'unreadCount'])->middleware('throttle:realtime_reads');
         Route::patch('notifications/{notification}/read', [CentroOperacionController::class, 'markNotification']);
         Route::post('notifications/read-all', [CentroOperacionController::class, 'markAllNotifications'])->middleware('idempotency');
 
         Route::get('operations/current-cutoff', [CentroOperacionController::class, 'currentCutoffSummary']);
         Route::post('operations/force-cutoff', [CentroOperacionController::class, 'forceCutoff'])->middleware('idempotency');
+        Route::post('operations/force-payment-deadline', [CentroOperacionController::class, 'forcePaymentDeadline'])->middleware('idempotency');
 
         // Módulo - Puntos y canje por dinero
         Route::get('points/balance', [PuntosController::class, 'balance']);
@@ -366,7 +380,9 @@ Route::prefix('v1')->group(function () {
         Route::get('reports/points-balance/export', [ReportesExportController::class, 'pointsBalance']);
         Route::get('reports/pre-requests/export', [ReportesExportController::class, 'preRequests']);
         Route::get('reports', [CentroOperacionController::class, 'reports']);
+        Route::get('reports/home', [CentroOperacionController::class, 'reportsHome']);
         Route::get('reports/{report}', [CentroOperacionController::class, 'report']);
+        Route::get('audit-logs/options', [CentroOperacionController::class, 'auditOptions']);
         Route::get('audit-logs', [CentroOperacionController::class, 'audits']);
         Route::get('operational-logs', [CentroOperacionController::class, 'logs']);
         Route::post('media', [ArchivoPrivadoController::class, 'store'])->middleware(['idempotency', 'throttle:20,1']);

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Api\V1;
 
+use App\Exceptions\BusinessException;
 use App\Http\Controllers\Controller;
 use App\Http\Traits\ReauthenticatesMfa;
 use App\Models\AccountInvitation;
@@ -90,7 +91,10 @@ class InvitationListController extends Controller
     public function revoke(Request $request, AccountInvitation $invitation)
     {
         Gate::authorize('manage', User::class);
-        $this->ensureRecentMfa($request);
+        $reauthentication = $this->requireMfaReauth($request);
+        if ($reauthentication !== true) {
+            return $reauthentication;
+        }
 
         $validated = $request->validate([
             'reason' => ['required', 'string', 'max:1000'],
@@ -101,15 +105,20 @@ class InvitationListController extends Controller
             $lockedInvitation = AccountInvitation::where('id', $invitation->id)->lockForUpdate()->firstOrFail();
 
             // Comprueba que siga siendo revocable
-            abort_unless(in_array($lockedInvitation->state, ['ACTIVE', 'PREPARED', 'INVITED', 'PENDING_ACTIVATION']), 409, 'La invitaciÃ³n ya no es revocable.');
+            if (! in_array($lockedInvitation->state, ['ACTIVE', 'PREPARED', 'INVITED', 'PENDING_ACTIVATION'])) {
+                throw new BusinessException(
+                    'INVITATION_NOT_REVOCABLE',
+                    'La invitación ya no es revocable.',
+                    409,
+                );
+            }
 
             // Cambia a REVOKED, invalida token, registra actor
             $lockedInvitation->update([
                 'state' => 'REVOKED',
                 'revoked_at' => now(),
-                // 'revoked_by' => $request->user()->id, // Note: Model might not have this field natively, we'll just set state
-                // 'revocation_reason' => $validated['reason'],
-                'token_hash' => null,
+                'revoked_by' => $request->user()->id,
+                'revocation_reason' => $validated['reason'],
                 'exchange_token_hash' => null,
             ]);
 

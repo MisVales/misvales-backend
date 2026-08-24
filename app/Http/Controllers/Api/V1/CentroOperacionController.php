@@ -7,7 +7,10 @@ use App\Models\AuditLog;
 use App\Models\RegistroOperacional;
 use App\Services\Observabilidad\SanitizadorDatos;
 use App\Services\Operaciones\ServicioCorteManual;
+use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
+use App\Services\Reportes\ServicioInicioReportes;
 use App\Services\Reportes\ServicioReportes;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -46,7 +49,7 @@ final class CentroOperacionController extends Controller
     public function markAllNotifications(Request $request): JsonResponse
     {
         $this->authorizeNotifications($request);
-        $request->user()->unreadNotifications->markAsRead();
+        $request->user()->unreadNotifications()->update(['read_at' => now()]);
 
         return response()->json(['data' => ['unread_count' => 0]]);
     }
@@ -56,6 +59,11 @@ final class CentroOperacionController extends Controller
         abort_unless($request->user()->hasPermissionTo('reports.view_global') || $request->user()->hasPermissionTo('reports.view_branch'), 403);
 
         return response()->json(['data' => ServicioReportes::REPORTS]);
+    }
+
+    public function reportsHome(Request $request, ServicioInicioReportes $service): JsonResponse
+    {
+        return response()->json(['data' => $service->obtener($request->user())]);
     }
 
     public function report(Request $request, string $report, ServicioReportes $service): JsonResponse
@@ -70,18 +78,72 @@ final class CentroOperacionController extends Controller
         return response()->json(['data' => $service->ejecutar($report, $filters, $request->user())]);
     }
 
+    public function auditOptions(Request $request): JsonResponse
+    {
+        $query = $this->authorizedAuditQuery($request);
+
+        $events = (clone $query)
+            ->select(['event_name', 'entity_type'])
+            ->whereNotNull('event_name')
+            ->where('event_name', '<>', '')
+            ->distinct()
+            ->orderBy('entity_type')
+            ->orderBy('event_name')
+            ->get()
+            ->map(fn (AuditLog $audit): array => [
+                'event_name' => $audit->event_name,
+                'entity_type' => $audit->entity_type,
+            ])
+            ->values();
+
+        $actorRoles = (clone $query)
+            ->whereNotNull('actor_role')
+            ->where('actor_role', '<>', '')
+            ->distinct()
+            ->orderBy('actor_role')
+            ->pluck('actor_role')
+            ->values();
+
+        $results = (clone $query)
+            ->whereNotNull('result')
+            ->where('result', '<>', '')
+            ->distinct()
+            ->orderBy('result')
+            ->pluck('result')
+            ->values();
+
+        return response()->json(['data' => [
+            'events' => $events,
+            'actor_roles' => $actorRoles,
+            'results' => $results,
+        ]]);
+    }
+
     public function audits(Request $request, SanitizadorDatos $sanitizer): JsonResponse
     {
-        $actor = $request->user();
-        abort_unless($actor->hasPermissionTo('audit.view_global') || $actor->hasPermissionTo('audit.view_branch'), 403);
-        $query = AuditLog::query()->with(['actor', 'branch'])->latest();
-        if (! $actor->hasPermissionTo('audit.view_global')) {
-            $branches = $actor->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->whereNotNull('branch_id')->pluck('branch_id');
-            $query->whereIn('branch_id', $branches);
-        }
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:128'],
+            'event_name' => ['nullable', 'string', 'max:255'],
+            'event_names' => ['nullable', 'array', 'max:250'],
+            'event_names.*' => ['required', 'string', 'max:255', 'distinct'],
+            'entity_type' => ['nullable', 'string', 'max:255'],
+            'actor_role' => ['nullable', 'string', 'max:64'],
+            'result' => ['nullable', 'string', 'max:32'],
+            'request_id' => ['nullable', 'string', 'max:128'],
+            'trace_id' => ['nullable', 'string', 'max:128'],
+            'correlation_id' => ['nullable', 'string', 'max:128'],
+            'branch_id' => ['nullable', 'uuid'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
+        $query = $this->authorizedAuditQuery($request)
+            ->with(['actor:id,name,email', 'branch:id,name,code'])
+            ->latest();
 
         if ($request->filled('search')) {
-            $s = '%' . trim($request->string('search')) . '%';
+            $s = '%'.trim((string) $request->string('search')).'%';
             $query->where(function ($q) use ($s) {
                 $q->where('event_name', 'like', $s)
                     ->orWhere('entity_type', 'like', $s)
@@ -98,19 +160,24 @@ final class CentroOperacionController extends Controller
 
         foreach (['event_name', 'entity_type', 'actor_role', 'result', 'request_id', 'trace_id', 'correlation_id', 'branch_id'] as $filter) {
             if ($request->filled($filter)) {
-                $query->where($filter, $request->string($filter));
+                $query->where($filter, (string) $request->string($filter));
             }
         }
 
+        if ($request->filled('event_names')) {
+            $query->whereIn('event_name', $request->input('event_names'));
+        }
+
         if ($request->filled('date_from')) {
-            $query->whereDate('created_at', '>=', $request->date('date_from'));
+            $query->where('created_at', '>=', $request->date('date_from')->startOfDay());
         }
         if ($request->filled('date_to')) {
-            $query->whereDate('created_at', '<=', $request->date('date_to'));
+            $query->where('created_at', '<', $request->date('date_to')->addDay()->startOfDay());
         }
 
         $page = $query->paginate(min($request->integer('per_page', 30), 100));
         $page->getCollection()->transform(function (AuditLog $audit) use ($sanitizer): array {
+            $audit->actor?->setAppends([]);
             $row = $audit->toArray();
             $row['previous_value'] = $sanitizer->sanitize($row['previous_value']);
             $row['new_value'] = $sanitizer->sanitize($row['new_value']);
@@ -122,22 +189,69 @@ final class CentroOperacionController extends Controller
         return response()->json(['data' => $page]);
     }
 
-    public function logs(Request $request): JsonResponse
+    public function logs(Request $request, SanitizadorDatos $sanitizer): JsonResponse
     {
+        $request->validate([
+            'search' => ['nullable', 'string', 'max:128'],
+            'channel' => ['nullable', 'string', 'in:APPLICATION,SECURITY,OPERATION,ERROR,AUDIT'],
+            'level' => ['nullable', 'string', 'in:DEBUG,INFO,NOTICE,WARNING,ERROR,CRITICAL,ALERT,EMERGENCY'],
+            'event' => ['nullable', 'string', 'max:255'],
+            'request_id' => ['nullable', 'string', 'max:128'],
+            'correlation_id' => ['nullable', 'string', 'max:128'],
+            'trace_id' => ['nullable', 'string', 'max:128'],
+            'status_code' => ['nullable', 'integer', 'min:100', 'max:599'],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
+        ]);
+
         $actor = $request->user();
-        abort_unless($actor->hasPermissionTo('logs.view_global') || $actor->hasPermissionTo('logs.view_branch'), 403);
+        $canViewGlobal = $actor->hasPermissionTo('logs.view_global');
+        abort_unless($canViewGlobal || $actor->hasPermissionTo('logs.view_branch'), 403);
         $query = RegistroOperacional::query()->latest('occurred_at');
-        if (! $actor->hasPermissionTo('logs.view_global')) {
-            $branches = $actor->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->whereNotNull('branch_id')->pluck('branch_id');
-            $query->whereIn('branch_id', $branches);
+        if (! $canViewGlobal) {
+            $query->whereIn('branch_id', $actor->roleScopes()
+                ->select('branch_id')
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereNotNull('branch_id'));
         }
-        foreach (['channel', 'level', 'request_id', 'correlation_id', 'trace_id'] as $filter) {
+
+        if ($request->filled('search')) {
+            $search = '%'.trim((string) $request->string('search')).'%';
+            $query->where(function ($builder) use ($search): void {
+                $builder->where('event', 'like', $search)
+                    ->orWhere('path', 'like', $search)
+                    ->orWhere('request_id', 'like', $search)
+                    ->orWhere('correlation_id', 'like', $search)
+                    ->orWhere('trace_id', 'like', $search);
+            });
+        }
+
+        foreach (['channel', 'level', 'event', 'request_id', 'correlation_id', 'trace_id', 'status_code'] as $filter) {
             if ($request->filled($filter)) {
-                $query->where($filter, $request->string($filter));
+                $query->where($filter, $filter === 'status_code'
+                    ? $request->integer($filter)
+                    : (string) $request->string($filter));
             }
         }
 
-        return response()->json(['data' => $query->paginate(min($request->integer('per_page', 50), 100))]);
+        if ($request->filled('date_from')) {
+            $query->where('occurred_at', '>=', $request->date('date_from')->startOfDay());
+        }
+        if ($request->filled('date_to')) {
+            $query->where('occurred_at', '<', $request->date('date_to')->addDay()->startOfDay());
+        }
+
+        $page = $query->paginate(min($request->integer('per_page', 50), 100));
+        $page->getCollection()->transform(function (RegistroOperacional $log) use ($sanitizer): array {
+            $row = $log->toArray();
+            $row['context'] = $sanitizer->sanitize($row['context']);
+
+            return $row;
+        });
+
+        return response()->json(['data' => $page]);
     }
 
     public function currentCutoffSummary(Request $request, ServicioCorteManual $corteManual): JsonResponse
@@ -150,7 +264,7 @@ final class CentroOperacionController extends Controller
     public function forceCutoff(Request $request, ServicioCorteManual $corteManual): JsonResponse
     {
         abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
-        
+
         $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
 
         try {
@@ -163,8 +277,43 @@ final class CentroOperacionController extends Controller
         }
     }
 
+    public function forcePaymentDeadline(Request $request, ServicioFinPeriodoPagoManual $periodoPago): JsonResponse
+    {
+        abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
+
+        $validated = $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
+
+        try {
+            return response()->json(['data' => $periodoPago->forzar($request->user(), $validated['motivo'] ?? null)]);
+        } catch (\RuntimeException $error) {
+            if ($error->getMessage() === 'FORCED_CUTOFF_NOT_FOUND') {
+                return response()->json(['message' => 'Primero debe forzar y completar un corte de relaciones.'], 422);
+            }
+
+            throw $error;
+        }
+    }
+
     private function authorizeNotifications(Request $request): void
     {
         abort_unless($request->user()->hasPermissionTo('notifications.view_own'), 403);
+    }
+
+    private function authorizedAuditQuery(Request $request): Builder
+    {
+        $actor = $request->user();
+        $canViewGlobal = $actor->hasPermissionTo('audit.view_global');
+        abort_unless($canViewGlobal || $actor->hasPermissionTo('audit.view_branch'), 403);
+
+        $query = AuditLog::query();
+        if (! $canViewGlobal) {
+            $query->whereIn('branch_id', $actor->roleScopes()
+                ->select('branch_id')
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereNotNull('branch_id'));
+        }
+
+        return $query;
     }
 }

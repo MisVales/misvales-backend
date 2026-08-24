@@ -26,9 +26,10 @@ class ServicioAsignacionCategoria
                 throw new ExcepcionDistribuidora('RESOURCE_VERSION_CONFLICT', 'La distribuidora fue modificada por otra operación.', 409);
             }
 
-            $fecha = CarbonImmutable::now();
+            $fecha = isset($datos['starts_at'])
+                ? CarbonImmutable::parse($datos['starts_at'])
+                : CarbonImmutable::now();
             $version = CategoryVersion::query()->with('category')->lockForUpdate()->findOrFail($datos['category_version_id']);
-            $this->validador->validarCategoriaEnFecha($version, $fecha);
 
             $anterior = AsignacionCategoriaDistribuidora::query()
                 ->where('distributor_id', $bloqueada->id)
@@ -36,9 +37,13 @@ class ServicioAsignacionCategoria
                 ->lockForUpdate()
                 ->first();
 
-            if ($anterior !== null && ! $fecha->isAfter($anterior->starts_at)) {
-                throw new ExcepcionDistribuidora('RESOURCE_VERSION_CONFLICT', 'La nueva vigencia debe ser posterior a la categoría actual.', 409);
+            // Estas columnas se almacenan con precisión de segundos. Evita que dos
+            // asignaciones inmediatas terminen con el mismo instante persistido.
+            if ($anterior !== null && $fecha->diffInSeconds($anterior->starts_at) < 1) {
+                $fecha = $anterior->starts_at->addSecond();
             }
+
+            $this->validador->validarCategoriaEnFecha($version, $fecha);
 
             if ($anterior !== null) {
                 $anterior->update(['ends_at' => $fecha]);

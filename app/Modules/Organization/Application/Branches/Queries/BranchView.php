@@ -9,6 +9,8 @@ final readonly class BranchView
         public string $code,
         public string $name,
         public ?string $address,
+        public ?float $latitude,
+        public ?float $longitude,
         public bool $isHeadquarters,
         public string $status,
         public int $lockVersion,
@@ -17,7 +19,7 @@ final readonly class BranchView
         public ?string $updatedAt,
     ) {}
 
-    /** @return array<string, bool|int|string|null> */
+    /** @return array<string, bool|float|int|string|null> */
     public function toArray(): array
     {
         return [
@@ -25,6 +27,8 @@ final readonly class BranchView
             'code' => $this->code,
             'name' => $this->name,
             'address' => $this->address,
+            'lat' => $this->latitude,
+            'lng' => $this->longitude,
             'is_headquarters' => $this->isHeadquarters,
             'status' => $this->status,
             'lock_version' => $this->lockVersion,

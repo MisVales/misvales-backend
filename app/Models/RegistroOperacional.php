@@ -11,7 +11,22 @@ class RegistroOperacional extends Model
 
     protected $table = 'operational_logs';
 
-    protected $guarded = [];
+    protected $fillable = [
+        'channel',
+        'level',
+        'event',
+        'actor_id',
+        'branch_id',
+        'request_id',
+        'correlation_id',
+        'trace_id',
+        'method',
+        'path',
+        'status_code',
+        'duration_ms',
+        'context',
+        'occurred_at',
+    ];
 
     protected function casts(): array
     {

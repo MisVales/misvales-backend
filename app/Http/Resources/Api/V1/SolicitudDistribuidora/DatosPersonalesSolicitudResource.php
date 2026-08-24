@@ -13,7 +13,8 @@ final class DatosPersonalesSolicitudResource extends JsonResource
     public function toArray(Request $request): array
     {
         $protector = app(ProtectorDatosSolicitud::class);
-        $puedeVerCompletos = $request->user()?->hasPermissionTo('distributor_applications.view_sensitive') ?? false;
+        $puedeVerCompletos = ($request->user()?->hasPermissionTo('distributor_applications.view_sensitive') ?? false)
+            || $request->attributes->get('verification_sensitive_application_id') === $this->application_id;
 
         return [
             'id' => $this->id,

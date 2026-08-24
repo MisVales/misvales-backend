@@ -2,11 +2,10 @@
 
 namespace App\Http\Middleware;
 
-use App\Models\RegistroOperacional;
+use App\Jobs\PersistOperationalHttpRequest;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
 
@@ -31,11 +30,50 @@ class TraceRequest
 
         $response = $next($request);
 
+        $durationMs = (int) ((hrtime(true) - $started) / 1_000_000);
+        $dbDurationMs = round((float) $request->attributes->get('db_duration_ms', 0.0), 2);
+
         // Añadimos la cabecera a la respuesta para que el frontend lo pueda reportar en caso de error
         $response->headers->set('X-Request-Id', $requestId);
         $response->headers->set('X-Correlation-Id', $correlationId);
         $response->headers->set('X-Trace-Id', $traceId);
-        $this->record($request, $response, (int) ((hrtime(true) - $started) / 1_000_000));
+        if (config('observability.expose_server_timing')) {
+            $response->headers->set('Server-Timing', "app;dur={$durationMs}, db;dur={$dbDurationMs}");
+        }
+
+        if (config('observability.operational_http_requests')) {
+            $record = [
+                'channel' => $response->getStatusCode() >= 500 ? 'ERROR' : ($request->is('api/*') ? 'OPERATION' : 'APPLICATION'),
+                'level' => $response->getStatusCode() >= 500 ? 'ERROR' : ($response->getStatusCode() >= 400 ? 'WARNING' : 'INFO'),
+                'event' => 'HTTP_REQUEST_COMPLETED',
+                'actor_id' => $request->user()?->id,
+                'branch_id' => $request->user()?->branch_id,
+                'request_id' => $requestId,
+                'correlation_id' => $correlationId,
+                'trace_id' => $traceId,
+                'method' => $request->method(),
+                'path' => '/'.$request->path(),
+                'status_code' => $response->getStatusCode(),
+                'duration_ms' => $durationMs,
+                'context' => [
+                    'route' => $request->route()?->getName(),
+                    'db_query_count' => (int) $request->attributes->get('db_query_count', 0),
+                    'db_duration_ms' => $dbDurationMs,
+                    'db_slow_query_count' => (int) $request->attributes->get('db_slow_query_count', 0),
+                ],
+                'occurred_at' => now(),
+            ];
+
+            try {
+                PersistOperationalHttpRequest::dispatch($record)
+                    ->onConnection(config('observability.queue_connection'));
+            } catch (\Throwable $exception) {
+                Log::warning('No fue posible encolar el log operacional HTTP.', [
+                    'exception' => $exception::class,
+                    'request_id' => $requestId,
+                ]);
+            }
+        }
 
         return $response;
     }
@@ -43,33 +81,5 @@ class TraceRequest
     private function identifier(?string $value): string
     {
         return $value && preg_match('/^[A-Za-z0-9._:-]{1,128}$/', $value) ? $value : (string) Str::uuid();
-    }
-
-    private function record(Request $request, Response $response, int $duration): void
-    {
-        try {
-            if (! Schema::hasTable('operational_logs')) {
-                return;
-            }
-            $status = $response->getStatusCode();
-            RegistroOperacional::query()->create([
-                'channel' => $status >= 500 ? 'ERROR' : ($request->is('api/*') ? 'OPERATION' : 'APPLICATION'),
-                'level' => $status >= 500 ? 'ERROR' : ($status >= 400 ? 'WARNING' : 'INFO'),
-                'event' => 'HTTP_REQUEST_COMPLETED',
-                'actor_id' => $request->user()?->id,
-                'branch_id' => $request->user()?->branch_id,
-                'request_id' => $request->attributes->get('request_id'),
-                'correlation_id' => $request->attributes->get('correlation_id'),
-                'trace_id' => $request->attributes->get('trace_id'),
-                'method' => $request->method(),
-                'path' => '/'.$request->path(),
-                'status_code' => $status,
-                'duration_ms' => $duration,
-                'context' => ['route' => $request->route()?->getName()],
-                'occurred_at' => now(),
-            ]);
-        } catch (\Throwable $exception) {
-            Log::error('No fue posible persistir el log operacional.', ['exception' => $exception::class]);
-        }
     }
 }
