@@ -83,9 +83,9 @@ return [
                     'useTLS' => env('REVERB_SCHEME', 'https') === 'https',
                 ],
                 'allowed_origins' => [
-                    'https://safeacces.lat',
-                    'https://api.safeacces.lat',
-                    'https://vpn.safeacces.lat',
+                    'safeacces.lat',
+                    'api.safeacces.lat',
+                    'vpn.safeacces.lat',
                 ],
                 'ping_interval' => env('REVERB_APP_PING_INTERVAL', 60),
                 'activity_timeout' => env('REVERB_APP_ACTIVITY_TIMEOUT', 30),
