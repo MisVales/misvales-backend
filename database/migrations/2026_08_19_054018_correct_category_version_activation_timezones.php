@@ -8,8 +8,8 @@ return new class extends Migration
     public function up(): void
     {
         // La primera normalización se ejecutó con la zona horaria de PHP en una
-        // instancia cuya conexión PostgreSQL usa otra zona. Reafirmamos las
-        // versiones futuras usando el reloj de PostgreSQL, que también se usa
+        // instancia cuya conexión de base de datos usa otra zona. Reafirmamos las
+        // versiones futuras usando el reloj de MariaDB, que también se usa
         // al persistir los timestamps en esta base.
         DB::table('category_versions')
             ->where('status', 'PUBLISHED')

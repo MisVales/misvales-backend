@@ -35,6 +35,7 @@ class VerificationVisitFactory extends Factory
             'assigned_by' => User::factory(),
             'status' => VerificationVisitStatus::ASSIGNED,
             'assigned_at' => now(),
+            'scheduled_for' => now(),
             'lock_version' => 1,
         ];
     }

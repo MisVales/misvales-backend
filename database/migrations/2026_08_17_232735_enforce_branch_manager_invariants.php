@@ -10,6 +10,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (DB::getDriverName() !== 'pgsql') {
+            return;
+        }
+
         // Enforce maximum 1 active branch_manager per branch
         $roleId = DB::table('roles')->where('code', 'branch_manager')->value('id');
 
@@ -27,6 +31,8 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS unique_active_branch_manager');
+        if (DB::getDriverName() === 'pgsql') {
+            DB::statement('DROP INDEX IF EXISTS unique_active_branch_manager');
+        }
     }
 };

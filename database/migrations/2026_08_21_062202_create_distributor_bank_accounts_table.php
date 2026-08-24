@@ -26,7 +26,7 @@ return new class extends Migration
             $table->unsignedInteger('lock_version')->default(1);
             $table->timestampsTz();
 
-            $table->index(['distributor_id', 'is_current', 'ends_at']);
+            $table->index(['distributor_id', 'is_current', 'ends_at'], 'dba_current_dates_index');
             $table->index('clabe_hmac');
         });
     }

@@ -183,6 +183,13 @@ final class SepomexSeeder extends Seeder
     private function synchronizeSequences(): void
     {
         foreach (['estados', 'municipios', 'codigos_postales', 'colonias'] as $table) {
+            if (DB::getDriverName() === 'mysql') {
+                $nextId = ((int) DB::table($table)->max('id')) + 1;
+                DB::statement("ALTER TABLE {$table} AUTO_INCREMENT = {$nextId}");
+
+                continue;
+            }
+
             DB::statement("SELECT setval(pg_get_serial_sequence('{$table}', 'id'), COALESCE((SELECT MAX(id) FROM {$table}), 1), true)");
         }
     }

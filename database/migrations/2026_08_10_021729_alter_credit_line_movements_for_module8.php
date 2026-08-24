@@ -44,12 +44,26 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE credit_line_movements ADD CONSTRAINT credit_line_movements_balances_check CHECK (total_authorized_before > 0 AND total_authorized_after > 0 AND used_balance_before >= 0 AND used_balance_before <= total_authorized_before AND used_balance_after >= 0 AND used_balance_after <= total_authorized_after)');
         }
-        DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
+        if (DB::getDriverName() === 'mysql') {
+            if (! Schema::hasIndex('credit_line_movements', 'credit_line_movements_idempotency_unique')) {
+                Schema::table('credit_line_movements', function (Blueprint $table): void {
+                    $table->unique('idempotency_key', 'credit_line_movements_idempotency_unique');
+                });
+            }
+        } else {
+            DB::statement('CREATE UNIQUE INDEX IF NOT EXISTS credit_line_movements_idempotency_unique ON credit_line_movements (idempotency_key) WHERE idempotency_key IS NOT NULL');
+        }
     }
 
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS credit_line_movements_idempotency_unique');
+        if (DB::getDriverName() === 'mysql') {
+            if (Schema::hasIndex('credit_line_movements', 'credit_line_movements_idempotency_unique')) {
+                Schema::table('credit_line_movements', fn (Blueprint $table) => $table->dropUnique('credit_line_movements_idempotency_unique'));
+            }
+        } else {
+            DB::statement('DROP INDEX IF EXISTS credit_line_movements_idempotency_unique');
+        }
 
         Schema::table('credit_line_movements', function (Blueprint $table) {
             $table->dropUnique(['credit_line_id', 'sequence']);

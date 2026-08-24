@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::create('client_transfer_requests', function (Blueprint $table): void {
+        $isMysql = DB::getDriverName() === 'mysql';
+
+        Schema::create('client_transfer_requests', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->foreignUuid('origin_assignment_id')->constrained('client_distributor_assignments')->restrictOnDelete();
@@ -18,6 +20,12 @@ return new class extends Migration
             $table->foreignUuid('origin_branch_id')->constrained('branches')->restrictOnDelete();
             $table->foreignUuid('destination_branch_id')->constrained('branches')->restrictOnDelete();
             $table->string('status', 32);
+            if ($isMysql) {
+                $table->unsignedTinyInteger('active_client_unique')
+                    ->nullable()
+                    ->storedAs("IF(status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED'), 1, NULL)");
+                $table->unique(['client_id', 'active_client_unique'], 'client_transfer_active_client_unique');
+            }
             $table->foreignUuid('initiated_by')->constrained('users')->restrictOnDelete();
             $table->foreignUuid('preaccepted_by')->nullable()->constrained('users')->restrictOnDelete();
             $table->timestampTz('preaccepted_at')->nullable();
@@ -52,7 +60,9 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_distinct_distributors_check CHECK (origin_distributor_id <> destination_distributor_id)');
         }
-        DB::statement("CREATE UNIQUE INDEX client_transfer_active_client_unique ON client_transfer_requests (client_id) WHERE status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED')");
+        if (! $isMysql) {
+            DB::statement("CREATE UNIQUE INDEX client_transfer_active_client_unique ON client_transfer_requests (client_id) WHERE status IN ('REQUESTED','PREACCEPTED','ORIGIN_AUTHORIZED')");
+        }
         DB::statement("ALTER TABLE organizational_change_events ADD CONSTRAINT organizational_change_type_check CHECK (type IN ('CLIENT_ADMIN_REASSIGNMENT','DISTRIBUTOR_BRANCH_CHANGE','COORDINATOR_CHANGE'))");
     }
 

@@ -57,11 +57,12 @@ return new class extends Migration
 
         DB::statement("ALTER TABLE operational_logs ADD CONSTRAINT operational_log_channel_check CHECK (channel IN ('APPLICATION','SECURITY','OPERATION','ERROR','AUDIT'))");
         foreach (['audit_logs', 'operational_logs', 'notification_deliveries'] as $table) {
-            if (DB::getDriverName() !== 'sqlite') {
-                if (DB::getDriverName() !== 'sqlite') {
-                    DB::statement("CREATE OR REPLACE FUNCTION prevent_{$table}_mutation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION '{$table} es inmutable'; END; $$ LANGUAGE plpgsql");
-                    DB::statement("CREATE TRIGGER trg_prevent_{$table}_update_delete BEFORE UPDATE OR DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_mutation() ");
-                }
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("CREATE TRIGGER trg_prevent_{$table}_update BEFORE UPDATE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$table} es inmutable'");
+                DB::statement("CREATE TRIGGER trg_prevent_{$table}_delete BEFORE DELETE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = '{$table} es inmutable'");
+            } elseif (DB::getDriverName() === 'pgsql') {
+                DB::statement("CREATE OR REPLACE FUNCTION prevent_{$table}_mutation() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION '{$table} es inmutable'; END; $$ LANGUAGE plpgsql");
+                DB::statement("CREATE TRIGGER trg_prevent_{$table}_update_delete BEFORE UPDATE OR DELETE ON {$table} FOR EACH ROW EXECUTE FUNCTION prevent_{$table}_mutation() ");
             }
         }
     }
@@ -69,7 +70,10 @@ return new class extends Migration
     public function down(): void
     {
         foreach (['audit_logs', 'operational_logs', 'notification_deliveries'] as $table) {
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_update");
+                DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_delete");
+            } elseif (DB::getDriverName() === 'pgsql') {
                 DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_update_delete ON {$table}");
                 DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_mutation()");
             }

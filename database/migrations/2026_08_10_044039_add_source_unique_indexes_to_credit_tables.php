@@ -21,7 +21,7 @@ return new class extends Migration
      */
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS idx_unique_source_credit_usage_restrictions');
-        DB::statement('DROP INDEX IF EXISTS idx_unique_source_credit_line_movements');
+        DB::statement('DROP INDEX IF EXISTS idx_unique_source_credit_usage_restrictions ON credit_usage_restrictions');
+        DB::statement('DROP INDEX IF EXISTS idx_unique_source_credit_line_movements ON credit_line_movements');
     }
 };

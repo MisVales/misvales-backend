@@ -9,7 +9,9 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::statement('ALTER TABLE relation_payments ALTER COLUMN bank_movement_id DROP NOT NULL');
+        Schema::table('relation_payments', function (Blueprint $table): void {
+            $table->uuid('bank_movement_id')->nullable()->change();
+        });
         Schema::table('relation_payments', function (Blueprint $t): void {
             $t->string('source_type', 32)->default('BANK_MOVEMENT');
             $t->uuid('source_id')->nullable();
@@ -76,6 +78,8 @@ return new class extends Migration
             $t->dropUnique(['source_type', 'source_id']);
             $t->dropColumn(['source_type', 'source_id']);
         });
-        DB::statement('ALTER TABLE relation_payments ALTER COLUMN bank_movement_id SET NOT NULL');
+        Schema::table('relation_payments', function (Blueprint $table): void {
+            $table->uuid('bank_movement_id')->nullable(false)->change();
+        });
     }
 };

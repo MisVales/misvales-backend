@@ -27,6 +27,38 @@ return new class extends Migration
             $table->index('created_at');
         });
 
+        if (DB::getDriverName() === 'mysql') {
+            Schema::table('branches', function (Blueprint $table): void {
+                $table->unsignedTinyInteger('active_headquarters_unique')
+                    ->nullable()
+                    ->storedAs('IF(is_headquarters = 1, 1, NULL)');
+                $table->unique('active_headquarters_unique', 'branches_is_headquarters_unique');
+            });
+
+            DB::statement("ALTER TABLE branches ADD CONSTRAINT branches_status_check CHECK (status IN ('ACTIVE', 'INACTIVE'))");
+            DB::statement('ALTER TABLE branches ADD CONSTRAINT branches_lock_version_check CHECK (lock_version >= 0)');
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER check_headquarters_deletion
+                BEFORE DELETE ON branches
+                FOR EACH ROW
+                BEGIN
+                    IF OLD.is_headquarters = 1 THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La sucursal matriz no puede eliminarse fisicamente.';
+                    END IF;
+                END
+            SQL);
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER check_headquarters_deactivation
+                BEFORE UPDATE ON branches
+                FOR EACH ROW
+                BEGIN
+                    IF OLD.is_headquarters = 1 AND NEW.status = 'INACTIVE' THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'La sucursal matriz no puede desactivarse.';
+                    END IF;
+                END
+            SQL);
+        }
+
         if (DB::connection()->getDriverName() === 'pgsql') {
             // Ãndice Ãºnico parcial para is_headquarters = true
             DB::statement('CREATE UNIQUE INDEX branches_is_headquarters_unique ON branches (is_headquarters) WHERE is_headquarters = true;');
@@ -87,6 +119,11 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation');
+            DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deletion');
+        }
+
         if (DB::connection()->getDriverName() === 'pgsql') {
             if (DB::getDriverName() !== 'sqlite') {
                 DB::statement('DROP TRIGGER IF EXISTS check_headquarters_deactivation ON branches;');

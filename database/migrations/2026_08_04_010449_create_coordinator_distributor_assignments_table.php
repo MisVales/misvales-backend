@@ -92,6 +92,35 @@ return new class extends Migration
                 FOR EACH ROW EXECUTE FUNCTION prevent_cda_deletion();
             ');
         }
+
+        if (DB::getDriverName() === 'mysql') {
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER trg_cda_status_consistency_insert
+                BEFORE INSERT ON coordinator_distributor_assignments
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.status = 'ACTIVE' AND NEW.ended_by IS NOT NULL THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Una asignacion activa no puede tener finalizador.';
+                    END IF;
+                END
+            SQL);
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER trg_cda_status_consistency_update
+                BEFORE UPDATE ON coordinator_distributor_assignments
+                FOR EACH ROW
+                BEGIN
+                    IF NEW.status = 'ACTIVE' AND NEW.ended_by IS NOT NULL THEN
+                        SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Una asignacion activa no puede tener finalizador.';
+                    END IF;
+                END
+            SQL);
+            DB::unprepared(<<<'SQL'
+                CREATE TRIGGER trg_prevent_cda_deletion
+                BEFORE DELETE ON coordinator_distributor_assignments
+                FOR EACH ROW
+                SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Las asignaciones anteriores no se eliminan fisicamente.'
+            SQL);
+        }
     }
 
     /**
@@ -99,6 +128,12 @@ return new class extends Migration
      */
     public function down(): void
     {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion');
+            DB::statement('DROP TRIGGER IF EXISTS trg_cda_status_consistency_update');
+            DB::statement('DROP TRIGGER IF EXISTS trg_cda_status_consistency_insert');
+        }
+
         if (DB::getDriverName() === 'pgsql') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_cda_deletion ON coordinator_distributor_assignments;');
             DB::statement('DROP FUNCTION IF EXISTS prevent_cda_deletion();');

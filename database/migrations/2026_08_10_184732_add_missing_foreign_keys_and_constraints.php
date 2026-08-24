@@ -2,15 +2,12 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql' && DB::connection()->getDriverName() !== 'sqlite') {
-            throw new RuntimeException('La alineaciÃ³n de esquema requiere PostgreSQL.');
-        }
-
         $this->abortarSiConsultaDevuelveIds(
             "SELECT id FROM distributors WHERE status = 'ACTIVE' AND (activated_at IS NULL OR activated_by IS NULL) LIMIT 20",
             'Distribuidoras ACTIVE sin evidencia de activaciÃ³n',
@@ -56,10 +53,14 @@ return new class extends Migration
         $this->recrearFk('coordinator_distributor_assignments', 'distributor_id', 'distributors');
         $this->recrearFk('redemption_periods', 'point_value_configuration_version_id', 'configuration_versions');
 
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            if (Schema::hasIndex('application_evaluations', 'application_evaluations_application_id_unique')) {
+                DB::statement('DROP INDEX application_evaluations_application_id_unique ON application_evaluations');
+            }
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+            DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         }
-        DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
 
         $this->recrearCheck('distributors', 'distributors_activation_check', "status <> 'ACTIVE' OR (activated_at IS NOT NULL AND activated_by IS NOT NULL)");
@@ -75,7 +76,9 @@ return new class extends Migration
         $this->recrearCheck('credit_increase_requests', 'credit_increase_requests_status_check', "status IN ('REQUESTED','REJECTED_BY_COORDINATOR','PREAUTHORIZED','REJECTED_BY_MANAGER','AUTHORIZED_PARTIAL','AUTHORIZED_TOTAL','COMPLETED')");
         $this->recrearCheck('credit_increase_requests', 'credit_increase_requests_manager_decision_check', "manager_decision IS NULL OR manager_decision IN ('APPROVE_REQUESTED','APPROVE_LOWER','REJECT')");
 
-        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS coordinator_distributor_active_distributor_unique ON coordinator_distributor_assignments (distributor_id) WHERE status = 'ACTIVE' AND valid_to IS NULL");
+        if (DB::getDriverName() !== 'mysql') {
+            DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS coordinator_distributor_active_distributor_unique ON coordinator_distributor_assignments (distributor_id) WHERE status = 'ACTIVE' AND valid_to IS NULL");
+        }
     }
 
     public function down(): void
@@ -90,7 +93,9 @@ return new class extends Migration
             "{$tabla}.{$columna} contiene referencias huÃ©rfanas",
         );
         $nombre = "{$tabla}_{$columna}_foreign";
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE {$tabla} DROP FOREIGN KEY {$nombre}");
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$nombre}");
         }
         if (DB::getDriverName() !== 'sqlite') {

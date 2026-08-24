@@ -35,7 +35,7 @@ final class ConfigurationDefinitionsSeeder extends Seeder
             }
 
             ConfigurationDefinition::query()
-                ->whereIn('key', ['VOUCHER_FORTNIGHTS_COUNT', 'MODIFICATION_TOKEN_TTL'])
+                ->whereIn('key', ['VOUCHER_FORTNIGHTS_COUNT', 'MODIFICATION_TOKEN_TTL', 'EARLY_PAYMENT_PERIOD'])
                 ->each(function (ConfigurationDefinition $definition) use ($managerId): void {
                     $definition->forceFill([
                         'status' => 'INACTIVE',
@@ -61,7 +61,6 @@ final class ConfigurationDefinitionsSeeder extends Seeder
             ['key' => 'INTEREST_RATE_PER_FORTNIGHT', 'name' => 'Interés por quincena', 'description' => 'Porcentaje global de interés simple aplicado por cada quincena de un vale nuevo.', 'value_type' => 'PERCENTAGE', 'unit' => 'percentage'],
             ['key' => 'VOUCHER_INSURANCE_AMOUNT', 'name' => 'Seguro del vale', 'description' => 'Importe global de seguro aplicado al emitir un vale nuevo.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
             ['key' => 'LATE_FEE_AMOUNT', 'name' => 'Recargo por falta de pago', 'description' => 'Importe del recargo aplicable por falta de pago.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
-            ['key' => 'EARLY_PAYMENT_PERIOD', 'name' => 'Periodo de pago anticipado', 'description' => 'Desplazamientos en días, desde el corte, para el inicio y fin del periodo de pago anticipado.', 'value_type' => 'JSON', 'unit' => 'days_after_cutoff'],
             ['key' => 'RELATION_PAYMENT_BANK', 'name' => 'Datos bancarios para relaciones', 'description' => 'Banco, beneficiario, convenio y CLABE publicados para el pago de relaciones.', 'value_type' => 'JSON', 'unit' => null],
         ];
     }

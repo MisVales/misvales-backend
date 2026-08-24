@@ -12,19 +12,28 @@ return new class extends Migration
             return;
         }
 
-        $dependencias = collect(DB::select(<<<'SQL'
-            SELECT tc.table_name AS tabla, tc.constraint_name AS conname
-            FROM information_schema.table_constraints AS tc
-            INNER JOIN information_schema.constraint_column_usage AS ccu
-                ON ccu.constraint_catalog = tc.constraint_catalog
-                AND ccu.constraint_schema = tc.constraint_schema
-                AND ccu.constraint_name = tc.constraint_name
-            WHERE tc.constraint_type = 'FOREIGN KEY'
-                AND tc.table_schema = current_schema()
-                AND ccu.table_schema = current_schema()
-                AND ccu.table_name = 'distributor_applications_m5'
-            SQL));
-        if ($dependencias !== []) {
+        if (DB::getDriverName() === 'mysql') {
+            $dependencias = collect(DB::select(<<<'SQL'
+                SELECT table_name AS tabla, constraint_name AS conname
+                FROM information_schema.key_column_usage
+                WHERE referenced_table_schema = DATABASE()
+                  AND referenced_table_name = 'distributor_applications_m5'
+                SQL));
+        } else {
+            $dependencias = collect(DB::select(<<<'SQL'
+                SELECT tc.table_name AS tabla, tc.constraint_name AS conname
+                FROM information_schema.table_constraints AS tc
+                INNER JOIN information_schema.constraint_column_usage AS ccu
+                    ON ccu.constraint_catalog = tc.constraint_catalog
+                    AND ccu.constraint_schema = tc.constraint_schema
+                    AND ccu.constraint_name = tc.constraint_name
+                WHERE tc.constraint_type = 'FOREIGN KEY'
+                    AND tc.table_schema = current_schema()
+                    AND ccu.table_schema = current_schema()
+                    AND ccu.table_name = 'distributor_applications_m5'
+                SQL));
+        }
+        if ($dependencias->isNotEmpty()) {
             $detalle = collect($dependencias)->map(fn ($fk) => $fk->tabla.'.'.$fk->conname)->implode(', ');
             throw new RuntimeException('No se puede retirar la raíz legacy; conserva FKs funcionales: '.$detalle);
         }

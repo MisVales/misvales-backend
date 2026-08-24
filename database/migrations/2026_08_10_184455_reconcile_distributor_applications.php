@@ -39,10 +39,10 @@ return new class extends Migration
             $this->abortarSiHay($sinCanonica, 'Solicitudes legacy sin raÃ­z canÃ³nica');
 
             $payloads = DB::table('distributor_applications_m5')
-                ->when(DB::getDriverName() === 'sqlite', function ($q) {
-                    $q->whereRaw("applicant_data <> '{}'");
-                }, function ($q) {
+                ->when(DB::getDriverName() === 'pgsql', function ($q) {
                     $q->whereRaw("applicant_data::jsonb <> '{}'::jsonb");
+                }, function ($q) {
+                    $q->whereRaw('JSON_LENGTH(applicant_data) > 0');
                 })
                 ->limit(20)->pluck('id');
             $this->abortarSiHay($payloads, 'Solicitudes legacy con applicant_data que requiere migraciÃ³n explÃ­cita a tablas estructuradas');
@@ -69,7 +69,9 @@ return new class extends Migration
                 ->whereNull('canonical.id')->limit(20)->pluck('child.application_id');
             $this->abortarSiHay($huerfanos, "{$tabla} contiene application_id sin raÃ­z canÃ³nica");
 
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("ALTER TABLE {$tabla} DROP FOREIGN KEY {$tabla}_application_id_foreign");
+            } elseif (DB::getDriverName() === 'pgsql') {
                 DB::statement("ALTER TABLE {$tabla} DROP CONSTRAINT IF EXISTS {$tabla}_application_id_foreign");
             }
             if (DB::getDriverName() !== 'sqlite') {
@@ -77,10 +79,14 @@ return new class extends Migration
             }
         }
 
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            if (Schema::hasIndex('application_evaluations', 'application_evaluations_application_id_unique')) {
+                DB::statement('DROP INDEX application_evaluations_application_id_unique ON application_evaluations');
+            }
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE application_evaluations DROP CONSTRAINT IF EXISTS application_evaluations_application_id_unique');
+            DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         }
-        DB::statement('DROP INDEX IF EXISTS application_evaluations_application_id_unique');
         DB::statement('CREATE INDEX IF NOT EXISTS application_evaluations_application_id_evaluated_at_index ON application_evaluations (application_id, evaluated_at)');
     }
 

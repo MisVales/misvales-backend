@@ -60,12 +60,16 @@ return new class extends Migration
                 OR (status = 'CANCELLED' AND cancelled_at IS NOT NULL AND consumed_at IS NULL AND ((reserved_voucher_id IS NULL AND reserved_at IS NULL) OR (reserved_voucher_id IS NOT NULL AND reserved_at IS NOT NULL)))
             )");
         }
-        DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
+        if (DB::getDriverName() !== 'mysql') {
+            DB::statement("CREATE UNIQUE INDEX IF NOT EXISTS credit_usage_restrictions_one_current ON credit_usage_restrictions (credit_line_id) WHERE status IN ('ACTIVE', 'RESERVED')");
+        }
     }
 
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS credit_usage_restrictions_one_current');
+        if (DB::getDriverName() !== 'mysql') {
+            DB::statement('DROP INDEX IF EXISTS credit_usage_restrictions_one_current');
+        }
 
         Schema::table('credit_usage_restrictions', function (Blueprint $table) {
             $table->dropConstrainedForeignId('created_by');

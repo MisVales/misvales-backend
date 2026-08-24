@@ -10,7 +10,7 @@ return new class extends Migration
     public function up(): void
     {
         if (DB::getDriverName() !== 'sqlite') {
-            DB::statement('CREATE SEQUENCE IF NOT EXISTS voucher_folio_seq START WITH 1 INCREMENT BY 1 NO CYCLE');
+            DB::statement('CREATE SEQUENCE IF NOT EXISTS voucher_folio_seq START WITH 1 INCREMENT BY 1 NOCYCLE');
         }
 
         Schema::create('distributor_operational_blocks', function (Blueprint $table): void {
@@ -114,17 +114,19 @@ return new class extends Migration
         Schema::table('client_portfolio_entries', function (Blueprint $table): void {
             $table->foreign('related_voucher_id')->references('id')->on('vouchers')->restrictOnDelete();
         });
-        if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan fÃ­sicamente.'; END; $$ LANGUAGE plpgsql");
-                DB::statement('CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW EXECUTE FUNCTION prevent_voucher_deletion()');
-            }
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Los vales no se eliminan fisicamente.'");
+        } elseif (DB::getDriverName() === 'pgsql') {
+            DB::statement("CREATE OR REPLACE FUNCTION prevent_voucher_deletion() RETURNS trigger AS $$ BEGIN RAISE EXCEPTION 'Los vales no se eliminan fÃ­sicamente.'; END; $$ LANGUAGE plpgsql");
+            DB::statement('CREATE TRIGGER trg_prevent_voucher_deletion BEFORE DELETE ON vouchers FOR EACH ROW EXECUTE FUNCTION prevent_voucher_deletion()');
         }
     }
 
     public function down(): void
     {
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_voucher_deletion');
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_voucher_deletion ON vouchers');
             DB::statement('DROP FUNCTION IF EXISTS prevent_voucher_deletion()');
         }

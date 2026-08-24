@@ -21,10 +21,10 @@ return new class extends Migration
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('CREATE SEQUENCE IF NOT EXISTS branches_code_sequence START WITH 1');
         }
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER SEQUENCE branches_code_sequence OWNED BY branches.code');
         }
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'pgsql') {
             DB::statement(<<<'SQL'
                 SELECT setval(
                     'branches_code_sequence',
@@ -36,6 +36,12 @@ return new class extends Migration
                     false
                 )
                 SQL);
+        } elseif (DB::getDriverName() === 'mysql') {
+            $next = (int) DB::table('branches')
+                ->where('code', 'REGEXP', '^SUC-[0-9]+$')
+                ->selectRaw('COALESCE(MAX(CAST(SUBSTRING(code, 5) AS UNSIGNED)), 0) + 1 AS value')
+                ->value('value');
+            DB::statement("ALTER SEQUENCE branches_code_sequence RESTART WITH {$next}");
         }
     }
 

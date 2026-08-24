@@ -1,6 +1,6 @@
 Project MisVales {
-  database_type: 'PostgreSQL'
-  Note: 'Esquema final consolidado estaticamente desde las 88 migraciones Laravel actuales; validado mediante conversion DBML a SQL PostgreSQL.'
+  database_type: 'MariaDB'
+  Note: 'Esquema final consolidado estaticamente desde las migraciones Laravel actuales para MariaDB.'
 }
 
 Table "account_invitations" {
@@ -1098,6 +1098,8 @@ Table "distributor_risk_alerts" {
 Table "distributor_surpluses" {
   "id" uuid [not null]
   "distributor_id" uuid [not null]
+  "branch_id" uuid [not null]
+  "origin_relation_id" uuid [not null]
   "bank_movement_id" uuid [not null]
   "original_amount" decimal(19,4) [not null]
   "available_amount" decimal(19,4) [not null]
@@ -1109,9 +1111,11 @@ Table "distributor_surpluses" {
   indexes {
     ("id") [name: 'distributor_surpluses_id_primary', pk]
     ("bank_movement_id") [name: 'distributor_surpluses_bank_movement_id_unique', unique]
+    ("branch_id", "status", "created_at") [name: 'distributor_surpluses_branch_id_status_created_at_index']
+    ("distributor_id", "status", "created_at") [name: 'distributor_surpluses_distributor_id_status_created_at_index']
   }
 
-  Note: 'distributor_surpluses_status_check: CHECK (status IN (\'PENDING_DECISION\',\'CREDIT_BALANCE\',\'REFUND_PENDING\',\'REFUNDED\',\'CONSUMED\')); distributor_surpluses_amounts_check: CHECK (original_amount > 0 AND available_amount >= 0 AND reserved_amount >= 0 AND available_amount + reserved_amount <= original_amount)'
+  Note: 'distributor_surpluses_status_check: CHECK (status IN (\'PENDING_DECISION\',\'CREDIT_BALANCE\',\'PARTIALLY_APPLIED\',\'REFUND_PENDING\',\'REFUNDED\',\'CONSUMED\')); distributor_surpluses_amounts_check: CHECK (original_amount > 0 AND available_amount >= 0 AND reserved_amount >= 0 AND available_amount + reserved_amount <= original_amount)'
 }
 
 Table "distributors" {
@@ -1745,12 +1749,20 @@ Table "surplus_applications" {
   "id" uuid [not null]
   "surplus_id" uuid [not null]
   "relation_id" uuid [not null]
+  "payment_id" uuid
   "amount" decimal(19,4) [not null]
+  "balance_before" decimal(19,4)
+  "balance_after" decimal(19,4)
+  "applied_by" uuid
+  "process" varchar(64) [not null, default: 'RELATION_GENERATION']
+  "idempotency_key" varchar(160) [not null]
   "applied_at" timestamptz [not null]
 
   indexes {
     ("id") [name: 'surplus_applications_id_primary', pk]
     ("surplus_id", "relation_id") [name: 'surplus_applications_surplus_id_relation_id_unique', unique]
+    ("payment_id") [name: 'surplus_applications_payment_id_unique', unique]
+    ("idempotency_key") [name: 'surplus_applications_idempotency_key_unique', unique]
   }
 }
 
@@ -1763,9 +1775,16 @@ Table "surplus_refund_requests" {
   "requested_by" uuid [not null]
   "decided_by" uuid
   "decision_reason" text
+  "decided_at" timestamptz
+  "authorized_at" timestamptz
   "executed_by" uuid
+  "cancelled_by" uuid
+  "cancellation_reason" text
+  "cancelled_at" timestamptz
   "execution_method" varchar(255)
   "execution_reference" varchar(255)
+  "execution_amount" decimal(19,4)
+  "execution_observations" text
   "evidence_media_id" uuid
   "executed_at" timestamptz
   "created_at" timestamptz
@@ -1773,9 +1792,10 @@ Table "surplus_refund_requests" {
 
   indexes {
     ("id") [name: 'surplus_refund_requests_id_primary', pk]
+    ("branch_id", "status", "created_at") [name: 'surplus_refund_requests_branch_id_status_created_at_index']
   }
 
-  Note: 'surplus_refunds_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'EXECUTED\'))'
+  Note: 'surplus_refunds_status_check: CHECK (status IN (\'REQUESTED\',\'AUTHORIZED\',\'REJECTED\',\'CANCELLED\',\'EXECUTED\'))'
 }
 
 Table "user_role_scopes" {
@@ -2102,6 +2122,8 @@ Ref "distributor_relations_branch_id_foreign": "distributor_relations"."branch_i
 Ref "distributor_risk_alerts_distributor_id_foreign": "distributor_risk_alerts"."distributor_id" > "distributors"."id" [delete: restrict]
 Ref "distributor_risk_alerts_branch_id_foreign": "distributor_risk_alerts"."branch_id" > "branches"."id" [delete: restrict]
 Ref "distributor_surpluses_distributor_id_foreign": "distributor_surpluses"."distributor_id" > "distributors"."id" [delete: restrict]
+Ref "distributor_surpluses_branch_id_foreign": "distributor_surpluses"."branch_id" > "branches"."id" [delete: restrict]
+Ref "distributor_surpluses_origin_relation_id_foreign": "distributor_surpluses"."origin_relation_id" > "distributor_relations"."id" [delete: restrict]
 Ref "distributor_surpluses_bank_movement_id_foreign": "distributor_surpluses"."bank_movement_id" > "bank_movements"."id" [delete: restrict]
 Ref "distributors_user_id_foreign": "distributors"."user_id" > "users"."id" [delete: restrict]
 Ref "distributors_branch_id_foreign": "distributors"."branch_id" > "branches"."id" [delete: restrict]
@@ -2150,11 +2172,14 @@ Ref "security_events_actor_user_id_foreign": "security_events"."actor_user_id" >
 Ref "security_events_auth_session_id_foreign": "security_events"."auth_session_id" > "auth_sessions"."id" [delete: set null]
 Ref "surplus_applications_surplus_id_foreign": "surplus_applications"."surplus_id" > "distributor_surpluses"."id" [delete: restrict]
 Ref "surplus_applications_relation_id_foreign": "surplus_applications"."relation_id" > "distributor_relations"."id" [delete: restrict]
+Ref "surplus_applications_payment_id_foreign": "surplus_applications"."payment_id" > "relation_payments"."id" [delete: restrict]
+Ref "surplus_applications_applied_by_foreign": "surplus_applications"."applied_by" > "users"."id" [delete: restrict]
 Ref "surplus_refund_requests_surplus_id_foreign": "surplus_refund_requests"."surplus_id" > "distributor_surpluses"."id" [delete: restrict]
 Ref "surplus_refund_requests_branch_id_foreign": "surplus_refund_requests"."branch_id" > "branches"."id" [delete: restrict]
 Ref "surplus_refund_requests_requested_by_foreign": "surplus_refund_requests"."requested_by" > "users"."id" [delete: restrict]
 Ref "surplus_refund_requests_decided_by_foreign": "surplus_refund_requests"."decided_by" > "users"."id" [delete: restrict]
 Ref "surplus_refund_requests_executed_by_foreign": "surplus_refund_requests"."executed_by" > "users"."id" [delete: restrict]
+Ref "surplus_refund_requests_cancelled_by_foreign": "surplus_refund_requests"."cancelled_by" > "users"."id" [delete: restrict]
 Ref "surplus_refund_requests_evidence_media_id_foreign": "surplus_refund_requests"."evidence_media_id" > "media_files"."id" [delete: restrict]
 Ref "user_role_scopes_user_id_foreign": "user_role_scopes"."user_id" > "users"."id" [delete: cascade]
 Ref "user_role_scopes_role_id_foreign": "user_role_scopes"."role_id" > "roles"."id" [delete: cascade]

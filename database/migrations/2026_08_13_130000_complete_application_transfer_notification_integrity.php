@@ -9,10 +9,6 @@ return new class extends Migration
 {
     public function up(): void
     {
-        if (DB::connection()->getDriverName() !== 'pgsql' && DB::connection()->getDriverName() !== 'sqlite') {
-            throw new RuntimeException('La correcciÃ³n de integridad requiere PostgreSQL.');
-        }
-
         $this->assertNoRows(
             "SELECT id FROM application_authorizations WHERE decision = 'APPROVED' AND (initial_credit_line_amount IS NULL OR initial_credit_line_amount <= 0) OR decision = 'REJECTED' AND initial_credit_line_amount IS NOT NULL LIMIT 20",
             'Existen autorizaciones con decisiÃ³n e importe incompatibles',
@@ -49,7 +45,10 @@ return new class extends Migration
             DB::statement("ALTER TABLE client_transfer_requests ADD CONSTRAINT client_transfer_cancellation_check CHECK ((status = 'CANCELLED' AND cancelled_by IS NOT NULL AND cancelled_at IS NOT NULL AND cancellation_reason IS NOT NULL) OR (status <> 'CANCELLED' AND cancelled_by IS NULL AND cancelled_at IS NULL AND cancellation_reason IS NULL))");
         }
 
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update');
+            DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_delete');
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement('DROP TRIGGER IF EXISTS trg_prevent_notification_deliveries_update_delete ON notification_deliveries');
             DB::statement('DROP FUNCTION IF EXISTS prevent_notification_deliveries_mutation()');
         }
@@ -75,7 +74,19 @@ return new class extends Migration
             'SELECT d.id FROM notification_deliveries d LEFT JOIN notifications n ON n.id = d.notification_id WHERE n.id IS NULL LIMIT 20',
             'Existen entregas sin notificaciÃ³n',
         );
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            $foreignKeyExists = (int) DB::scalar(<<<'SQL'
+                SELECT COUNT(*)
+                FROM information_schema.REFERENTIAL_CONSTRAINTS
+                WHERE CONSTRAINT_SCHEMA = DATABASE()
+                  AND TABLE_NAME = 'notification_deliveries'
+                  AND CONSTRAINT_NAME = 'notification_deliveries_notification_id_foreign'
+            SQL) > 0;
+
+            if ($foreignKeyExists) {
+                DB::statement('ALTER TABLE notification_deliveries DROP FOREIGN KEY notification_deliveries_notification_id_foreign');
+            }
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement('ALTER TABLE notification_deliveries DROP CONSTRAINT IF EXISTS notification_deliveries_notification_id_foreign');
         }
         Schema::table('notification_deliveries', function (Blueprint $table): void {
@@ -105,7 +116,9 @@ return new class extends Migration
         );
 
         $name = "{$table}_application_id_foreign";
-        if (DB::getDriverName() !== 'sqlite') {
+        if (DB::getDriverName() === 'mysql') {
+            DB::statement("ALTER TABLE {$table} DROP FOREIGN KEY {$name}");
+        } elseif (DB::getDriverName() === 'pgsql') {
             DB::statement("ALTER TABLE {$table} DROP CONSTRAINT IF EXISTS {$name}");
         }
         Schema::table($table, function (Blueprint $blueprint) use ($name): void {

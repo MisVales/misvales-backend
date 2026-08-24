@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use Database\Seeders\Testing\MinimalGeographySeeder;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
@@ -23,10 +24,13 @@ class DatabaseSeeder extends Seeder
             ConfigurationDefinitionsSeeder::class,
             InitialConfigurationVersionsSeeder::class,
             InitialCatalogSeeder::class,
-            SepomexSeeder::class,
         ]);
 
-        if (app()->environment('local', 'testing', 'development')) {
+        $this->call(app()->environment('testing')
+            ? MinimalGeographySeeder::class
+            : SepomexSeeder::class);
+
+        if (app()->environment('local', 'development')) {
             $this->call([
                 LocalDevSeeder::class,
                 ValesEjemploSeeder::class,

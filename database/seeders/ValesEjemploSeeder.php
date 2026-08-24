@@ -269,7 +269,7 @@ final class ValesEjemploSeeder extends Seeder
         ]);
 
         $vale->parcialidades()->createMany(array_map(
-            static fn (array $parcialidad): array => $parcialidad + ['due_at' => now()->addDays($parcialidad['number'] * 15)],
+            static fn (array $parcialidad): array => $parcialidad + ['due_at' => null],
             $calculo['installments'],
         ));
     }

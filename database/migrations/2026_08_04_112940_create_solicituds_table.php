@@ -19,10 +19,10 @@ return new class extends Migration
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->foreignUuid('coordinator_id')->constrained('users')->restrictOnDelete();
             $table->string('status', 40)->default('DRAFT');
-            if (DB::getDriverName() === 'sqlite') {
-                $table->jsonb('section_declarations')->default('{}');
-            } else {
+            if (DB::getDriverName() === 'pgsql') {
                 $table->jsonb('section_declarations')->default(DB::raw("'{}'::jsonb"));
+            } else {
+                $table->jsonb('section_declarations')->default('{}');
             }
             $table->jsonb('pending_sections')->nullable();
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
@@ -43,10 +43,8 @@ return new class extends Migration
         }
 
         if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number ~ '^SOL-[0-9]{4}-[0-9]{6,}$')");
-            }
-            DB::statement('ALTER SEQUENCE distributor_application_number_seq OWNED BY distributor_applications.application_number');
+            $operator = DB::getDriverName() === 'pgsql' ? '~' : 'REGEXP';
+            DB::statement("ALTER TABLE distributor_applications ADD CONSTRAINT distributor_applications_number_check CHECK (application_number {$operator} '^SOL-[0-9]{4}-[0-9]{6,}$')");
         }
     }
 

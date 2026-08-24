@@ -72,7 +72,7 @@ final class LocalTestingUsersSeeder extends Seeder
                 ['pepe@gmail.com', 'Pepe', 'distributor', 'DISTRIBUTOR', $branch->id],
             ] as [$email, $name, $roleCode, $scopeType, $branchId]) {
                 $user = $this->upsertUser($email, $name);
-                
+
                 $scopeId = null;
                 if ($roleCode === 'distributor' && $branchId !== null) {
                     $distribuidora = $this->setupDistributor($user, $branchId, $manager->id);
@@ -81,7 +81,7 @@ final class LocalTestingUsersSeeder extends Seeder
                         $this->seedPepeMedia($user, $distribuidora, $manager);
                     }
                 }
-                
+
                 $this->assign($user, $roleCode, $scopeType, $branchId, $manager->id, $scopeId);
                 $this->seedTotp($user, $totpSecret);
             }
@@ -350,7 +350,15 @@ final class LocalTestingUsersSeeder extends Seeder
 
     private function randomSource(string $group): string
     {
-        return self::PEPE_MEDIA_SOURCES[$group][array_rand(self::PEPE_MEDIA_SOURCES[$group])];
+        $availableSources = collect(self::PEPE_MEDIA_SOURCES[$group])
+            ->filter(fn (string $source): bool => is_file($source))
+            ->values();
+
+        if ($availableSources->isEmpty()) {
+            throw new RuntimeException("No se encontró ningún archivo de demostración disponible para {$group}.");
+        }
+
+        return $availableSources->random();
     }
 
     private function mimeType(string $extension): string

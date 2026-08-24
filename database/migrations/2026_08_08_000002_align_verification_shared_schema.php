@@ -19,7 +19,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        DB::statement('DROP INDEX IF EXISTS audit_logs_event_type_index');
+        DB::statement('DROP INDEX IF EXISTS audit_logs_event_type_index ON audit_logs');
         DB::statement('ALTER TABLE audit_logs DROP COLUMN IF EXISTS event_type');
 
         Schema::table('media_files', function (Blueprint $table): void {

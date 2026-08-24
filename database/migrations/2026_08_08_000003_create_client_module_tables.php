@@ -9,6 +9,8 @@ return new class extends Migration
 {
     public function up(): void
     {
+        $isMysql = DB::getDriverName() === 'mysql';
+
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('CREATE SEQUENCE IF NOT EXISTS client_number_seq START WITH 1 INCREMENT BY 1');
         }
@@ -39,7 +41,7 @@ return new class extends Migration
             $table->index('rfc_hmac');
         });
 
-        Schema::create('client_addresses', function (Blueprint $table): void {
+        Schema::create('client_addresses', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->boolean('is_current')->default(true);
@@ -56,6 +58,12 @@ return new class extends Migration
             $table->foreignUuid('address_proof_media_id')->nullable()->constrained('media_files')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unsignedTinyInteger('current_fingerprint_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_addresses_current_client_unique');
+                $table->unique(['normalized_fingerprint_hmac', 'current_fingerprint_unique'], 'client_addresses_current_fingerprint_unique');
+            }
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->timestampsTz();
@@ -63,7 +71,7 @@ return new class extends Migration
             $table->index(['client_id', 'starts_at']);
         });
 
-        Schema::create('client_bank_accounts', function (Blueprint $table): void {
+        Schema::create('client_bank_accounts', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->string('bank_name');
@@ -75,6 +83,10 @@ return new class extends Migration
             $table->boolean('is_current')->default(true);
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL AND is_current = 1, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_bank_accounts_current_unique');
+            }
             $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
             $table->string('change_reason')->nullable();
             $table->unsignedInteger('lock_version')->default(1);
@@ -85,18 +97,22 @@ return new class extends Migration
             $table->index('clabe_hmac');
         });
 
-        Schema::create('client_distributor_assignments', function (Blueprint $table): void {
+        Schema::create('client_distributor_assignments', function (Blueprint $table) use ($isMysql): void {
             $table->uuid('id')->primary();
             $table->foreignUuid('client_id')->constrained('clients')->restrictOnDelete();
             $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
             $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
             $table->timestampTz('starts_at');
             $table->timestampTz('ends_at')->nullable();
+            if ($isMysql) {
+                $table->unsignedTinyInteger('current_client_unique')->nullable()->storedAs('IF(ends_at IS NULL, 1, NULL)');
+                $table->unique(['client_id', 'current_client_unique'], 'client_distributor_current_unique');
+            }
             $table->foreignUuid('assigned_by')->constrained('users')->restrictOnDelete();
             $table->string('reason')->nullable();
             $table->timestampsTz();
 
-            $table->index(['distributor_id', 'starts_at', 'ends_at']);
+            $table->index(['distributor_id', 'starts_at', 'ends_at'], 'cda_distributor_dates_index');
             $table->index(['branch_id', 'starts_at', 'ends_at']);
         });
 
@@ -125,9 +141,8 @@ return new class extends Migration
             DB::statement('ALTER TABLE clients ADD CONSTRAINT clients_lock_version_check CHECK (lock_version >= 1)');
         }
         if (DB::getDriverName() !== 'sqlite') {
-            if (DB::getDriverName() !== 'sqlite') {
-                DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number ~ '^CLI-[0-9]{4}-[0-9]{6,}$')");
-            }
+            $operator = DB::getDriverName() === 'pgsql' ? '~' : 'REGEXP';
+            DB::statement("ALTER TABLE clients ADD CONSTRAINT clients_number_check CHECK (client_number {$operator} '^CLI-[0-9]{4}-[0-9]{6,}$')");
         }
         if (DB::getDriverName() !== 'sqlite') {
             DB::statement('ALTER TABLE client_addresses ADD CONSTRAINT client_addresses_dates_check CHECK (ends_at IS NULL OR ends_at > starts_at)');
@@ -150,10 +165,12 @@ return new class extends Migration
             DB::statement('ALTER TABLE client_portfolio_entries ADD CONSTRAINT client_portfolio_entries_lock_version_check CHECK (lock_version >= 1)');
         }
 
-        DB::statement('CREATE UNIQUE INDEX client_addresses_current_client_unique ON client_addresses (client_id) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_addresses_current_fingerprint_unique ON client_addresses (normalized_fingerprint_hmac) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_bank_accounts_current_client_unique ON client_bank_accounts (client_id) WHERE ends_at IS NULL AND is_current = true');
-        DB::statement('CREATE UNIQUE INDEX client_distributor_assignments_current_client_unique ON client_distributor_assignments (client_id) WHERE ends_at IS NULL');
+        if (! $isMysql) {
+            DB::statement('CREATE UNIQUE INDEX client_addresses_current_client_unique ON client_addresses (client_id) WHERE ends_at IS NULL AND is_current = true');
+            DB::statement('CREATE UNIQUE INDEX client_addresses_current_fingerprint_unique ON client_addresses (normalized_fingerprint_hmac) WHERE ends_at IS NULL AND is_current = true');
+            DB::statement('CREATE UNIQUE INDEX client_bank_accounts_current_client_unique ON client_bank_accounts (client_id) WHERE ends_at IS NULL AND is_current = true');
+            DB::statement('CREATE UNIQUE INDEX client_distributor_assignments_current_client_unique ON client_distributor_assignments (client_id) WHERE ends_at IS NULL');
+        }
 
         $this->crearProteccionContraEliminacion();
     }
@@ -161,7 +178,9 @@ return new class extends Migration
     public function down(): void
     {
         foreach (['client_portfolio_entries', 'client_distributor_assignments', 'client_bank_accounts', 'client_addresses', 'clients'] as $table) {
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion");
+            } elseif (DB::getDriverName() === 'pgsql') {
                 DB::statement("DROP TRIGGER IF EXISTS trg_prevent_{$table}_deletion ON {$table}");
                 DB::statement("DROP FUNCTION IF EXISTS prevent_{$table}_deletion()");
             }
@@ -180,7 +199,9 @@ return new class extends Migration
     private function crearProteccionContraEliminacion(): void
     {
         foreach (['clients', 'client_addresses', 'client_bank_accounts', 'client_distributor_assignments', 'client_portfolio_entries'] as $table) {
-            if (DB::getDriverName() !== 'sqlite') {
+            if (DB::getDriverName() === 'mysql') {
+                DB::statement("CREATE TRIGGER trg_prevent_{$table}_deletion BEFORE DELETE ON {$table} FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'Los registros del modulo de clientes no se eliminan fisicamente.'");
+            } elseif (DB::getDriverName() === 'pgsql') {
                 DB::statement(<<<SQL
                 CREATE OR REPLACE FUNCTION prevent_{$table}_deletion()
                 RETURNS trigger AS \$\$
