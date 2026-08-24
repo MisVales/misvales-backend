@@ -913,6 +913,30 @@ paths:
       security: [{ bearerAuth: [] }]
       responses: { '200': { description: Bandeja propia marcada } }
 
+  /points/balance:
+    get:
+      summary: Consultar saldo de puntos conforme al alcance efectivo
+      tags: [Points]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Saldo y movimientos visibles para el actor }
+        '403': { description: Sin alcance de consulta }
+
+  /points/redemptions:
+    get:
+      summary: Listar solicitudes de canje visibles
+      tags: [Points]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Solicitudes de canje conforme al alcance }
+    post:
+      summary: Solicitar canje de puntos propios
+      tags: [Points]
+      security: [{ bearerAuth: [] }]
+      responses:
+        '201': { description: Solicitud de canje creada }
+        '409': { description: Saldo o periodo incompatible }
+
   /reports:
     get:
       summary: Listar los veintidós reportes funcionales disponibles
@@ -971,7 +995,7 @@ paths:
 
   /health/readiness:
     get:
-      summary: Verificar PostgreSQL, Redis, almacenamiento privado y scheduler
+      summary: Verificar MariaDB, Redis, almacenamiento privado y scheduler
       tags: [Operations]
       responses: { '200': { description: Servicio listo }, '503': { description: Dependencia no disponible } }
 

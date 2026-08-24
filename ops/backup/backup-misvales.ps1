@@ -12,15 +12,15 @@ $stamp = [DateTime]::UtcNow.ToString('yyyyMMddTHHmmssZ')
 $backupDirectory = Join-Path $destinationRoot $stamp
 [System.IO.Directory]::CreateDirectory($backupDirectory) | Out-Null
 
-$databaseFile = Join-Path $backupDirectory 'postgres.dump'
-$databaseCommand = 'pg_dump --format=custom --no-owner --no-acl --username=$POSTGRES_USER --dbname=$POSTGRES_DB --file=/var/lib/postgresql/data/misvales-backup.dump'
+$databaseFile = Join-Path $backupDirectory 'mariadb.sql'
+$databaseCommand = 'MYSQL_PWD="$MARIADB_PASSWORD" mariadb-dump --single-transaction --routines --triggers --events --hex-blob --user="$MARIADB_USER" "$MARIADB_DATABASE" > /var/lib/mysql/misvales-backup.sql'
 Push-Location $composePath
 try {
-    & docker compose exec -T postgres sh -ec $databaseCommand 2>$null | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'pg_dump terminó con error.' }
-    & docker compose cp postgres:/var/lib/postgresql/data/misvales-backup.dump $databaseFile | Out-Null
-    if ($LASTEXITCODE -ne 0) { throw 'No fue posible extraer el dump PostgreSQL.' }
-    & docker compose exec -T postgres sh -ec 'rm -f /var/lib/postgresql/data/misvales-backup.dump' | Out-Null
+    & docker compose exec -T mariadb sh -ec $databaseCommand 2>$null | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'mariadb-dump terminó con error.' }
+    & docker compose cp mariadb:/var/lib/mysql/misvales-backup.sql $databaseFile | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'No fue posible extraer el respaldo de MariaDB.' }
+    & docker compose exec -T mariadb sh -ec 'rm -f /var/lib/mysql/misvales-backup.sql' | Out-Null
     & docker compose exec -T minio sh -ec 'test -d /data' | Out-Null
     if ($LASTEXITCODE -ne 0) { throw 'MinIO no está disponible.' }
     & docker compose cp minio:/data (Join-Path $backupDirectory 'minio-data') | Out-Null

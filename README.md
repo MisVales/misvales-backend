@@ -17,7 +17,7 @@ La especificación funcional oficial se encuentra en el repositorio `misvales-do
 ## Tecnologías
 
 - Laravel.
-- PostgreSQL.
+- MariaDB.
 - Redis.
 - Laravel Sanctum.
 - Laravel Queue y Laravel Workers.
@@ -41,7 +41,7 @@ La especificación funcional oficial se encuentra en el repositorio `misvales-do
 ```mermaid
 flowchart TD
     A[Aplicaciones Angular] --> B[API Laravel]
-    B --> C[PostgreSQL]
+    B --> C[MariaDB]
     B --> D[Redis]
     D --> E[Laravel Workers]
     E --> F[Correo, PDF, notificaciones y reportes]
@@ -80,7 +80,7 @@ Laravel -> Redis Queue -> Laravel Worker -> Correo / PDF / notificación / repor
 
 ## Base de datos
 
-PostgreSQL es la base de datos principal. El esquema debe administrarse mediante migraciones versionadas dentro de este repositorio.
+MariaDB es la base de datos principal. El esquema debe administrarse mediante migraciones versionadas dentro de este repositorio.
 
 Reglas obligatorias:
 
@@ -125,7 +125,7 @@ Requisitos:
 
 - PHP.
 - Composer.
-- PostgreSQL.
+- MariaDB.
 - Redis.
 
 Después de clonar el repositorio:
@@ -144,7 +144,48 @@ Para procesar las colas durante el desarrollo:
 php artisan queue:work redis
 ```
 
+Para ejecutar Reverb localmente:
+
+```bash
+php artisan reverb:start --host=0.0.0.0 --port=8080
+```
+
+## Realtime con Reverb
+
+Reverb solo transporta invalidaciones. El navegador recibe `notifications.updated` en
+`private-user.{user_uuid}` y vuelve a consultar por HTTP la bandeja y el contador. Los
+mensajes no contienen modelos, datos personales, montos, permisos ni respuestas de la API.
+Todas las escrituras continúan exclusivamente en los endpoints HTTP existentes.
+
+La autorización del canal se publica en `POST /api/broadcasting/auth` y exige Sanctum,
+usuario activo, MFA vigente y el rate limit `broadcasting`. El UUID del canal debe ser
+exactamente el del usuario autenticado. Los eventos cliente y whispers están deshabilitados.
+Las lecturas HTTP disparadas por estas señales usan el límite `realtime_reads` y Angular
+consolida señales repetidas antes de volver a consultar.
+
+En producción cada APP ejecuta su propio proceso `reverb:start` detrás del balanceador y
+`REVERB_SCALING_ENABLED=true` distribuye los mensajes entre APP1/APP2 mediante el Redis
+compartido. No se requieren sticky sessions. El proxy exterior termina TLS/WSS y debe
+reenviar `Upgrade: websocket` y `Connection: Upgrade` al puerto interno de Reverb. Los
+hosts de origen se declaran explícitamente, sin esquema, en `REVERB_ALLOWED_ORIGINS`;
+nunca se acepta `*`.
+
+Horizon atiende primero la cola `realtime` y después `default`. Durante un despliegue deben
+reiniciarse de forma supervisada los procesos con `php artisan reverb:restart` y
+`php artisan horizon:terminate`; las operaciones de negocio no dependen de que Reverb esté
+disponible.
+
 Los valores reales de conexión, credenciales, claves y secretos nunca deben incluirse en Git.
+
+Los valores `*.example.invalid` de `.env.production.example` son marcadores y deben
+reemplazarse por los dominios estables del despliegue antes de cachear configuración.
+`APP_URL`, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS`,
+`SESSION_DOMAIN`, `WEBAUTHN_*`, `REVERB_HOST` y `REVERB_ALLOWED_ORIGINS` deben describir
+la misma topología HTTPS/WSS y no aceptar comodines.
+
+Horizon y los workers se ejecutan exclusivamente en Linux, WSL2 o un contenedor Linux
+con `pcntl` y `posix`. Esas extensiones se instalan y verifican en la imagen/host de
+producción; no se emulan en Windows ni se degrada Horizon para satisfacer Composer local.
 
 ## Pruebas
 

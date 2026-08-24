@@ -845,7 +845,7 @@ El gerente de sucursal consulta y opera con los valores publicados. Asignar a un
 | Quincenas por producto | Sin valor precargado | Se define al publicar el producto. |
 | Día global de corte | Día 25 de cada mes | Configurable globalmente. |
 | Días para la fecha límite | 20 días posteriores al corte | Configurable globalmente. |
-| Periodo de pago anticipado | Sin duración precargada | El gerente general configura su inicio y fin respecto de la fecha límite. |
+| Periodo de pago anticipado | Desde el corte hasta el día anterior a la fecha límite | Se calcula automáticamente y no es configurable. |
 | Zona horaria | `America/Monterrey` | Única zona operativa. |
 | Hora de corte | 00:05 | Hora local de la fecha de corte. |
 | Cierre de fecha límite | 23:59:59 | Hora local del día límite. |
@@ -863,7 +863,6 @@ El gerente de sucursal consulta y opera con los valores publicados. Asignar a un
 
 - Fechas de corte o pago.
 - Días posteriores al corte.
-- Periodo de pago anticipado.
 - Montos de productos.
 - Número de quincenas.
 - Comisión del préstamo.
@@ -1516,7 +1515,7 @@ La clasificación se determina con la fecha y hora en que la suma de pagos conci
 - **Abono:** existe al menos un pago, pero la relación no queda liquidada.
 - **Falta de pago:** no existe pago conciliado al momento de la evaluación.
 
-Si existen varios abonos, el comportamiento final se determina cuando la relación queda liquidada. El inicio y fin del periodo anticipado provienen de la configuración vigente y quedan congelados en la relación.
+Si existen varios abonos, el comportamiento final se determina cuando la relación queda liquidada. El periodo anticipado inicia en el corte y termina a las 23:59:59 del día anterior a la fecha límite; ambas fechas quedan congeladas en la relación.
 
 ##### Secuencia posterior al vencimiento
 
@@ -3187,7 +3186,6 @@ Inician sin datos precargados:
 - Interés por quincena.
 - Seguro.
 - Número de quincenas.
-- Periodo de pago anticipado.
 - Periodos de canje.
 
 El gerente general administra y publica todos los valores globales. El gerente de sucursal únicamente los consulta y opera con la versión vigente.
@@ -4081,7 +4079,7 @@ Los cambios solo afectan operaciones futuras. Los vales y relaciones deben conse
 | Número de quincenas por producto | Sin valor precargado | Se define al crear o publicar el producto. |
 | Día global de corte | Día 25 de cada mes | Configurable globalmente. |
 | Días para la fecha límite | 20 días posteriores al corte | Configurable globalmente. |
-| Periodo de pago anticipado | Sin duración precargada | El gerente general configura su inicio y fin respecto de la fecha límite; la ventana resultante se muestra y se congela en cada relación. |
+| Periodo de pago anticipado | Desde el corte hasta el día anterior a la fecha límite | Se calcula automáticamente, se muestra y se congela en cada relación. |
 | Zona horaria | America/Monterrey | Única zona operativa. |
 | Hora de ejecución del corte | 00:05 | Se interpreta en America/Monterrey. |
 | Cierre de fecha límite | 23:59:59 | Se interpreta en America/Monterrey. |
@@ -4675,11 +4673,12 @@ La clasificación se determina con la fecha y hora en que la suma de pagos conci
 
 Si existen varios abonos, el comportamiento final se determina cuando la relación queda liquidada.
 
-El inicio y fin del periodo anticipado deben obtenerse de la configuración global vigente y mostrarse en cada relación. No deben deducirse ni escribirse directamente en el código.
+El periodo anticipado inicia en la fecha y hora del corte y termina a las 23:59:59 del día anterior a la fecha límite. Esta regla no es configurable; las fechas calculadas deben mostrarse y congelarse en cada relación.
 
-Ejemplo de clasificación, sin convertir estas fechas en valores predeterminados:
+Ejemplo de clasificación:
 
-- Periodo anticipado: 13, 14 y 15 de febrero de 2026.
+- Corte e inicio anticipado: 13 de febrero de 2026.
+- Fin anticipado: 15 de febrero de 2026 a las 23:59:59.
 - Fecha límite: 16 de febrero de 2026.
 - Una liquidación entre el 13 y el 15 se clasifica como anticipada.
 - Una liquidación el 16 se clasifica como puntual.
