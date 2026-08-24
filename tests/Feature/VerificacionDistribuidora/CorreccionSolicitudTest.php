@@ -3,9 +3,9 @@
 namespace Tests\Feature\VerificacionDistribuidora;
 
 use App\Enums\ApplicationStatus;
+use App\Models\CreditoComercialSolicitud;
 use App\Models\DistributorApplication;
 use App\Models\FamiliarSolicitud;
-use App\Models\CreditoComercialSolicitud;
 use App\Models\User;
 use App\Models\VerificationVisit;
 

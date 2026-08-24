@@ -202,9 +202,9 @@ final class ValesEjemploSeeder extends Seeder
         return ProductVersion::query()->firstOrCreate(
             ['product_id' => $producto->id, 'version' => 1],
             [
-                'name' => "Vale de $".number_format($importe),
+                'name' => 'Vale de $'.number_format($importe),
                 'nominal_amount' => number_format($importe, 4, '.', ''),
-                                'status' => 'PUBLISHED',
+                'status' => 'PUBLISHED',
                 'effective_from' => now()->subDay(),
                 'reason' => 'Datos de demostración',
                 'created_by' => $usuario->id,

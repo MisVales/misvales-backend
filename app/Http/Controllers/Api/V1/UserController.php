@@ -90,8 +90,7 @@ class UserController extends Controller
         Request $request,
         RoleAssignmentPolicyService $policyService,
         OrganizationScopeResolver $scopeResolver,
-    )
-    {
+    ) {
         Gate::authorize('create', User::class);
 
         $request->validate([

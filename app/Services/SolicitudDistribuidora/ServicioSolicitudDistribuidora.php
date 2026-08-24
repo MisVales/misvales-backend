@@ -472,20 +472,21 @@ final class ServicioSolicitudDistribuidora
 
         if (empty($sucursalesGerente) && empty($sucursalesCoordinador)) {
             $consulta->whereRaw('1 = 0');
+
             return;
         }
 
         $consulta->where(function (Builder $query) use ($sucursalesGerente, $sucursalesCoordinador, $actor) {
-            if (!empty($sucursalesGerente)) {
+            if (! empty($sucursalesGerente)) {
                 $query->orWhereIn('branch_id', $sucursalesGerente);
             }
 
-            if (!empty($sucursalesCoordinador)) {
+            if (! empty($sucursalesCoordinador)) {
                 $query->orWhere(function (Builder $subQuery) use ($sucursalesCoordinador, $actor) {
                     $subQuery->whereIn('branch_id', $sucursalesCoordinador)
                         ->where(function (Builder $q) use ($actor) {
                             $q->where('coordinator_id', $actor->id)
-                              ->orWhere('created_by', $actor->id);
+                                ->orWhere('created_by', $actor->id);
                         });
                 });
             }

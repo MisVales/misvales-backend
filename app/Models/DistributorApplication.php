@@ -5,13 +5,13 @@ namespace App\Models;
 use App\Enums\ApplicationStatus;
 use App\Exceptions\BusinessException;
 use App\Models\Concerns\HasOptimisticLocking;
+use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use App\Modules\Organization\Infrastructure\Persistence\Eloquent\Models\BranchRecord;
 
 class DistributorApplication extends Model
 {

@@ -5,8 +5,8 @@ namespace App\Http\Resources\Api\V1\SolicitudDistribuidora;
 use App\Http\Resources\VerificacionDistribuidora\ApplicationAuthorizationResource;
 use App\Http\Resources\VerificacionDistribuidora\ApplicationCorrectionResource;
 use App\Http\Resources\VerificacionDistribuidora\ApplicationEvaluationResource;
-use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
 use App\Http\Resources\VerificacionDistribuidora\MediaFileResource;
+use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
 use App\Models\MediaFileBinding;
 use Illuminate\Http\Request;
 

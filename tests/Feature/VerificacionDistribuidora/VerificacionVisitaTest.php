@@ -6,13 +6,13 @@ use App\Enums\ApplicationStatus;
 use App\Enums\VerificationVisitResult;
 use App\Enums\VerificationVisitStatus;
 use App\Models\Branch;
+use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
 use App\Models\MediaFile;
 use App\Models\MediaFileBinding;
 use App\Models\User;
-use App\Models\VerificationVisit;
 use App\Models\VehiculoSolicitud;
-use App\Models\DatosPersonalesSolicitud;
+use App\Models\VerificationVisit;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use Carbon\CarbonImmutable;
 

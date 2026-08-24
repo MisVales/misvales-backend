@@ -11,6 +11,7 @@ use App\Helpers\AuditHelper;
 use App\Models\AsignacionCategoriaDistribuidora;
 use App\Models\AsignacionClienteDistribuidora;
 use App\Models\BloqueoOperativoDistribuidora;
+use App\Models\CategoryVersion;
 use App\Models\Cliente;
 use App\Models\Distribuidora;
 use App\Models\LineaCredito;
@@ -186,7 +187,7 @@ final class ServicioGeneracionVale
         return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $categoria, 'calculation' => $calculo, 'credit' => $credito, 'financial_conditions' => $condiciones, 'financial_configuration_versions' => $configuracion['versions']];
     }
 
-    private function resolverCategoriaVigente(Distribuidora $distribuidora): \App\Models\CategoryVersion
+    private function resolverCategoriaVigente(Distribuidora $distribuidora): CategoryVersion
     {
         $asignacionCategoria = AsignacionCategoriaDistribuidora::query()->with('versionCategoria')
             ->where('distributor_id', $distribuidora->id)->where('starts_at', '<=', now())

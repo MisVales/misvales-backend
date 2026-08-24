@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Database\Seeders\Testing;
 
-use App\Models\MfaCredential;
+use App\Models\AsignacionCategoriaDistribuidora;
+use App\Models\CategoryVersion;
+use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
+use App\Models\DistributorApplication;
+use App\Models\LineaCredito;
 use App\Models\MediaFile;
 use App\Models\MediaFileBinding;
+use App\Models\MfaCredential;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -88,15 +94,15 @@ final class LocalTestingUsersSeeder extends Seeder
         });
     }
 
-    private function setupDistributor(User $distributor, string $branchId, string $managerId): \App\Models\Distribuidora
+    private function setupDistributor(User $distributor, string $branchId, string $managerId): Distribuidora
     {
         $coordinator = User::where('normalized_email', 'jesus@gmail.com')->first() ?? User::find($managerId);
 
         // Generar un sufijo numérico basado en el id del distribuidor para evitar colisiones
-        $suffix = '99' . str_pad((string)(crc32($distributor->email) % 10000), 4, '0', STR_PAD_LEFT);
+        $suffix = '99'.str_pad((string) (crc32($distributor->email) % 10000), 4, '0', STR_PAD_LEFT);
 
-        $solicitud = \App\Models\DistributorApplication::firstOrCreate(
-            ['application_number' => 'SOL-2026-' . $suffix],
+        $solicitud = DistributorApplication::firstOrCreate(
+            ['application_number' => 'SOL-2026-'.$suffix],
             [
                 'branch_id' => $branchId,
                 'coordinator_id' => $coordinator->id,
@@ -107,11 +113,11 @@ final class LocalTestingUsersSeeder extends Seeder
             ]
         );
 
-        $distribuidora = \App\Models\Distribuidora::firstOrNew(['user_id' => $distributor->id]);
+        $distribuidora = Distribuidora::firstOrNew(['user_id' => $distributor->id]);
         if (! $distribuidora->exists) {
             $distribuidora->forceFill([
                 'application_id' => $solicitud->id,
-                'distributor_number' => 'DIS-2026-' . $suffix,
+                'distributor_number' => 'DIS-2026-'.$suffix,
                 'branch_id' => $branchId,
                 'status' => 'ACTIVE',
                 'activated_at' => now(),
@@ -120,17 +126,17 @@ final class LocalTestingUsersSeeder extends Seeder
             ])->save();
         }
 
-        \App\Models\LineaCredito::query()->firstOrCreate(
+        LineaCredito::query()->firstOrCreate(
             ['distributor_id' => $distribuidora->id],
             ['total_authorized' => '100000.0000', 'used_balance' => '0.0000', 'lock_version' => 1]
         );
 
-        $categoria = \App\Models\CategoryVersion::whereHas('category', function ($query) {
+        $categoria = CategoryVersion::whereHas('category', function ($query) {
             $query->where('code', 'CAT-PLATA');
         })->first();
 
         if ($categoria) {
-            \App\Models\AsignacionCategoriaDistribuidora::query()->firstOrCreate(
+            AsignacionCategoriaDistribuidora::query()->firstOrCreate(
                 ['distributor_id' => $distribuidora->id, 'ends_at' => null],
                 [
                     'category_version_id' => $categoria->id,
@@ -141,7 +147,7 @@ final class LocalTestingUsersSeeder extends Seeder
             );
         }
 
-        \App\Models\CoordinatorDistributorAssignment::query()->firstOrCreate(
+        CoordinatorDistributorAssignment::query()->firstOrCreate(
             ['distributor_id' => $distribuidora->id, 'status' => 'ACTIVE'],
             [
                 'coordinator_id' => $coordinator->id,
@@ -149,7 +155,7 @@ final class LocalTestingUsersSeeder extends Seeder
                 'valid_from' => now()->subDay(),
                 'assigned_by' => $managerId,
                 'assignment_reason' => 'Pruebas de desarrollo',
-                'lock_version' => 1
+                'lock_version' => 1,
             ]
         );
 
@@ -235,7 +241,7 @@ final class LocalTestingUsersSeeder extends Seeder
         ]);
     }
 
-    private function seedPepeMedia(User $pepe, \App\Models\Distribuidora $distribuidora, User $manager): void
+    private function seedPepeMedia(User $pepe, Distribuidora $distribuidora, User $manager): void
     {
         $application = $distribuidora->solicitud;
         if ($application === null) {

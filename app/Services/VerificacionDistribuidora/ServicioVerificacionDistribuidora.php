@@ -11,9 +11,9 @@ use App\Models\DistributorApplication;
 use App\Models\MediaFileBinding;
 use App\Models\SolicitudDistribuidora;
 use App\Models\VerificationVisit;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
-use Carbon\CarbonImmutable;
 
 class ServicioVerificacionDistribuidora
 {
