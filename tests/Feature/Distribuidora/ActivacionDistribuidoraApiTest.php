@@ -223,7 +223,7 @@ class ActivacionDistribuidoraApiTest extends TestCase
         self::assertDatabaseHas('outbox_events', ['event_type' => 'DISTRIBUTOR_CATEGORY_ASSIGNED']);
         self::assertSame(1, DB::table('outbox_events')
             ->where('event_type', 'DISTRIBUTOR_CATEGORY_ASSIGNED')
-            ->whereRaw("payload->>'event_code' = ?", ['EV-093'])
+            ->where('payload->event_code', 'EV-093')
             ->count());
         $this->getJson("/api/v1/distributors/{$distribuidora->id}/category-assignments")
             ->assertSuccessful()->assertJsonCount(2, 'data');

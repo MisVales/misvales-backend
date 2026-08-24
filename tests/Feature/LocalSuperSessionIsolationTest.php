@@ -4,9 +4,12 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
-use Database\Seeders\DatabaseSeeder;
+use App\Models\MfaCredential;
+use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
 final class LocalSuperSessionIsolationTest extends TestCase
@@ -15,7 +18,21 @@ final class LocalSuperSessionIsolationTest extends TestCase
 
     public function test_real_local_manager_login_is_not_replaced_by_the_technical_session(): void
     {
-        $this->seed(DatabaseSeeder::class);
+        $user = User::factory()->create([
+            'email' => 'test@gmail.com',
+            'normalized_email' => 'test@gmail.com',
+            'password' => Hash::make('123456789ggg'),
+        ]);
+        MfaCredential::query()->create([
+            'user_id' => $user->id,
+            'type' => 'TOTP',
+            'label' => 'Local test',
+            'confirmed_at' => now(),
+            'secret_ciphertext' => Crypt::encryptString('JBSWY3DPEHPK3PXP'),
+            'algorithm' => 'SHA1',
+            'digits' => 6,
+            'period' => 30,
+        ]);
         app()->detectEnvironment(fn (): string => 'local');
         config()->set('bootstrap.local_super_session.enabled', false);
 

@@ -73,10 +73,10 @@ class AuthRefreshCookieTest extends TestCase
 
     public function test_refresh_accepts_an_explicitly_configured_origin(): void
     {
-        config()->set('cors.allowed_origins', ['https://expert-damages-voices-rough.trycloudflare.com']);
-        config()->set('production.frontend_url', 'https://expert-damages-voices-rough.trycloudflare.com');
+        config()->set('cors.allowed_origins', ['https://app.example.test']);
+        config()->set('production.frontend_url', 'https://app.example.test');
 
-        $this->withHeader('Origin', 'https://expert-damages-voices-rough.trycloudflare.com')
+        $this->withHeader('Origin', 'https://app.example.test')
             ->postJson('/api/v1/auth/refresh')
             ->assertUnauthorized()
             ->assertJsonPath('error.code', 'INVALID_SESSION');

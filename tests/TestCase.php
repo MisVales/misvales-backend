@@ -2,6 +2,9 @@
 
 namespace Tests;
 
+use App\Models\AuthSession;
+use App\Models\User;
+use Carbon\CarbonInterface;
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
 use Illuminate\Foundation\Testing\TestCase as BaseTestCase;
@@ -27,4 +30,24 @@ abstract class TestCase extends BaseTestCase
         return $app;
     }
 
+    protected function actingAsApiUser(
+        User $user,
+        bool $mfaCompleted = true,
+        ?CarbonInterface $mfaVerifiedAt = null,
+    ): static {
+        $token = $user->createToken('test-token');
+        AuthSession::query()->create([
+            'user_id' => $user->id,
+            'session_identifier_hash' => hash('sha256', $token->plainTextToken),
+            'device_id' => 'test-device',
+            'ip_address' => '127.0.0.1',
+            'user_agent' => 'PHPUnit',
+            'expires_at' => now()->addHour(),
+            'mfa_verified_at' => $mfaCompleted ? ($mfaVerifiedAt ?? now()) : null,
+            'last_activity_at' => now(),
+        ]);
+        app('auth')->forgetGuards();
+
+        return $this->withHeader('Authorization', 'Bearer '.$token->plainTextToken);
+    }
 }

@@ -30,12 +30,19 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
     }
 
-    public function test_el_gerente_general_crea_una_solicitud_en_borrador_con_folio_unico(): void
+    public function test_solo_el_coordinador_crea_una_solicitud_en_borrador_con_folio_unico(): void
     {
         $gerente = $this->usuarioConRol('general_manager');
         $sucursal = $this->sucursal($gerente, 'TRC-01');
         $coordinador = $this->usuarioConRol('coordinator', $sucursal->id);
+
         Sanctum::actingAs($gerente);
+        $this->postJson('/api/v1/distributor-applications', [
+            'branch_id' => $sucursal->id,
+            'coordinator_id' => $coordinador->id,
+        ])->assertForbidden();
+
+        Sanctum::actingAs($coordinador);
 
         $respuesta = $this->postJson('/api/v1/distributor-applications', [
             'branch_id' => $sucursal->id,
@@ -59,22 +66,22 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         self::assertNotSame($respuesta->json('data.application_number'), $segunda->json('data.application_number'));
         $this->assertDatabaseHas('distributor_applications', [
             'id' => $respuesta->json('data.id'),
-            'created_by' => $gerente->id,
+            'created_by' => $coordinador->id,
             'status' => 'DRAFT',
         ]);
     }
 
     public function test_dos_transacciones_concurrentes_reciben_valores_de_folio_distintos(): void
     {
-        config(['database.connections.pgsql_solicitudes_concurrentes' => config('database.connections.pgsql')]);
-        $principal = DB::connection('pgsql');
-        $concurrente = DB::connection('pgsql_solicitudes_concurrentes');
+        config(['database.connections.mysql_solicitudes_concurrentes' => config('database.connections.mysql')]);
+        $principal = DB::connection('mysql');
+        $concurrente = DB::connection('mysql_solicitudes_concurrentes');
 
-        $valorPrincipal = (int) $principal->selectOne("SELECT nextval('distributor_application_number_seq') AS value")->value;
-        $valorConcurrente = (int) $concurrente->selectOne("SELECT nextval('distributor_application_number_seq') AS value")->value;
+        $valorPrincipal = (int) $principal->selectOne('SELECT NEXT VALUE FOR distributor_application_number_seq AS value')->value;
+        $valorConcurrente = (int) $concurrente->selectOne('SELECT NEXT VALUE FOR distributor_application_number_seq AS value')->value;
 
         self::assertNotSame($valorPrincipal, $valorConcurrente);
-        DB::disconnect('pgsql_solicitudes_concurrentes');
+        DB::disconnect('mysql_solicitudes_concurrentes');
     }
 
     public function test_rechaza_datos_personales_y_referencias_menores_de_edad_con_mensaje_claro(): void
@@ -97,7 +104,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'INE-001',
         ])->assertUnprocessable()
@@ -138,7 +145,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'INE-001',
         ])->assertUnprocessable()
@@ -232,7 +239,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'INE-001',
         ])->assertCreated();
@@ -267,7 +274,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'INE-001',
         ])->assertCreated();
@@ -442,7 +449,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'MARIA@EXAMPLE.TEST',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'ABC123456789',
         ])
@@ -569,7 +576,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'maria@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'ABC123456789',
         ])->assertCreated();
@@ -754,10 +761,21 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $solicitud = $this->solicitud($general, $sucursal, $coordinador, 'SOL-2026-100012');
         Sanctum::actingAs($general);
 
-        $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles", [
+        $vehiculo = $this->postJson("/api/v1/distributor-applications/{$solicitud->id}/vehicles", [
             'lock_version' => 1,
             'vehicle_type' => 'BICYCLE',
         ])->assertCreated();
+
+        $archivo = MediaFile::query()->create([
+            'file_type' => 'VEHICLE_EVIDENCE', 'disk' => 'private', 'path' => 'test/vehicle.jpg',
+            'original_name' => 'vehicle.jpg', 'mime_type' => 'image/jpeg', 'size_bytes' => 10,
+            'sha256' => hash('sha256', 'vehicle'), 'uploaded_by' => $general->id,
+            'validation_status' => 'VALIDATED', 'validated_at' => now(),
+        ]);
+        MediaFileBinding::query()->create([
+            'media_file_id' => $archivo->id, 'owner_type' => 'application_vehicle',
+            'owner_id' => $vehiculo->json('data.id'), 'purpose' => 'VEHICLE_EVIDENCE', 'created_by' => $general->id,
+        ]);
 
         $this->patchJson("/api/v1/distributor-applications/{$solicitud->id}", [
             'lock_version' => 2,
@@ -938,7 +956,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => str_repeat('A', 26),
         ])->assertUnprocessable()
@@ -959,13 +977,13 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
             'first_name' => 'Ana',
             'first_last_name' => 'Pérez',
             'curp' => 'GODE561231HDFXXX090',
-            'rfc' => 'GODE561231GR80',
+            'rfc' => 'AAAAAAAAAAAAAAAA',
             'birth_date' => '1990-01-15',
             'birth_country' => 'MX',
             'birth_state' => 'Coahuila',
             'birth_city' => 'Torreón',
             'email' => 'ana@example.test',
-            'phone_number' => '8711234567',
+            'phone_number' => '+528711234567',
             'official_id_type' => 'INE',
             'official_id_number' => 'INE-001',
         ];
@@ -973,7 +991,7 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
         $this->putJson("/api/v1/distributor-applications/{$solicitud->id}/personal-data", $payload)
             ->assertUnprocessable()
             ->assertJsonPath('error.fields.curp.0', 'La CURP debe tener exactamente 18 caracteres.')
-            ->assertJsonPath('error.fields.rfc.0', 'El RFC no puede exceder 13 caracteres.');
+            ->assertJsonPath('error.fields.rfc.0', 'El RFC no puede exceder 15 caracteres.');
     }
 
     public function test_otro_parentesco_exige_especificacion_y_se_conserva(): void
@@ -1023,6 +1041,21 @@ final class SolicitudDistribuidoraBasicaApiTest extends TestCase
                     'purpose' => $purpose,
                 ])->assertCreated()->assertJsonPath('data.validation_status', 'VALIDATED');
         }
+
+        $webpConNombreJpg = base64_decode('UklGRiIAAABXRUJQVlA4IBYAAAAwAQCdASoBAAEAAUAmJaQAA3AA/vuUAAA=', true);
+        $webpTemporal = tempnam(sys_get_temp_dir(), 'misvales-webp-');
+        file_put_contents($webpTemporal, $webpConNombreJpg);
+        $this->beforeApplicationDestroyed(static fn () => @unlink($webpTemporal));
+        $mediaWebp = $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->post('/api/v1/media', [
+                'file' => new UploadedFile($webpTemporal, 'vehiculo-renombrado.jpg', 'image/jpeg', null, true),
+                'owner_type' => 'distributor_application',
+                'owner_id' => $solicitud->id,
+                'purpose' => 'VEHICLE_EVIDENCE',
+            ])->assertCreated()
+            ->assertJsonPath('data.mime_type', 'image/webp');
+
+        $this->assertStringEndsWith('.webp', MediaFile::query()->findOrFail($mediaWebp->json('data.id'))->path);
 
         $this->getJson("/api/v1/distributor-applications/{$solicitud->id}")
             ->assertOk()

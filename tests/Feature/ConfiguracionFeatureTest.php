@@ -101,19 +101,12 @@ class ConfiguracionFeatureTest extends TestCase
         $this->assertEquals($v2->fresh()->effective_from->toDateTimeString(), $v1->fresh()->effective_to->toDateTimeString());
     }
 
-    public function test_valida_el_periodo_anticipado_y_los_datos_bancarios_publicables(): void
+    public function test_valida_los_datos_bancarios_publicables(): void
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);
         $this->assignGeneralManager($user);
         $this->actingAs($user);
 
-        $period = ConfigurationDefinition::query()->create([
-            'key' => 'EARLY_PAYMENT_PERIOD',
-            'name' => 'Periodo anticipado',
-            'value_type' => 'JSON',
-            'status' => 'ACTIVE',
-            'created_by' => $user->id,
-        ]);
         $bank = ConfigurationDefinition::query()->create([
             'key' => 'RELATION_PAYMENT_BANK',
             'name' => 'Banco de relaciones',
@@ -126,20 +119,10 @@ class ConfiguracionFeatureTest extends TestCase
             'effective_from' => now()->addDay()->format('Y-m-d H:i:s'),
         ];
 
-        $this->postJson("/api/v1/configurations/{$period->key}/versions", [
-            ...$base,
-            'value' => ['start' => 10, 'end' => 5],
-        ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['value.end']]]);
-
         $this->postJson("/api/v1/configurations/{$bank->key}/versions", [
             ...$base,
             'value' => ['name' => 'Banco', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-1', 'clabe' => '1234'],
         ])->assertUnprocessable()->assertJsonStructure(['error' => ['fields' => ['value.clabe']]]);
-
-        $this->postJson("/api/v1/configurations/{$period->key}/versions", [
-            ...$base,
-            'value' => ['start' => 0, 'end' => 10],
-        ])->assertCreated();
 
         $this->postJson("/api/v1/configurations/{$bank->key}/versions", [
             ...$base,

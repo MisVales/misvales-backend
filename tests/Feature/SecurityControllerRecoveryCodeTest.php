@@ -19,7 +19,7 @@ class SecurityControllerRecoveryCodeTest extends TestCase
             'password' => Hash::make('Password123!'),
         ]);
 
-        $this->actingAs($user);
+        $this->actingAsApiUser($user);
 
         // Sin contrase?a actual, debe fallar
         $response = $this->postJson('/api/v1/me/security/recovery-codes', []);

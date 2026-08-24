@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\AccountInvitation;
 use App\Models\Role;
 use App\Models\User;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -19,8 +20,9 @@ class InvitationManagementTest extends TestCase
     {
         parent::setUp();
 
+        $this->seed(RolesAndPermissionsSeeder::class);
         $this->admin = User::factory()->create(['state' => 'ACTIVE']);
-        $adminRole = Role::firstOrCreate(['code' => 'admin'], ['name' => 'Admin', 'default_scope' => 'GLOBAL']);
+        $adminRole = Role::query()->where('code', 'general_manager')->firstOrFail();
         $this->admin->roleScopes()->create([
             'role_id' => $adminRole->id,
             'scope_type' => 'GLOBAL',
@@ -50,7 +52,7 @@ class InvitationManagementTest extends TestCase
             'expires_at' => now()->addDays(2),
         ]);
 
-        $this->actingAs($this->admin);
+        $this->actingAsApiUser($this->admin);
 
         $response = $this->getJson('/api/v1/invitations?state=ACTIVE');
         $response->assertStatus(200);
@@ -74,10 +76,7 @@ class InvitationManagementTest extends TestCase
             'expires_at' => now()->addDays(2),
         ]);
 
-        $this->actingAs($this->admin);
-
-        // Simular MFA reciente en sesión
-        session(['last_mfa_verification' => now()->timestamp]);
+        $this->actingAsApiUser($this->admin);
 
         $response = $this->postJson("/api/v1/invitations/{$invitation->id}/revoke", [
             'reason' => 'Duplicate',
@@ -90,10 +89,11 @@ class InvitationManagementTest extends TestCase
         $this->assertEquals('Duplicate', $invitation->revocation_reason);
         $this->assertEquals($this->admin->id, $invitation->revoked_by);
 
-        $this->assertDatabaseHas('audit_logs', [
+        $this->assertDatabaseHas('security_events', [
             'event_type' => 'INVITATION_REVOKED',
             'entity_id' => $invitation->id,
-            'user_id' => $this->admin->id,
+            'user_id' => $user1->id,
+            'actor_user_id' => $this->admin->id,
         ]);
     }
 
@@ -109,8 +109,7 @@ class InvitationManagementTest extends TestCase
             'expires_at' => now()->addDays(2),
         ]);
 
-        $this->actingAs($this->admin);
-        session(['last_mfa_verification' => now()->timestamp]);
+        $this->actingAsApiUser($this->admin);
 
         $response = $this->postJson("/api/v1/invitations/{$invitation->id}/revoke", [
             'reason' => 'Already consumed',
@@ -131,14 +130,13 @@ class InvitationManagementTest extends TestCase
             'expires_at' => now()->addDays(2),
         ]);
 
-        $this->actingAs($this->admin);
-        // NO simulamos MFA reciente en la sesión
+        $this->actingAsApiUser($this->admin, true, now()->subHours(2));
 
         $response = $this->postJson("/api/v1/invitations/{$invitation->id}/revoke", [
             'reason' => 'Requires MFA',
         ]);
 
         $response->assertStatus(403);
-        $response->assertJsonFragment(['error' => 'MFA_REAUTH_REQUIRED']);
+        $response->assertJsonPath('mfa_required', true);
     }
 }

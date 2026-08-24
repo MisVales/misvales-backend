@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
 use App\Services\Auth\RoleAssignmentPolicyService;
+use App\Services\Auth\RoleTransitionService;
 use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\Request;
@@ -20,7 +21,7 @@ final class RoleAssignmentPolicyServiceTest extends TestCase
 
     public function test_it_rejects_a_global_branch_manager_assignment(): void
     {
-        $service = new RoleAssignmentPolicyService(new OrganizationAssignmentRules);
+        $service = new RoleAssignmentPolicyService(new OrganizationAssignmentRules, new RoleTransitionService);
         $actor = new User(['state' => 'ACTIVE']);
         $target = new User(['state' => 'ACTIVE']);
         $role = new Role(['code' => 'branch_manager']);

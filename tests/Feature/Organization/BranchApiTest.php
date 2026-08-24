@@ -37,11 +37,15 @@ final class BranchApiTest extends TestCase
         $response = $this->postJson('/api/v1/branches', [
             'name' => 'Sucursal Torreón Norte',
             'address' => 'Blvd. Independencia 100, Torreón, Coahuila, 27000',
+            'lat' => 25.5584,
+            'lng' => -103.4068,
         ]);
 
         $response
             ->assertCreated()
             ->assertJsonPath('data.address', 'Blvd. Independencia 100, Torreón, Coahuila, 27000')
+            ->assertJsonPath('data.lat', 25.5584)
+            ->assertJsonPath('data.lng', -103.4068)
             ->assertJsonPath('data.status', 'ACTIVE')
             ->assertJsonPath('data.lock_version', 0);
         $this->assertMatchesRegularExpression('/\ASUC-\d{3,}\z/', $response->json('data.code'));
@@ -71,6 +75,10 @@ final class BranchApiTest extends TestCase
     {
         $generalManager = $this->userWithRole('general_manager');
         $assignedBranch = $this->branch($generalManager, 'TRC-01');
+        $assignedBranch->forceFill([
+            'address_latitude' => 25.5428,
+            'address_longitude' => -103.4068,
+        ])->save();
         $this->branch($generalManager, 'TRC-02');
         $branchManager = $this->userWithRole('branch_manager', $assignedBranch->id);
         Sanctum::actingAs($branchManager);
@@ -81,6 +89,8 @@ final class BranchApiTest extends TestCase
             ->assertOk()
             ->assertJsonCount(1, 'data')
             ->assertJsonPath('data.0.id', $assignedBranch->id)
+            ->assertJsonPath('data.0.lat', 25.5428)
+            ->assertJsonPath('data.0.lng', -103.4068)
             ->assertJsonPath('meta.total', 1);
     }
 

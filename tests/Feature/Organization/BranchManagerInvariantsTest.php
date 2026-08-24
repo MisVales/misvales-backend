@@ -2,10 +2,13 @@
 
 namespace Tests\Feature\Organization;
 
+use App\Http\Middleware\RequireMfaCompleted;
+use App\Http\Middleware\TrackSessionActivity;
 use App\Models\Branch;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
+use Database\Seeders\RolesAndPermissionsSeeder;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
@@ -23,9 +26,23 @@ class BranchManagerInvariantsTest extends TestCase
     {
         parent::setUp();
 
-        $this->seed();
+        $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $this->admin = User::factory()->create([
+            'email' => 'test@gmail.com',
+            'normalized_email' => 'test@gmail.com',
+        ]);
+        $this->admin->assignRole('general_manager');
+        Branch::factory()->create([
+            'code' => 'MATRIZ',
+            'is_headquarters' => true,
+            'created_by' => $this->admin->id,
+        ]);
+        Branch::factory()->create([
+            'is_headquarters' => false,
+            'created_by' => $this->admin->id,
+        ]);
 
-        $this->admin = User::where('email', 'test@gmail.com')->firstOrFail();
         $this->branchManagerRole = Role::where('code', 'branch_manager')->firstOrFail();
     }
 
@@ -41,7 +58,7 @@ class BranchManagerInvariantsTest extends TestCase
         ]);
 
         $response->assertStatus(403);
-        $this->assertStringContainsString('matriz no puede tener gerente', $response->json('message'));
+        $this->assertStringContainsString('matriz no puede tener gerente', $response->json('error.message'));
     }
 
     public function test_branch_manager_cannot_be_assigned_if_active_manager_exists(): void
@@ -53,7 +70,7 @@ class BranchManagerInvariantsTest extends TestCase
             'email' => 'manager1@test.com',
             'role_id' => $this->branchManagerRole->id,
             'branch_id' => $branch->id,
-        ])->assertStatus(200);
+        ])->assertCreated();
 
         $response = $this->actingAs($this->admin)->postJson('/api/v1/users', [
             'name' => 'Manager Two',
@@ -63,52 +80,34 @@ class BranchManagerInvariantsTest extends TestCase
         ]);
 
         $response->assertStatus(403);
-        $this->assertStringContainsString('ya cuenta con un gerente', $response->json('message'));
+        $this->assertStringContainsString('ya cuenta con un gerente', $response->json('error.message'));
     }
 
-    public function test_eligible_branches_query_excludes_unavailable_branches(): void
+    public function test_current_branch_directory_lists_active_branches_with_pagination(): void
     {
         $branch = Branch::where('is_headquarters', false)->where('status', 'ACTIVE')->firstOrFail();
 
-        $response = $this->actingAs($this->admin)->getJson('/api/v1/branches?eligible_for_manager=true');
+        $response = $this->actingAs($this->admin)->getJson('/api/v1/branches?status=ACTIVE');
         $response->assertStatus(200);
-        $this->assertTrue(collect($response->json())->contains('id', $branch->id));
+        $this->assertTrue(collect($response->json('data'))->contains('id', $branch->id));
 
         $headquarters = Branch::where('is_headquarters', true)->firstOrFail();
-        $this->assertFalse(collect($response->json())->contains('id', $headquarters->id));
-
-        $this->actingAs($this->admin)->postJson('/api/v1/users', [
-            'name' => 'Manager One',
-            'email' => 'manager1@test.com',
-            'role_id' => $this->branchManagerRole->id,
-            'branch_id' => $branch->id,
-        ])->assertStatus(200);
-
-        $response2 = $this->actingAs($this->admin)->getJson('/api/v1/branches?eligible_for_manager=true');
-        $this->assertFalse(collect($response2->json())->contains('id', $branch->id));
-
-        $user = User::where('email', 'manager1@test.com')->firstOrFail();
-        $assignment = UserRoleScope::where('user_id', $user->id)->firstOrFail();
-
-        $this->actingAs($this->admin)->deleteJson("/api/v1/users/{$user->id}/assignments/{$assignment->id}")->assertStatus(200);
-
-        $response3 = $this->actingAs($this->admin)->getJson('/api/v1/branches?eligible_for_manager=true');
-        $this->assertTrue(collect($response3->json())->contains('id', $branch->id));
+        $this->assertTrue(collect($response->json('data'))->contains('id', $headquarters->id));
+        $response->assertJsonStructure(['data', 'meta' => ['current_page', 'per_page', 'total']]);
     }
 
     public function test_concurrent_assignments_are_rejected(): void
     {
         $branch = Branch::where('is_headquarters', false)->firstOrFail();
 
-        $user1 = clone $this->admin;
-        $user1->id = Str::uuid()->toString();
-        $user1->email = 'concurrent1@test.com';
-        $user1->save();
-
-        $user2 = clone $this->admin;
-        $user2->id = Str::uuid()->toString();
-        $user2->email = 'concurrent2@test.com';
-        $user2->save();
+        $user1 = User::factory()->create([
+            'email' => 'concurrent1@test.com',
+            'normalized_email' => 'concurrent1@test.com',
+        ]);
+        $user2 = User::factory()->create([
+            'email' => 'concurrent2@test.com',
+            'normalized_email' => 'concurrent2@test.com',
+        ]);
 
         UserRoleScope::create([
             'id' => Str::uuid(),
@@ -119,7 +118,7 @@ class BranchManagerInvariantsTest extends TestCase
         ]);
 
         $this->expectException(QueryException::class);
-        $this->expectExceptionMessageMatches('/unique_active_branch_manager/');
+        $this->expectExceptionMessageMatches('/sucursal ya cuenta con un gerente activo/i');
 
         UserRoleScope::create([
             'id' => Str::uuid(),

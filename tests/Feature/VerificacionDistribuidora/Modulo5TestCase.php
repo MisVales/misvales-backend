@@ -44,6 +44,10 @@ abstract class Modulo5TestCase extends TestCase
             'last_activity_at' => now(),
         ]);
 
+        // Cada llamada HTTP debe volver a resolver el bearer token actual. Laravel
+        // conserva los guards resueltos dentro de la misma instancia de prueba.
+        app('auth')->forgetGuards();
+
         return $this->withHeaders([
             'Authorization' => 'Bearer '.$token->plainTextToken,
         ]);

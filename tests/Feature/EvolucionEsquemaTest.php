@@ -32,14 +32,17 @@ class EvolucionEsquemaTest extends TestCase
         $this->assertFalse(Schema::hasTable('distributor_applications_m5'));
 
         $filas = DB::select(<<<'SQL'
-            SELECT c.conrelid::regclass::text AS tabla, parent.relname AS destino, c.confdeltype
-            FROM pg_constraint c
-            JOIN pg_class parent ON parent.oid = c.confrelid
-            WHERE c.contype = 'f'
-              AND c.conname IN (
-                'verification_visits_application_id_foreign',
-                'application_corrections_application_id_foreign',
-                'application_evaluations_application_id_foreign',
+            SELECT kcu.TABLE_NAME AS tabla, kcu.REFERENCED_TABLE_NAME AS destino, rc.DELETE_RULE AS delete_rule
+            FROM information_schema.KEY_COLUMN_USAGE kcu
+            JOIN information_schema.REFERENTIAL_CONSTRAINTS rc
+              ON rc.CONSTRAINT_SCHEMA = kcu.CONSTRAINT_SCHEMA
+             AND rc.TABLE_NAME = kcu.TABLE_NAME
+             AND rc.CONSTRAINT_NAME = kcu.CONSTRAINT_NAME
+            WHERE kcu.CONSTRAINT_SCHEMA = DATABASE()
+              AND kcu.CONSTRAINT_NAME IN (
+                 'verification_visits_application_id_foreign',
+                 'application_corrections_application_id_foreign',
+                 'application_evaluations_application_id_foreign',
                 'application_authorizations_application_id_foreign',
                 'application_state_transitions_application_id_foreign',
                 'distributors_application_id_foreign'
@@ -49,7 +52,7 @@ class EvolucionEsquemaTest extends TestCase
         $this->assertCount(6, $filas);
         foreach ($filas as $fila) {
             $this->assertSame('distributor_applications', $fila->destino);
-            $this->assertSame('r', $fila->confdeltype);
+            $this->assertSame('RESTRICT', $fila->delete_rule);
         }
     }
 
@@ -175,20 +178,31 @@ class EvolucionEsquemaTest extends TestCase
         }
     }
 
-    public function test_postgresql_no_conserva_check_hacia_voucher_id_inexistente(): void
+    public function test_mariadb_no_conserva_check_hacia_voucher_id_inexistente(): void
     {
         $this->assertFalse(Schema::hasColumn('credit_usage_restrictions', 'voucher_id'));
         $this->assertTrue(Schema::hasColumn('credit_usage_restrictions', 'reserved_voucher_id'));
 
-        $checks = collect(DB::select("SELECT pg_get_constraintdef(oid) AS definition FROM pg_constraint WHERE conrelid = 'credit_usage_restrictions'::regclass AND contype = 'c'"));
+        $checks = collect(DB::select(<<<'SQL'
+            SELECT cc.CHECK_CLAUSE AS definition
+            FROM information_schema.TABLE_CONSTRAINTS tc
+            JOIN information_schema.CHECK_CONSTRAINTS cc
+              ON cc.CONSTRAINT_SCHEMA = tc.CONSTRAINT_SCHEMA
+             AND cc.CONSTRAINT_NAME = tc.CONSTRAINT_NAME
+            WHERE tc.CONSTRAINT_SCHEMA = DATABASE()
+              AND tc.TABLE_NAME = 'credit_usage_restrictions'
+              AND tc.CONSTRAINT_TYPE = 'CHECK'
+        SQL));
         $this->assertFalse($checks->contains(fn ($check) => preg_match('/(?<!reserved_)voucher_id/', $check->definition) === 1));
     }
 
-    public function test_modulo_de_puntos_no_existe_en_el_esquema_final(): void
+    public function test_modulo_de_puntos_conserva_su_esquema_actual(): void
     {
-        foreach (['point_accounts', 'point_movements', 'point_redemption_requests', 'redemption_periods'] as $table) {
-            $this->assertFalse(Schema::hasTable($table), $table);
+        foreach (['point_accounts', 'point_movements', 'point_redemption_requests'] as $table) {
+            $this->assertTrue(Schema::hasTable($table), $table);
         }
+
+        $this->assertFalse(Schema::hasTable('redemption_periods'));
     }
 
     public function test_historiales_rechazan_estados_desconocidos(): void
@@ -237,44 +251,74 @@ class EvolucionEsquemaTest extends TestCase
 
     public function test_upgrade_legacy_vacio_converge_y_payload_ambiguo_aborta(): void
     {
-        Schema::create('distributor_applications_m5', function (Blueprint $table): void {
-            $table->uuid('id')->primary();
-            $table->uuid('branch_id')->nullable();
-            $table->uuid('coordinator_id')->nullable();
-            $table->string('status')->nullable();
-            $table->jsonb('applicant_data')->default('{}');
-        });
+        $solicitud = null;
+        $branchCreatorId = null;
 
-        (require database_path('migrations/2026_08_10_184455_reconcile_distributor_applications.php'))->up();
-        (require database_path('migrations/2026_08_10_184456_drop_legacy_distributor_applications_m5.php'))->up();
-        $this->assertFalse(Schema::hasTable('distributor_applications_m5'));
+        try {
+            Schema::create('distributor_applications_m5', function (Blueprint $table): void {
+                $table->uuid('id')->primary();
+                $table->uuid('branch_id')->nullable();
+                $table->uuid('coordinator_id')->nullable();
+                $table->string('status')->nullable();
+                $table->jsonb('applicant_data')->default('{}');
+            });
 
-        Schema::create('distributor_applications_m5', function (Blueprint $table): void {
-            $table->uuid('id')->primary();
-            $table->uuid('branch_id')->nullable();
-            $table->uuid('coordinator_id')->nullable();
-            $table->string('status')->nullable();
-            $table->jsonb('applicant_data')->default('{}');
-        });
-        $solicitud = DistributorApplication::factory()->create();
-        DB::table('distributor_applications_m5')->insert([
-            'id' => $solicitud->id,
-            'branch_id' => $solicitud->branch_id,
-            'coordinator_id' => $solicitud->coordinator_id,
-            'status' => $solicitud->status->value,
-            'applicant_data' => json_encode(['personal_info' => ['first_name' => 'Ambiguo']]),
-        ]);
+            (require database_path('migrations/2026_08_10_184455_reconcile_distributor_applications.php'))->up();
+            (require database_path('migrations/2026_08_10_184456_drop_legacy_distributor_applications_m5.php'))->up();
+            $this->assertFalse(Schema::hasTable('distributor_applications_m5'));
 
-        $this->expectException(\RuntimeException::class);
-        $this->expectExceptionMessage('applicant_data');
-        (require database_path('migrations/2026_08_10_184455_reconcile_distributor_applications.php'))->up();
+            Schema::create('distributor_applications_m5', function (Blueprint $table): void {
+                $table->uuid('id')->primary();
+                $table->uuid('branch_id')->nullable();
+                $table->uuid('coordinator_id')->nullable();
+                $table->string('status')->nullable();
+                $table->jsonb('applicant_data')->default('{}');
+            });
+            $solicitud = DistributorApplication::factory()->create();
+            $branchCreatorId = DB::table('branches')->where('id', $solicitud->branch_id)->value('created_by');
+            DB::table('distributor_applications_m5')->insert([
+                'id' => $solicitud->id,
+                'branch_id' => $solicitud->branch_id,
+                'coordinator_id' => $solicitud->coordinator_id,
+                'status' => $solicitud->status->value,
+                'applicant_data' => json_encode(['personal_info' => ['first_name' => 'Ambiguo']]),
+            ]);
+
+            try {
+                (require database_path('migrations/2026_08_10_184455_reconcile_distributor_applications.php'))->up();
+                $this->fail('Se esperaba que el payload ambiguo abortara la migración.');
+            } catch (\RuntimeException $exception) {
+                $this->assertStringContainsString('applicant_data', $exception->getMessage());
+            }
+        } finally {
+            Schema::dropIfExists('distributor_applications_m5');
+
+            if ($solicitud !== null) {
+                DB::table('distributor_applications')->where('id', $solicitud->id)->delete();
+                DB::table('branches')->where('id', $solicitud->branch_id)->delete();
+                DB::table('users')->whereIn('id', array_values(array_unique(array_filter([
+                    $solicitud->coordinator_id,
+                    $solicitud->created_by,
+                    $branchCreatorId,
+                ]))))->delete();
+            }
+        }
+    }
+
+    protected function connectionsToTransact(): array
+    {
+        if ($this->name() === 'test_upgrade_legacy_vacio_converge_y_payload_ambiguo_aborta') {
+            return [];
+        }
+
+        return [config('database.default')];
     }
 
     private function esperarViolacion(callable $operacion): void
     {
         try {
             DB::transaction($operacion);
-            $this->fail('Se esperaba una violación de integridad PostgreSQL.');
+            $this->fail('Se esperaba una violación de integridad MariaDB.');
         } catch (QueryException) {
             $this->addToAssertionCount(1);
         }

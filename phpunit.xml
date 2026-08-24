@@ -26,7 +26,6 @@
         <env name="BROADCAST_CONNECTION" value="null"/>
         <env name="CACHE_STORE" value="array"/>
         <env name="CLIENT_DATA_HMAC_KEY" value="testing-client-hmac-key-not-for-production"/>
-        <env name="DB_CONNECTION" value="pgsql"/>
         <env name="DB_DATABASE" value="misvales_testing"/>
         <env name="FILESYSTEM_DISK" value="local"/>
         <env name="INITIAL_GENERAL_MANAGER_ENABLED" value="true"/>
@@ -34,6 +33,8 @@
         <env name="INITIAL_GENERAL_MANAGER_EMAIL" value="gerente.general.testing@misvales.test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
+        <env name="OBSERVABILITY_ENABLED" value="true"/>
+        <env name="OBSERVABILITY_QUEUE_CONNECTION" value="sync"/>
         <env name="REDIS_HOST" value="127.0.0.1"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>

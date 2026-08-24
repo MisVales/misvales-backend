@@ -29,6 +29,7 @@ final class CierreOperativoApiTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+        config()->set('filesystems.default', 'private');
         $this->seed(RolesAndPermissionsSeeder::class);
         $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
     }

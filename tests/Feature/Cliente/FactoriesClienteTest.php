@@ -15,7 +15,7 @@ class FactoriesClienteTest extends TestCase
 {
     use DatabaseTransactions;
 
-    public function test_factories_generan_registros_sinteticos_compatibles_con_postgresql(): void
+    public function test_factories_generan_registros_sinteticos_compatibles_con_mariadb(): void
     {
         $cliente = Cliente::factory()->create();
         $domicilio = DomicilioCliente::factory()->for($cliente, 'cliente')->create();

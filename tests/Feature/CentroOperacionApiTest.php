@@ -97,6 +97,8 @@ final class CentroOperacionApiTest extends TestCase
         $this->withoutExceptionHandling();
         $general = $this->user('general_manager');
         $audit = AuditLog::query()->create(['actor_id' => $general->id, 'entity_type' => 'voucher', 'event_name' => 'TEST', 'entity_id' => fake()->uuid(), 'new_value' => ['token' => 'secret-value', 'status' => 'OK'], 'result' => 'SUCCESS']);
+        AuditLog::query()->create(['actor_id' => $general->id, 'actor_role' => 'general_manager', 'entity_type' => 'branches', 'event_name' => 'BRANCH_CREATED', 'entity_id' => fake()->uuid(), 'result' => 'SUCCESS']);
+        AuditLog::query()->create(['actor_id' => $general->id, 'actor_role' => 'general_manager', 'entity_type' => 'vouchers', 'event_name' => 'VOUCHER_GENERATED', 'entity_id' => fake()->uuid(), 'result' => 'SUCCESS']);
         try {
             DB::transaction(fn () => $audit->update(['result' => 'CHANGED']));
             self::fail('La auditoría no debe permitir actualización.');
@@ -104,8 +106,50 @@ final class CentroOperacionApiTest extends TestCase
             self::assertTrue(true);
         }
         Sanctum::actingAs($general);
-        $this->withHeaders(['X-Request-Id' => 'req-test', 'X-Correlation-Id' => 'corr-test', 'X-Trace-Id' => 'trace-test'])->getJson('/api/v1/audit-logs')->assertOk()->assertHeader('X-Correlation-Id', 'corr-test')->assertJsonPath('data.data.0.new_value.token', '[REDACTED]');
+        $this->withHeaders(['X-Request-Id' => 'req-test', 'X-Correlation-Id' => 'corr-test', 'X-Trace-Id' => 'trace-test'])->getJson('/api/v1/audit-logs')->assertOk()->assertHeader('X-Correlation-Id', 'corr-test')->assertJsonFragment(['token' => '[REDACTED]'])->assertJsonMissingPath('data.data.0.actor.branch_id');
+        $this->getJson('/api/v1/audit-logs/options')->assertOk()
+            ->assertJsonFragment(['event_name' => 'BRANCH_CREATED', 'entity_type' => 'branches'])
+            ->assertJsonFragment(['event_name' => 'VOUCHER_GENERATED', 'entity_type' => 'vouchers']);
+        $this->getJson('/api/v1/audit-logs?event_names[]=BRANCH_CREATED&event_names[]=VOUCHER_GENERATED')
+            ->assertOk()
+            ->assertJsonPath('data.total', 2);
         $this->getJson('/api/v1/operational-logs?correlation_id=corr-test')->assertOk()->assertJsonPath('data.data.0.path', '/api/v1/audit-logs')->assertJsonMissingPath('data.data.0.context.password');
+    }
+
+    public function test_gerente_de_sucursal_solo_consulta_auditoria_de_su_sucursal(): void
+    {
+        $propia = Branch::factory()->create();
+        $ajena = Branch::factory()->create();
+        $gerente = $this->user('branch_manager', $propia->id);
+
+        $visible = AuditLog::query()->create([
+            'actor_id' => $gerente->id,
+            'branch_id' => $propia->id,
+            'entity_type' => 'branches',
+            'event_name' => 'OWN_BRANCH_EVENT',
+            'entity_id' => fake()->uuid(),
+            'result' => 'SUCCESS',
+        ]);
+        AuditLog::query()->create([
+            'actor_id' => $gerente->id,
+            'branch_id' => $ajena->id,
+            'entity_type' => 'branches',
+            'event_name' => 'OTHER_BRANCH_EVENT',
+            'entity_id' => fake()->uuid(),
+            'result' => 'SUCCESS',
+        ]);
+
+        Sanctum::actingAs($gerente);
+
+        $this->getJson('/api/v1/audit-logs')
+            ->assertOk()
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.id', $visible->id)
+            ->assertJsonMissing(['event_name' => 'OTHER_BRANCH_EVENT']);
+
+        $this->getJson('/api/v1/audit-logs?branch_id='.$ajena->id)
+            ->assertOk()
+            ->assertJsonPath('data.total', 0);
     }
 
     private function user(string $roleCode, ?string $branchId = null): User

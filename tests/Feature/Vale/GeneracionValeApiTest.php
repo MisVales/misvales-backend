@@ -120,7 +120,7 @@ final class GeneracionValeApiTest extends TestCase
         $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
     }
 
-    public function test_secuencia_postgresql_reserva_folios_no_reutilizables(): void
+    public function test_secuencia_mariadb_reserva_folios_no_reutilizables(): void
     {
         $valores = collect(range(1, 20))->map(fn (): string => $this->crear()->assertSuccessful()->json('data.folio'));
         $this->assertCount(20, $valores->unique());

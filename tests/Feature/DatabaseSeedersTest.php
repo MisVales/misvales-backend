@@ -23,7 +23,7 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(1, $firstCounts['user_role_scopes']);
         self::assertSame(0, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(14, $firstCounts['configuration_definitions']);
+        self::assertSame(13, $firstCounts['configuration_definitions']);
         self::assertSame(12, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
@@ -78,6 +78,14 @@ final class DatabaseSeedersTest extends TestCase
                 ->all(),
         );
 
+        self::assertSame(1, DB::table('role_permissions as role_permission')
+            ->join('roles as role', 'role.id', '=', 'role_permission.role_id')
+            ->join('permissions as permission', 'permission.id', '=', 'role_permission.permission_id')
+            ->where('role.code', 'coordinator')
+            ->where('permission.code', 'relations.view_assigned')
+            ->whereNull('role_permission.revoked_at')
+            ->count());
+
         foreach ($this->expectedConfigurationValues() as $key => $expectedValue) {
             $storedValue = DB::table('configuration_versions as version')
                 ->join('configuration_definitions as definition', 'definition.id', '=', 'version.configuration_definition_id')
@@ -91,19 +99,25 @@ final class DatabaseSeedersTest extends TestCase
             self::assertSame($expectedValue, json_decode((string) $storedValue, true), $key);
         }
 
-        foreach (['categories', 'category_versions', 'products', 'product_versions', 'distributors', 'clients', 'vouchers'] as $table) {
+        self::assertSame(3, DB::table('categories')->count());
+        self::assertSame(3, DB::table('category_versions')->count());
+        self::assertSame(5, DB::table('products')->count());
+        self::assertSame(5, DB::table('product_versions')->count());
+        foreach (['distributors', 'clients', 'vouchers'] as $table) {
             self::assertSame(0, DB::table($table)->count(), $table);
         }
 
-        foreach (['point_accounts', 'point_movements', 'point_redemption_requests', 'redemption_periods'] as $table) {
-            self::assertFalse(Schema::hasTable($table), $table);
+        foreach (['point_accounts', 'point_movements', 'point_redemption_requests'] as $table) {
+            self::assertTrue(Schema::hasTable($table), $table);
         }
-        self::assertSame(0, DB::table('permissions')->where('module', 'points')->orWhere('code', 'like', 'points.%')->count());
+        self::assertFalse(Schema::hasTable('redemption_periods'));
+        self::assertGreaterThan(0, DB::table('permissions')->where('module', 'points')->orWhere('code', 'like', 'points.%')->count());
         self::assertSame(0, DB::table('configuration_definitions')->whereIn('key', [
             'POINTS_DIVISOR_AMOUNT',
             'POINTS_MULTIPLIER',
             'POINT_VALUE_AMOUNT',
             'LATE_POINTS_REDUCTION_RATE',
+            'EARLY_PAYMENT_PERIOD',
         ])->count());
 
         self::assertSame(0, DB::table('municipios as municipality')

@@ -5,7 +5,6 @@ namespace Tests\Feature\SolicitudDistribuidora;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
-use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
 
 final class SeguridadRutasSolicitudDistribuidoraTest extends TestCase
@@ -16,7 +15,7 @@ final class SeguridadRutasSolicitudDistribuidoraTest extends TestCase
     {
         $email = Str::uuid().'@example.test';
         $usuario = User::factory()->create(['state' => 'DISABLED', 'email' => $email, 'normalized_email' => $email]);
-        Sanctum::actingAs($usuario);
+        $this->actingAsApiUser($usuario);
 
         $this->getJson('/api/v1/distributor-applications')
             ->assertUnauthorized()
@@ -27,7 +26,7 @@ final class SeguridadRutasSolicitudDistribuidoraTest extends TestCase
     {
         $email = Str::uuid().'@example.test';
         $usuario = User::factory()->create(['state' => 'ACTIVE', 'email' => $email, 'normalized_email' => $email]);
-        Sanctum::actingAs($usuario);
+        $this->actingAsApiUser($usuario, false);
 
         $this->getJson('/api/v1/distributor-applications')
             ->assertForbidden()
