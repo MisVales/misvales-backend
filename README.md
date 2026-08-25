@@ -177,11 +177,11 @@ disponible.
 
 Los valores reales de conexión, credenciales, claves y secretos nunca deben incluirse en Git.
 
-Los valores `*.example.invalid` de `.env.production.example` son marcadores y deben
-reemplazarse por los dominios estables del despliegue antes de cachear configuración.
-`APP_URL`, `FRONTEND_URL`, `SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS`,
-`SESSION_DOMAIN`, `WEBAUTHN_*`, `REVERB_HOST` y `REVERB_ALLOWED_ORIGINS` deben describir
-la misma topología HTTPS/WSS y no aceptar comodines.
+`.env.production.example` contiene la topología HTTPS vigente de SafeAcces. Antes de
+cachear configuración deben revisarse `APP_URL`, `FRONTEND_URL`,
+`SANCTUM_STATEFUL_DOMAINS`, `CORS_ALLOWED_ORIGINS`, `SESSION_DOMAIN` y `WEBAUTHN_*` para
+que describan el mismo despliegue y no acepten comodines. `FRONTEND_URL` se incorpora
+automáticamente a CORS y su host a Sanctum para evitar configuraciones divergentes.
 
 Horizon y los workers se ejecutan exclusivamente en Linux, WSL2 o un contenedor Linux
 con `pcntl` y `posix`. Esas extensiones se instalan y verifican en la imagen/host de
