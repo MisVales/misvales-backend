@@ -6,6 +6,8 @@
 /.env.backup
 /.env.production
 /.env.prod
+/.env.prod.app1
+/.env.prod.app2
 /.env.testing
 
 .phpactor.json

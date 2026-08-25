@@ -67,7 +67,6 @@ final class ProductionConfigurationValidator
             || in_array('*', $origins, true)
             || in_array('*', $patterns, true);
     }
-
     private function frontendOriginIsAllowed(): bool
     {
         $frontendOrigin = rtrim((string) config('production.frontend_url'), '/');
