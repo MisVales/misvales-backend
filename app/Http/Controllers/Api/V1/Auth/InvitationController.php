@@ -290,10 +290,11 @@ class InvitationController extends Controller
             $invitation->update([
                 'mfa_setup_completed_at' => $now,
             ]);
-
-            // 5. Limpiar Caché
-            Cache::forget("totp_setup_{$exchangeTokenHash}");
         });
+
+        // Limpiar el secreto solo después de que la transacción confirme todos los cambios.
+        // Mantenerlo durante la transacción permite reintentar si la escritura en BD falla.
+        Cache::forget("totp_setup_{$exchangeTokenHash}");
 
         if ($developmentMfaBypass) {
             app(SecurityAuditService::class)->log($request, [
