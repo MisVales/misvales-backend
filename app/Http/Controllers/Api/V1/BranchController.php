@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Branch;
+use App\Models\Role;
+use App\Models\UserRoleScope;
 use App\Services\Audit\SecurityAuditService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -44,15 +46,16 @@ class BranchController extends Controller
         }
 
         if ($request->query('eligible_for_manager') === 'true') {
+            $branchManagerRoleId = Role::query()->where('code', 'branch_manager')->value('id');
+
             $query->where('is_headquarters', false)
                 ->where('status', 'ACTIVE')
-                ->whereDoesntHave('personnel', function ($q) {
-                    $q->where('status', 'ACTIVE')
-                        ->whereNull('revoked_at')
-                        ->whereHas('role', function ($r) {
-                            $r->where('code', 'branch_manager');
-                        });
-                });
+                ->whereNotIn('id', UserRoleScope::query()
+                    ->select('branch_id')
+                    ->where('role_id', $branchManagerRoleId)
+                    ->where('status', 'ACTIVE')
+                    ->whereNull('revoked_at')
+                    ->whereNotNull('branch_id'));
         }
 
         return response()->json($query->get());

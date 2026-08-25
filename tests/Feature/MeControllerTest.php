@@ -86,4 +86,31 @@ final class MeControllerTest extends TestCase
             ->assertJsonPath('scopes.0.scope_id', $distributor->id)
             ->assertJsonFragment(['clients.create']);
     }
+
+    public function test_me_includes_the_authorized_branch_name_in_a_branch_scope(): void
+    {
+        $this->seed(RolesAndPermissionsSeeder::class);
+        $this->withoutMiddleware([TrackSessionActivity::class, RequireMfaCompleted::class]);
+
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $branch = Branch::factory()->create(['name' => 'Sucursal Matamoros', 'code' => 'MAT']);
+        $role = Role::query()->where('code', 'coordinator')->firstOrFail();
+        UserRoleScope::query()->create([
+            'id' => Str::uuid()->toString(),
+            'user_id' => $user->id,
+            'role_id' => $role->id,
+            'branch_id' => $branch->id,
+            'assigned_by_user_id' => $user->id,
+            'assigned_at' => now(),
+            'scope_type' => 'BRANCH',
+            'status' => 'ACTIVE',
+        ]);
+
+        Sanctum::actingAs($user);
+
+        $this->getJson('/api/v1/me')
+            ->assertOk()
+            ->assertJsonPath('scopes.0.branch_name', 'Sucursal Matamoros')
+            ->assertJsonPath('scopes.0.branch_code', 'MAT');
+    }
 }
