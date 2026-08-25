@@ -62,10 +62,7 @@ final class EstadoOperativoController extends Controller
             $lines[] = sprintf('misvales_bank_reconciliation_pending{status="%s"} %d', $status, $this->tableCountWhere('bank_movements', 'reconciliation_status', $status));
         }
         $lines[] = '# TYPE misvales_queue_depth gauge';
-        foreach ([
-            config('broadcasting.queue', 'broadcasts'),
-            config('queue.connections.redis.queue', 'default'),
-        ] as $queue) {
+        foreach ([config('queue.connections.redis.queue', 'default')] as $queue) {
             $lines[] = sprintf('misvales_queue_depth{queue="%s"} %d', $queue, $this->queueDepth($queue));
         }
 

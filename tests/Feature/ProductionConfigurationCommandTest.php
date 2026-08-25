@@ -41,20 +41,6 @@ final class ProductionConfigurationCommandTest extends TestCase
             ->assertFailed();
     }
 
-    public function test_release_validator_rejects_unsafe_reverb_configuration(): void
-    {
-        $this->configureSafeProductionBaseline();
-        config()->set('reverb.apps.apps.0.allowed_origins', ['*']);
-        config()->set('reverb.apps.apps.0.accept_client_events_from', 'members');
-        config()->set('reverb.servers.reverb.scaling.enabled', false);
-
-        $this->artisan('app:validate-production')
-            ->expectsOutputToContain('REVERB_ORIGINS_UNSAFE')
-            ->expectsOutputToContain('REVERB_CLIENT_EVENTS_ENABLED')
-            ->expectsOutputToContain('REVERB_SCALING_DISABLED')
-            ->assertFailed();
-    }
-
     public function test_repository_does_not_ship_the_fixed_credential_bootstrap(): void
     {
         self::assertFileDoesNotExist(base_path('create_coordinator.php'));
@@ -73,13 +59,6 @@ final class ProductionConfigurationCommandTest extends TestCase
         config()->set('cors.supports_credentials', true);
         config()->set('cors.allowed_origins', ['https://app.misvales.example']);
         config()->set('cors.allowed_origins_patterns', []);
-        config()->set('broadcasting.default', 'reverb');
-        config()->set('broadcasting.connections.reverb.options.scheme', 'https');
-        config()->set('broadcasting.connections.reverb.options.useTLS', true);
-        config()->set('reverb.servers.reverb.scaling.enabled', true);
-        config()->set('reverb.apps.apps.0.allowed_origins', ['app.misvales.example']);
-        config()->set('reverb.apps.apps.0.accept_client_events_from', 'none');
-        config()->set('reverb.apps.apps.0.rate_limiting.enabled', true);
         config()->set('filesystems.disks.private', [
             'driver' => 'local',
             'root' => storage_path('app/private'),
