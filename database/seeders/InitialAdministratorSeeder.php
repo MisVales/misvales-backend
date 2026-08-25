@@ -15,13 +15,22 @@ use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use RuntimeException;
 
-final class InitialGeneralManagerSeeder extends Seeder
+final class InitialAdministratorSeeder extends Seeder
 {
     public function run(): void
     {
         $invitation = DB::transaction(function (): ?array {
-            $role = Role::query()->where('code', 'general_manager')->firstOrFail();
-            $user = $this->resolveManager();
+            $manager = User::query()
+                ->whereHas('roleScopes', fn ($query) => $query
+                    ->where('scope_type', 'GLOBAL')
+                    ->where('status', 'ACTIVE')
+                    ->whereNull('revoked_at')
+                    ->whereHas('role', fn ($roleQuery) => $roleQuery->where('code', 'general_manager')))
+                ->oldest('created_at')
+                ->firstOrFail();
+
+            $role = Role::query()->where('code', 'admin')->firstOrFail();
+            $user = $this->resolveAdministrator();
 
             UserRoleScope::query()->firstOrCreate([
                 'user_id' => $user->id,
@@ -32,9 +41,9 @@ final class InitialGeneralManagerSeeder extends Seeder
             ], [
                 'branch_id' => null,
                 'scope_id' => null,
-                'assigned_by_user_id' => $user->id,
+                'assigned_by_user_id' => $manager->id,
                 'assigned_at' => now(),
-                'assignment_reason' => 'Bootstrap inicial del Gerente General',
+                'assignment_reason' => 'Bootstrap inicial del Administrador',
             ]);
 
             if (app()->environment(['local', 'testing']) || $user->state === 'ACTIVE') {
@@ -55,7 +64,7 @@ final class InitialGeneralManagerSeeder extends Seeder
 
             AccountInvitation::query()->create([
                 'user_id' => $user->id,
-                'created_by_user_id' => $user->id,
+                'created_by_user_id' => $manager->id,
                 'purpose' => 'ACCOUNT_ACTIVATION',
                 'token_hash' => hash('sha256', $token),
                 'state' => 'ACTIVE',
@@ -71,15 +80,15 @@ final class InitialGeneralManagerSeeder extends Seeder
         }
     }
 
-    private function resolveManager(): User
+    private function resolveAdministrator(): User
     {
-        $enabled = (bool) config('bootstrap.initial_general_manager.enabled', false);
-        $name = trim((string) config('bootstrap.initial_general_manager.name'));
-        $email = trim((string) config('bootstrap.initial_general_manager.email'));
+        $enabled = (bool) config('bootstrap.initial_admin.enabled', false);
+        $name = trim((string) config('bootstrap.initial_admin.name'));
+        $email = trim((string) config('bootstrap.initial_admin.email'));
 
         if ($enabled) {
             if ($name === '' || $email === '') {
-                throw new RuntimeException('Configure INITIAL_GENERAL_MANAGER_NAME e INITIAL_GENERAL_MANAGER_EMAIL para inicializar el sistema.');
+                throw new RuntimeException('Configure INITIAL_ADMIN_NAME e INITIAL_ADMIN_EMAIL para inicializar el sistema.');
             }
 
             return User::query()->firstOrCreate(
@@ -93,19 +102,19 @@ final class InitialGeneralManagerSeeder extends Seeder
             );
         }
 
-        $existingManager = User::query()
+        $existingAdministrator = User::query()
             ->whereHas('roleScopes', fn ($query) => $query
                 ->where('scope_type', 'GLOBAL')
                 ->where('status', 'ACTIVE')
                 ->whereNull('revoked_at')
-                ->whereHas('role', fn ($roleQuery) => $roleQuery->where('code', 'general_manager')))
+                ->whereHas('role', fn ($roleQuery) => $roleQuery->where('code', 'admin')))
             ->oldest('created_at')
             ->first();
 
-        if ($existingManager !== null) {
-            return $existingManager;
+        if ($existingAdministrator !== null) {
+            return $existingAdministrator;
         }
 
-        throw new RuntimeException('Configure INITIAL_GENERAL_MANAGER_ENABLED, INITIAL_GENERAL_MANAGER_NAME e INITIAL_GENERAL_MANAGER_EMAIL para inicializar el sistema.');
+        throw new RuntimeException('Configure INITIAL_ADMIN_ENABLED, INITIAL_ADMIN_NAME e INITIAL_ADMIN_EMAIL para inicializar el sistema.');
     }
 }

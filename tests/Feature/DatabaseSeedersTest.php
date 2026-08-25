@@ -52,15 +52,16 @@ final class DatabaseSeedersTest extends TestCase
             ->whereNull('scope.revoked_at')
             ->count(), $managerEmail);
 
+        $adminEmail = mb_strtolower((string) config('bootstrap.initial_admin.email'));
         self::assertSame(1, DB::table('users as user')
             ->join('user_role_scopes as scope', 'scope.user_id', '=', 'user.id')
             ->join('roles as role', 'role.id', '=', 'scope.role_id')
-            ->where('user.normalized_email', 'jesusmanueldelarosaguillen@gmail.com')
+            ->where('user.normalized_email', $adminEmail)
             ->where('role.code', 'admin')
             ->where('scope.scope_type', 'GLOBAL')
             ->where('scope.status', 'ACTIVE')
             ->whereNull('scope.revoked_at')
-            ->count());
+            ->count(), $adminEmail);
 
         $administratorSensitivePermissions = DB::table('role_permissions as role_permission')
             ->join('roles as role', 'role.id', '=', 'role_permission.role_id')
@@ -110,14 +111,19 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(3, DB::table('categories')->count());
         self::assertSame(3, DB::table('category_versions')->count());
         self::assertEqualsCanonicalizing([
-            ['name' => 'Cobre', 'profit_percentage' => '0.030000'],
-            ['name' => 'Plata', 'profit_percentage' => '0.060000'],
-            ['name' => 'Oro', 'profit_percentage' => '0.100000'],
-        ], DB::table('category_versions')
-            ->select(['name', 'profit_percentage'])
-            ->where('status', 'PUBLISHED')
+            ['code' => 'CAT-COBRE', 'name' => 'Cobre', 'profit_percentage' => '0.030000'],
+            ['code' => 'CAT-PLATA', 'name' => 'Plata', 'profit_percentage' => '0.060000'],
+            ['code' => 'CAT-ORO', 'name' => 'Oro', 'profit_percentage' => '0.100000'],
+        ], DB::table('categories as category')
+            ->join('category_versions as version', 'version.category_id', '=', 'category.id')
+            ->where('version.version', 1)
+            ->select('category.code', 'version.name', 'version.profit_percentage')
             ->get()
-            ->map(fn (object $category): array => (array) $category)
+            ->map(static fn ($category): array => [
+                'code' => $category->code,
+                'name' => $category->name,
+                'profit_percentage' => $category->profit_percentage,
+            ])
             ->all());
         self::assertSame(5, DB::table('products')->count());
         self::assertSame(5, DB::table('product_versions')->count());

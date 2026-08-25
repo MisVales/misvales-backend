@@ -30,6 +30,9 @@
         <env name="INITIAL_GENERAL_MANAGER_ENABLED" value="true"/>
         <env name="INITIAL_GENERAL_MANAGER_NAME" value="Gerente General de Pruebas"/>
         <env name="INITIAL_GENERAL_MANAGER_EMAIL" value="gerente.general.testing@misvales.test"/>
+        <env name="INITIAL_ADMIN_ENABLED" value="true"/>
+        <env name="INITIAL_ADMIN_NAME" value="Administrador de Pruebas"/>
+        <env name="INITIAL_ADMIN_EMAIL" value="administrador.testing@misvales.test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="QUEUE_CONNECTION" value="sync"/>
         <env name="OBSERVABILITY_ENABLED" value="true"/>

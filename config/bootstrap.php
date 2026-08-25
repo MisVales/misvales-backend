@@ -8,6 +8,11 @@ return [
         'name' => env('INITIAL_GENERAL_MANAGER_NAME'),
         'email' => env('INITIAL_GENERAL_MANAGER_EMAIL'),
     ],
+    'initial_admin' => [
+        'enabled' => env('INITIAL_ADMIN_ENABLED', false),
+        'name' => env('INITIAL_ADMIN_NAME'),
+        'email' => env('INITIAL_ADMIN_EMAIL'),
+    ],
     'local_super_session' => [
         'enabled' => env('LOCAL_SUPER_SESSION_ENABLED', false),
         'email' => env('LOCAL_SUPER_SESSION_EMAIL', 'codex-local-session@invalid.test'),
