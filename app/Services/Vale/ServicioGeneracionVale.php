@@ -281,7 +281,8 @@ final class ServicioGeneracionVale
 
     private function siguienteFolio(): string
     {
-        $secuencia = (int) DB::scalar('SELECT NEXT VALUE FOR voucher_folio_seq');
+        $resultado = DB::selectFromWriteConnection('SELECT NEXT VALUE FOR voucher_folio_seq AS value');
+        $secuencia = (int) ($resultado[0]->value ?? 1);
 
         return sprintf('VAL-%s-%08d', now()->format('Y'), $secuencia);
     }
