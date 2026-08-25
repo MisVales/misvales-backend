@@ -79,6 +79,7 @@ return [
             'prefix_indexes' => true,
             'strict' => true,
             'engine' => 'InnoDB',
+            'timezone' => env('DB_TIMEZONE', '-06:00'),
         ],
 
         // Impide que el framework reactive la conexión retirada.

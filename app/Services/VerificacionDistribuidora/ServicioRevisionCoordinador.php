@@ -164,7 +164,8 @@ class ServicioRevisionCoordinador
                 throw new BusinessException('VERIFICATION_VISIT_ALREADY_STARTED', 'Ya existe una visita activa.', 409);
             }
 
-            $scheduled = CarbonImmutable::parse($scheduledFor);
+            $scheduled = CarbonImmutable::parse($scheduledFor)
+                ->setTimezone(config('app.timezone'));
             $separationMinutes = self::ARRIVAL_BUFFER_BEFORE_MINUTES
                 + self::VISIT_DURATION_MINUTES
                 + self::TRAVEL_BUFFER_AFTER_MINUTES;
@@ -189,7 +190,7 @@ class ServicioRevisionCoordinador
                 'verifier_id' => $verifierId,
                 'assigned_by' => $coordinatorId,
                 'assigned_at' => now(),
-                'scheduled_for' => $scheduledFor,
+                'scheduled_for' => $scheduled,
             ]);
             $visit->forceFill(['status' => VerificationVisitStatus::ASSIGNED])->save();
 
