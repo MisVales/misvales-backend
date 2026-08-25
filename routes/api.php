@@ -24,6 +24,7 @@ use App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController
 use App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\ErrorCatalogController;
 use App\Http\Controllers\Api\V1\EstadoOperativoController;
 use App\Http\Controllers\Api\V1\ExcedenteController;
 use App\Http\Controllers\Api\V1\InvitationListController;
@@ -169,6 +170,7 @@ Route::prefix('v1')->group(function () {
 
         // Auditoría
         Route::get('security-events', [SecurityEventController::class, 'index']);
+        Route::get('error-catalog', ErrorCatalogController::class);
 
         // Invitaciones
         Route::get('invitations', [InvitationListController::class, 'index']);
