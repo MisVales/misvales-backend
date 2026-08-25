@@ -103,7 +103,6 @@ return [
 
     'waits' => [
         'redis:default' => 60,
-        'redis:'.env('BROADCAST_QUEUE', 'broadcasts') => 30,
     ],
 
     /*
@@ -216,19 +215,6 @@ return [
             'timeout' => 60,
             'nice' => 0,
         ],
-        'supervisor-broadcasts' => [
-            'connection' => 'redis',
-            'queue' => [env('BROADCAST_QUEUE', 'broadcasts')],
-            'balance' => 'auto',
-            'autoScalingStrategy' => 'time',
-            'maxProcesses' => 1,
-            'maxTime' => 0,
-            'maxJobs' => 0,
-            'memory' => 128,
-            'tries' => 3,
-            'timeout' => 60,
-            'nice' => 0,
-        ],
     ],
 
     'environments' => [
@@ -238,19 +224,11 @@ return [
                 'balanceMaxShift' => 1,
                 'balanceCooldown' => 3,
             ],
-            'supervisor-broadcasts' => [
-                'maxProcesses' => (int) env('HORIZON_BROADCASTS_MAX_PROCESSES', 5),
-                'balanceMaxShift' => 1,
-                'balanceCooldown' => 3,
-            ],
         ],
 
         'local' => [
             'supervisor-default' => [
                 'maxProcesses' => (int) env('HORIZON_DEFAULT_MAX_PROCESSES', 2),
-            ],
-            'supervisor-broadcasts' => [
-                'maxProcesses' => (int) env('HORIZON_BROADCASTS_MAX_PROCESSES', 1),
             ],
         ],
     ],

@@ -173,13 +173,6 @@ class AppServiceProvider extends ServiceProvider
             return $configuredLimit(Limit::perMinute(3)->by($request->user()?->id ?: $request->ip()));
         });
 
-        RateLimiter::for('broadcasting', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(
-                Limit::perMinute(config('ratelimit.broadcasting_auth_per_minute', 30))
-                    ->by($request->user()?->id ?: $request->ip())
-            );
-        });
-
         RateLimiter::for('realtime_reads', function (Request $request) use ($configuredLimit) {
             return $configuredLimit(
                 Limit::perMinute(120)->by($request->user()?->id ?: $request->ip())
