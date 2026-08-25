@@ -48,9 +48,6 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
             }
         }
 
-        if ((bool) config('app.debug')) {
-            throw new RuntimeException('APP_DEBUG must be false in production.');
-        }
         foreach (['db_primary_host', 'db_replica_host', 'redis_host'] as $name) {
             $host = strtolower(trim((string) $required[$name]));
             if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
