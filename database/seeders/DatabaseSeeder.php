@@ -19,6 +19,7 @@ class DatabaseSeeder extends Seeder
             RolesSeeder::class,
             PermissionsSeeder::class,
             InitialGeneralManagerSeeder::class,
+            InitialAdminSeeder::class,
             RolePermissionsSeeder::class,
             HeadquartersBranchSeeder::class,
             ConfigurationDefinitionsSeeder::class,
@@ -30,11 +31,5 @@ class DatabaseSeeder extends Seeder
             ? MinimalGeographySeeder::class
             : SepomexSeeder::class);
 
-        if (app()->environment('local', 'development')) {
-            $this->call([
-                LocalDevSeeder::class,
-                ValesEjemploSeeder::class,
-            ]);
-        }
     }
 }

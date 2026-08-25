@@ -2,12 +2,12 @@
 
 namespace Database\Seeders;
 
-use Illuminate\Database\Seeder;
 use App\Models\Category;
 use App\Models\CategoryVersion;
 use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\User;
+use Illuminate\Database\Seeder;
 
 class InitialCatalogSeeder extends Seeder
 {
@@ -22,13 +22,13 @@ class InitialCatalogSeeder extends Seeder
 
         // Categories
         $categorias = [
+            'COBRE' => ['name' => 'Cobre', 'profit' => '0.030000'],
             'PLATA' => ['name' => 'Plata', 'profit' => '0.060000'],
-            'ORO' => ['name' => 'Oro', 'profit' => '0.075000'],
-            'DIAMANTE' => ['name' => 'Diamante', 'profit' => '0.100000'],
+            'ORO' => ['name' => 'Oro', 'profit' => '0.100000'],
         ];
 
         foreach ($categorias as $codeSuffix => $data) {
-            $code = 'CAT-' . $codeSuffix;
+            $code = 'CAT-'.$codeSuffix;
             $categoria = Category::firstOrNew(['code' => $code]);
             if (! $categoria->exists) {
                 $categoria->forceFill([
@@ -37,7 +37,7 @@ class InitialCatalogSeeder extends Seeder
                     'created_by' => $creatorId,
                 ])->save();
             }
-            
+
             CategoryVersion::firstOrCreate(
                 ['category_id' => $categoria->id, 'version' => 1],
                 [
@@ -68,9 +68,9 @@ class InitialCatalogSeeder extends Seeder
             ProductVersion::firstOrCreate(
                 ['product_id' => $producto->id, 'version' => 1],
                 [
-                    'name' => "Vale de $" . number_format($importe),
+                    'name' => 'Vale de $'.number_format($importe),
                     'nominal_amount' => number_format($importe, 4, '.', ''),
-                                        'status' => 'PUBLISHED',
+                    'status' => 'PUBLISHED',
                     'effective_from' => now()->subDay(),
                     'reason' => 'Catálogo inicial',
                     'created_by' => $creatorId,

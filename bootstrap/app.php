@@ -411,10 +411,10 @@ return Application::configure(basePath: dirname(__DIR__))
             // Fallback for everything else
             if ($request->is('api/*')) {
                 return $respondError(
-                    $request, 
-                    'INTERNAL_ERROR', 
-                    'ERROR REAL: ' . $e->getMessage() . ' en ' . $e->getFile() . ' linea ' . $e->getLine(), 
-                    500
+                    $request,
+                    'INTERNAL_ERROR',
+                    'Ocurrió un error inesperado. Inténtalo nuevamente.',
+                    500,
                 );
             }
         });
