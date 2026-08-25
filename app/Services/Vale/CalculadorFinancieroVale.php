@@ -19,6 +19,7 @@ final class CalculadorFinancieroVale
         $interesTotal = $this->redondear(bcmul(bcmul($capital, $interes, 10), (string) $quincenas, 10));
         $totalMisVales = $this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]);
         $gananciaTotal = $this->redondear(bcmul($capital, $ganancia, 10));
+        $totalCliente = bcadd($totalMisVales, $gananciaTotal, 4);
 
         $componentes = [
             'capital' => $this->distribuir($capital, $quincenas),
@@ -27,7 +28,7 @@ final class CalculadorFinancieroVale
             'insurance' => $this->distribuir($seguro, $quincenas),
             'distributor_profit' => $this->distribuir($gananciaTotal, $quincenas),
             'misvales_payment' => $this->distribuir($totalMisVales, $quincenas),
-            'client_payment' => $this->distribuir($totalMisVales, $quincenas),
+            'client_payment' => $this->distribuir($totalCliente, $quincenas),
         ];
 
         $parcialidades = [];
@@ -50,9 +51,9 @@ final class CalculadorFinancieroVale
             'distributor_profit_percentage' => $this->tasa($ganancia),
             'distributor_profit_total' => $gananciaTotal,
             'distributor_profit_per_fortnight' => $componentes['distributor_profit'][0],
-            'net_payment_after_distributor_profit_per_fortnight' => bcsub($componentes['misvales_payment'][0], $componentes['distributor_profit'][0], 4),
+            'net_payment_after_distributor_profit_per_fortnight' => $componentes['misvales_payment'][0],
             'client_payment_per_fortnight' => $componentes['client_payment'][0],
-            'client_total' => $totalMisVales,
+            'client_total' => $totalCliente,
             'installments' => $parcialidades,
         ];
     }

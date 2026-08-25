@@ -12,10 +12,20 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class RelacionDistribuidoraController extends Controller
 {
+    private const DETAIL_RELATIONS = [
+        'distribuidora.usuario',
+        'distribuidora.sucursal',
+        'distribuidora.lineaCredito',
+        'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio',
+        'pagos.asignaciones.partidaRelacion',
+        'partidas',
+        'puntosGanados:id,source_id,points',
+    ];
+
     public function index(Request $request)
     {
         $query = RelacionDistribuidora::query()
-            ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio', 'partidas'])
+            ->with(self::DETAIL_RELATIONS)
             ->latest('cutoff_at');
         $this->scope($query, $request);
         if ($request->filled('cutoff')) {
@@ -45,7 +55,7 @@ final class RelacionDistribuidoraController extends Controller
     {
         $this->authorizeView($relacion, $request);
 
-        return response()->json(['data' => $relacion->load(['partidas', 'distribuidora.usuario', 'distribuidora.sucursal', 'distribuidora.lineaCredito', 'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio'])]);
+        return response()->json(['data' => $relacion->load(self::DETAIL_RELATIONS)]);
     }
 
     public function download(RelacionDistribuidora $relacion, Request $request, ServicioPdfRelacion $pdf): Response

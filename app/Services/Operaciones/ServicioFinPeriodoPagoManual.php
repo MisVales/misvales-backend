@@ -21,10 +21,10 @@ final class ServicioFinPeriodoPagoManual
         private readonly ServicioMorosidadDistribuidora $riesgo,
     ) {}
 
-    public function forzar(User $actor, ?string $motivo = null): array
+    public function forzar(User $actor, ?string $motivo = null, ?string $processRunId = null): array
     {
-        return Cache::lock('operation_force_payment_deadline', 15)->block(5, function () use ($actor, $motivo): array {
-            $run = $this->ultimoCorteForzado();
+        return Cache::lock('operation_force_payment_deadline', 15)->block(5, function () use ($actor, $motivo, $processRunId): array {
+            $run = $this->ultimoCorteForzado($processRunId);
             $completed = $this->evaluacionCompletada($run->id);
             if ($completed !== null) {
                 return array_merge($completed->new_value, ['success' => true, 'replayed' => true]);
@@ -85,7 +85,7 @@ final class ServicioFinPeriodoPagoManual
                 ],
             );
 
-            $missingBranches = $this->sucursalesSinArchivoFinal($relations, CarbonImmutable::parse($run->created_at, config('app.timezone')));
+            $missingBranches = $this->sucursalesSinArchivoFinal($relations, $run->id, CarbonImmutable::parse($run->created_at, config('app.timezone')));
 
             if ($missingBranches !== []) {
                 AuditLog::create([
@@ -118,6 +118,7 @@ final class ServicioFinPeriodoPagoManual
                 $overdueEvaluationAt,
                 $relationIds,
                 CarbonImmutable::parse($run->created_at, config('app.timezone')),
+                $run->id,
             );
 
             $outcomes = ['settled' => 0, 'partially_paid' => 0, 'unpaid' => 0];
@@ -203,14 +204,31 @@ final class ServicioFinPeriodoPagoManual
         });
     }
 
-    private function ultimoCorteForzado(): object
+    private function ultimoCorteForzado(?string $processRunId = null): object
     {
-        $runId = AuditLog::query()
+        $forcedCutoffs = AuditLog::query()
             ->where('entity_type', 'operation_cutoff')
             ->where('event_name', 'ForzarCorte')
             ->where('result', 'SUCCESS')
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('distributor_relations')
+                    ->whereColumn('distributor_relations.process_run_id', 'audit_logs.entity_id');
+            });
+        if ($processRunId !== null) {
+            $forcedCutoffs->where('entity_id', $processRunId);
+        }
+        $runId = (clone $forcedCutoffs)->whereNotExists(function ($query): void {
+            $query->selectRaw('1')
+                ->from('audit_logs as expired')
+                ->whereColumn('expired.entity_id', 'audit_logs.entity_id')
+                ->where('expired.entity_type', 'relation_process_run')
+                ->where('expired.event_name', 'PaymentDeadlineExpired')
+                ->where('expired.result', 'SUCCESS');
+        })
             ->latest()
             ->value('entity_id');
+        $runId ??= $processRunId === null ? (clone $forcedCutoffs)->latest()->value('entity_id') : $processRunId;
 
         if ($runId === null) {
             throw new RuntimeException('FORCED_CUTOFF_NOT_FOUND');
@@ -257,7 +275,7 @@ final class ServicioFinPeriodoPagoManual
         return CarbonImmutable::parse($cutoffAt, config('app.timezone'))->utc();
     }
 
-    private function sucursalesSinArchivoFinal($relations, CarbonImmutable $importsSince): array
+    private function sucursalesSinArchivoFinal($relations, string $processRunId, CarbonImmutable $importsSince): array
     {
         if ($relations->isEmpty()) {
             return [];
@@ -267,7 +285,13 @@ final class ServicioFinPeriodoPagoManual
         $withFile = DB::table('bank_file_imports')
             ->whereIn('branch_id', $branchIds)
             ->where('status', 'PROCESSED')
-            ->where('created_at', '>=', $importsSince->setTimezone(config('app.timezone')))
+            ->where(function ($query) use ($processRunId, $importsSince): void {
+                $query->where('process_run_id', $processRunId)
+                    ->orWhere(function ($legacy) use ($importsSince): void {
+                        $legacy->whereNull('process_run_id')
+                            ->where('created_at', '>=', $importsSince->setTimezone(config('app.timezone')));
+                    });
+            })
             ->where('created_at', '<=', CarbonImmutable::now(config('app.timezone')))
             ->pluck('branch_id')
             ->unique();

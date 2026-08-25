@@ -7,18 +7,29 @@ use App\Models\AlertaRiesgoDistribuidora;
 use App\Models\BloqueoOperativoDistribuidora;
 use App\Models\CoordinatorDistributorAssignment;
 use App\Models\Distribuidora;
+use App\Models\RelacionDistribuidora;
 use App\Models\SolicitudRetiroMorosidad;
 use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use Illuminate\Http\Request;
 
 final class RiesgoDistribuidoraController extends Controller
 {
-    public function me(Request $request)
+    public function me(Request $request, ServicioMorosidadDistribuidora $service)
     {
         abort_unless($request->user()->hasPermissionTo('risk.view_own') && $request->user()->distribuidora, 403);
         $block = BloqueoOperativoDistribuidora::query()->where('distributor_id', $request->user()->distribuidora->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->first();
 
-        return response()->json(['data' => ['blocked' => (bool) $block, 'reason' => $block?->reason, 'can_pay' => true, 'can_clarify' => true]]);
+        $removal = $service->estadoRetiro($request->user()->distribuidora);
+
+        return response()->json(['data' => [
+            'blocked' => (bool) $block,
+            'reason' => $block?->reason,
+            'can_pay' => true,
+            'can_clarify' => true,
+            'can_request_removal' => $block !== null && $removal['regularized_relation'] !== null && $removal['pending_request'] === null,
+            'has_pending_removal_request' => $removal['pending_request'] !== null,
+            'regularized_relation_id' => $removal['regularized_relation']?->id,
+        ]]);
     }
 
     public function alerts(Request $r)
@@ -36,7 +47,17 @@ final class RiesgoDistribuidoraController extends Controller
             }
         }
 
-        return response()->json(['data' => $q->get()]);
+        $alerts = $q->get();
+        $pendingRequests = SolicitudRetiroMorosidad::query()
+            ->whereIn('distributor_id', $alerts->pluck('distributor_id'))
+            ->where('status', 'REQUESTED')
+            ->with(['solicitante', 'distribuidora.usuario', 'distribuidora.sucursal'])
+            ->latest()
+            ->get()
+            ->keyBy('distributor_id');
+        $alerts->each(fn (AlertaRiesgoDistribuidora $alert) => $alert->setAttribute('pending_removal_request', $pendingRequests->get($alert->distributor_id)));
+
+        return response()->json(['data' => $alerts]);
     }
 
     public function decide(AlertaRiesgoDistribuidora $alerta, Request $r, ServicioMorosidadDistribuidora $s)
@@ -52,6 +73,13 @@ final class RiesgoDistribuidoraController extends Controller
         $d = $r->validate(['reason' => ['required', 'string', 'max:1000']]);
 
         return response()->json(['data' => $s->solicitarRetiro($distribuidora, $r->user(), $d['reason'])], 201);
+    }
+
+    public function removeDirectly(Distribuidora $distribuidora, Request $request, ServicioMorosidadDistribuidora $service)
+    {
+        $validated = $request->validate(['reason' => ['required', 'string', 'max:1000']]);
+
+        return response()->json(['data' => $service->retirarDirectamente($distribuidora, $request->user(), $validated['reason'])]);
     }
 
     public function removals(Request $r)
@@ -90,7 +118,7 @@ final class RiesgoDistribuidoraController extends Controller
         }
 
         $blocks = $q->get()->map(function (BloqueoOperativoDistribuidora $block) {
-            $overdueRelations = \App\Models\RelacionDistribuidora::where('distributor_id', $block->distributor_id)
+            $overdueRelations = RelacionDistribuidora::where('distributor_id', $block->distributor_id)
                 ->where('payment_deadline_at', '<', now())
                 ->where('balance', '>', 0)
                 ->get();

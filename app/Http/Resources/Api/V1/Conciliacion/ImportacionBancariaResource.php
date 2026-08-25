@@ -18,6 +18,7 @@ final class ImportacionBancariaResource extends JsonResource
             'error_code' => $this->error,
             'uploaded_by' => $this->uploaded_by,
             'branch_id' => $this->branch_id,
+            'process_run_id' => $this->process_run_id,
             'replayed' => (bool) ($this->replayed ?? false),
             'processed_at' => $this->processed_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),

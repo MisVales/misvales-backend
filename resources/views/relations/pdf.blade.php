@@ -54,8 +54,8 @@
             <p><strong>Pago anticipado:</strong> {{ $relation->advance_period_start->format('d/m/Y') }} al {{ $relation->advance_period_end->format('d/m/Y') }}</p>
         </div>
         <div class="right">
-            <span class="label">Total a pagar</span><br>
-            <span class="amount">${{ number_format((float) $totals['total'], 2) }}</span><br>
+            <span class="label">Total neto a pagar a MisVales</span><br>
+            <span class="amount">${{ number_format((float) $totals['net_payment'], 2) }}</span><br>
             <span class="label">Saldo pendiente: ${{ number_format((float) $relation->balance, 2) }}</span>
         </div>
     </section>
@@ -67,10 +67,10 @@
                 <th class="product">Producto</th>
                 <th class="client">Cliente</th>
                 <th class="payments">Pagos realizados</th>
-                <th class="money">Comisión</th>
-                <th class="money">Pago</th>
+                <th class="money">Ganancia distribuidora</th>
+                <th class="money">Cobro al cliente</th>
                 <th class="money">Recargos</th>
-                <th class="money">Total</th>
+                <th class="money">Neto a MisVales</th>
             </tr>
         </thead>
         <tbody>
@@ -80,10 +80,10 @@
                     <td class="product">{{ $row['product'] }}</td>
                     <td class="client">{{ $row['client'] }}</td>
                     <td class="payments">{{ $row['payments_made'] }}</td>
-                    <td class="money">${{ number_format((float) $row['commission'], 2) }}</td>
-                    <td class="money">${{ number_format((float) $row['payment'], 2) }}</td>
+                    <td class="money">${{ number_format((float) $row['distributor_profit'], 2) }}</td>
+                    <td class="money">${{ number_format((float) $row['client_payment'], 2) }}</td>
                     <td class="money">${{ number_format((float) $row['surcharge'], 2) }}</td>
-                    <td class="money">${{ number_format((float) $row['total'], 2) }}</td>
+                    <td class="money">${{ number_format((float) $row['net_payment'], 2) }}</td>
                 </tr>
             @empty
                 <tr><td colspan="8">Esta relación no contiene partidas.</td></tr>
@@ -92,10 +92,10 @@
         <tfoot>
             <tr>
                 <td colspan="4" style="text-align:right">Totales</td>
-                <td class="money">${{ number_format((float) $totals['commission'], 2) }}</td>
-                <td class="money">${{ number_format((float) $totals['payment'], 2) }}</td>
+                <td class="money">${{ number_format((float) $totals['distributor_profit'], 2) }}</td>
+                <td class="money">${{ number_format((float) $totals['client_payment'], 2) }}</td>
                 <td class="money">${{ number_format((float) $totals['surcharge'], 2) }}</td>
-                <td class="money">${{ number_format((float) $totals['total'], 2) }}</td>
+                <td class="money">${{ number_format((float) $totals['net_payment'], 2) }}</td>
             </tr>
         </tfoot>
     </table>

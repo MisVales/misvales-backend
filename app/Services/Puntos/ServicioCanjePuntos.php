@@ -6,6 +6,7 @@ use App\Models\Distribuidora;
 use App\Models\PointAccount;
 use App\Models\PointMovement;
 use App\Models\PointRedemptionRequest;
+use App\Models\RelacionDistribuidora;
 use App\Models\User;
 use App\Services\ConfiguracionServicio;
 use Illuminate\Support\Facades\DB;
@@ -232,7 +233,7 @@ final class ServicioCanjePuntos
 
     public function acreditarPuntos(Distribuidora $distribuidora, int $points, string $motivo, ?User $actor = null): PointAccount
     {
-        return DB::transaction(function () use ($distribuidora, $points, $motivo, $actor): PointAccount {
+        return DB::transaction(function () use ($distribuidora, $points, $actor): PointAccount {
             $account = PointAccount::firstOrCreate(
                 ['distributor_id' => $distribuidora->id],
                 ['balance' => 0, 'reserved' => 0, 'lock_version' => 0]
@@ -263,5 +264,64 @@ final class ServicioCanjePuntos
 
             return $account->fresh();
         });
+    }
+
+    public function acreditarLiquidacionAnticipada(RelacionDistribuidora $relacion): ?PointAccount
+    {
+        if ($relacion->temporal_classification !== 'EARLY') {
+            return null;
+        }
+
+        $capital = (string) $relacion->pagos()->sum('capital_applied');
+        $divisor = $this->valorConfiguracionDecimal('POINTS_DIVISOR_AMOUNT', '1200.0000');
+        $multiplicador = (int) $this->valorConfiguracionDecimal('POINTS_MULTIPLIER', '3');
+        $puntos = (int) bcdiv($capital, $divisor, 0) * $multiplicador;
+
+        if ($puntos <= 0) {
+            return null;
+        }
+
+        $account = $this->obtenerOCrearCuenta($relacion->distribuidora);
+        $account = PointAccount::whereKey($account->id)->lockForUpdate()->firstOrFail();
+
+        if (PointMovement::query()
+            ->where('source_type', 'EARLY_RELATION_SETTLEMENT')
+            ->where('source_id', $relacion->id)
+            ->exists()) {
+            return $account;
+        }
+
+        $balanceBefore = $account->balance;
+        $account->balance += $puntos;
+        $account->lock_version++;
+        $account->save();
+
+        PointMovement::query()->create([
+            'point_account_id' => $account->id,
+            'distributor_id' => $relacion->distributor_id,
+            'type' => 'ACCREDIT',
+            'points' => $puntos,
+            'point_value_snapshot' => $this->obtenerValorPuntoVigente(),
+            'amount' => $capital,
+            'balance_before' => $balanceBefore,
+            'balance_after' => $account->balance,
+            'source_type' => 'EARLY_RELATION_SETTLEMENT',
+            'source_id' => $relacion->id,
+            'performed_by' => null,
+            'created_at' => now(),
+        ]);
+
+        return $account->fresh();
+    }
+
+    private function valorConfiguracionDecimal(string $key, string $fallback): string
+    {
+        try {
+            $value = $this->configuracionServicio?->resolver($key)['value'] ?? $fallback;
+
+            return bcadd((string) $value, '0', 4);
+        } catch (\Throwable) {
+            return $fallback;
+        }
     }
 }

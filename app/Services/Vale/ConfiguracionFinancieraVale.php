@@ -25,6 +25,16 @@ final class ConfiguracionFinancieraVale
             'type' => 'DECIMAL',
             'label' => 'seguro del vale',
         ],
+        'minimum_installment_count' => [
+            'key' => 'VOUCHER_MIN_FORTNIGHTS_COUNT',
+            'type' => 'INTEGER',
+            'label' => 'mínimo de quincenas por vale',
+        ],
+        'maximum_installment_count' => [
+            'key' => 'VOUCHER_MAX_FORTNIGHTS_COUNT',
+            'type' => 'INTEGER',
+            'label' => 'máximo de quincenas por vale',
+        ],
         'late_fee_amount' => [
             'key' => 'LATE_FEE_AMOUNT',
             'type' => 'DECIMAL',
@@ -36,7 +46,7 @@ final class ConfiguracionFinancieraVale
 
     /**
      * @return array{
-     *     values: array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, late_fee_amount: string},
+     *     values: array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, minimum_installment_count: int, maximum_installment_count: int, late_fee_amount: string},
      *     versions: array<string, array{version_id: string, version: int, value: mixed}>
      * }
      */
@@ -55,6 +65,7 @@ final class ConfiguracionFinancieraVale
                 }
 
                 $faltantes[] = $definicion['label'];
+
                 continue;
             }
 
@@ -92,7 +103,15 @@ final class ConfiguracionFinancieraVale
             );
         }
 
-        /** @var array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, late_fee_amount: string} $values */
+        if ($values['minimum_installment_count'] > $values['maximum_installment_count']) {
+            throw new ExcepcionVale(
+                'VOUCHER_FINANCIAL_CONFIGURATION_INVALID',
+                'El mínimo de quincenas no puede ser mayor que el máximo.',
+                409,
+            );
+        }
+
+        /** @var array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, minimum_installment_count: int, maximum_installment_count: int, late_fee_amount: string} $values */
         return ['values' => $values, 'versions' => $versions];
     }
 
@@ -103,6 +122,7 @@ final class ConfiguracionFinancieraVale
         return match ($campo) {
             'loan_commission_percentage', 'simple_interest_percentage' => $this->porcentaje($texto),
             'insurance_amount', 'late_fee_amount' => $this->monto($texto),
+            'minimum_installment_count', 'maximum_installment_count' => $this->enteroPositivo($texto),
             default => throw new \InvalidArgumentException('Campo financiero no reconocido.'),
         };
     }
@@ -125,4 +145,12 @@ final class ConfiguracionFinancieraVale
         return bcadd($valor, '0', 4);
     }
 
+    private function enteroPositivo(string $valor): int
+    {
+        if (filter_var($valor, FILTER_VALIDATE_INT) === false || (int) $valor < 1) {
+            throw new \InvalidArgumentException('Número de quincenas inválido.');
+        }
+
+        return (int) $valor;
+    }
 }

@@ -6,8 +6,10 @@ use App\Exceptions\ExcepcionExcedente;
 use App\Models\AplicacionExcedente;
 use App\Models\ExcedenteDistribuidora;
 use App\Models\MediaFileBinding;
+use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
 use App\Models\SolicitudDevolucionExcedente;
+use App\Models\TransferenciaBancariaSimulada;
 use App\Models\User;
 use App\Services\Pago\ServicioAplicacionPago;
 use Carbon\CarbonImmutable;
@@ -176,62 +178,98 @@ final class ServicioExcedente
         }, 3);
     }
 
-    public function aplicarDisponibles(RelacionDistribuidora $relation): void
+    public function programarDisponibles(RelacionDistribuidora $relation, User $actor): ?TransferenciaBancariaSimulada
     {
-        $ids = ExcedenteDistribuidora::query()
+        $available = (string) ExcedenteDistribuidora::query()
             ->where('distributor_id', $relation->distributor_id)
             ->whereIn('status', ['CREDIT_BALANCE', 'PARTIALLY_APPLIED'])
             ->where('available_amount', '>', 0)
-            ->oldest()
-            ->pluck('id');
+            ->sum('available_amount');
+        $amount = bccomp($available, $relation->balance, 4) > 0 ? (string) $relation->balance : $available;
+        if (bccomp($amount, '0', 4) <= 0) {
+            return null;
+        }
 
-        foreach ($ids as $id) {
-            DB::transaction(function () use ($id, $relation): void {
-                $surplus = ExcedenteDistribuidora::query()->whereKey($id)->lockForUpdate()->firstOrFail();
-                $lockedRelation = RelacionDistribuidora::query()->whereKey($relation->id)->lockForUpdate()->firstOrFail();
-                if (! in_array($surplus->status, ['CREDIT_BALANCE', 'PARTIALLY_APPLIED'], true)
-                    || bccomp($surplus->available_amount, '0', 4) <= 0
-                    || bccomp($lockedRelation->balance, '0', 4) <= 0) {
-                    return;
+        return TransferenciaBancariaSimulada::query()->firstOrCreate(
+            ['bank_folio' => 'SALDO-FAVOR-'.$relation->id],
+            [
+                'branch_id' => $relation->branch_id,
+                'relation_id' => $relation->id,
+                'created_by' => $actor->id,
+                'concept' => 'Aplicación de saldo a favor',
+                'payment_reference' => $relation->payment_reference,
+                'amount' => $amount,
+                'paid_at' => now(),
+                'payment_type' => 'CREDIT_BALANCE',
+            ],
+        );
+    }
+
+    public function aplicarDisponibles(RelacionDistribuidora $relation): ?PagoRelacion
+    {
+        return DB::transaction(function () use ($relation): ?PagoRelacion {
+            $lockedRelation = RelacionDistribuidora::query()->whereKey($relation->id)->lockForUpdate()->firstOrFail();
+            if (bccomp($lockedRelation->balance, '0', 4) <= 0) {
+                return null;
+            }
+
+            $surpluses = ExcedenteDistribuidora::query()
+                ->where('distributor_id', $lockedRelation->distributor_id)
+                ->whereIn('status', ['CREDIT_BALANCE', 'PARTIALLY_APPLIED'])
+                ->where('available_amount', '>', 0)
+                ->oldest()
+                ->lockForUpdate()
+                ->get();
+            if ($surpluses->isEmpty()) {
+                return null;
+            }
+
+            $remaining = (string) $lockedRelation->balance;
+            $contributions = [];
+            foreach ($surpluses as $surplus) {
+                if (bccomp($remaining, '0', 4) <= 0) {
+                    break;
                 }
+                $amount = bccomp($surplus->available_amount, $remaining, 4) > 0 ? $remaining : $surplus->available_amount;
+                $contributions[] = [$surplus, $amount, (string) $surplus->available_amount, bcsub($surplus->available_amount, $amount, 4)];
+                $remaining = bcsub($remaining, $amount, 4);
+            }
 
-                $amount = bccomp($surplus->available_amount, $lockedRelation->balance, 4) > 0 ? $lockedRelation->balance : $surplus->available_amount;
-                $before = $surplus->available_amount;
-                $after = bcsub($before, $amount, 4);
+            $total = array_reduce($contributions, fn (string $carry, array $item): string => bcadd($carry, $item[1], 4), '0.0000');
+            if (bccomp($total, '0', 4) <= 0) {
+                return null;
+            }
+
+            $payment = $this->payments->aplicarSaldoFavor($total, now()->toImmutable(), $lockedRelation, $lockedRelation->id);
+            foreach ($contributions as [$surplus, $amount, $before, $after]) {
                 $idempotencyKey = 'surplus:'.$surplus->id.':relation:'.$lockedRelation->id;
-                $application = AplicacionExcedente::query()->firstOrCreate(
-                    ['idempotency_key' => $idempotencyKey],
-                    [
-                        'surplus_id' => $surplus->id,
-                        'relation_id' => $lockedRelation->id,
-                        'amount' => $amount,
-                        'balance_before' => $before,
-                        'balance_after' => $after,
-                        'process' => 'RELATION_GENERATION',
-                        'applied_at' => now(),
-                    ],
-                );
-                if (! $application->wasRecentlyCreated) {
-                    return;
-                }
-
-                $payment = $this->payments->aplicarSaldoFavor($amount, now()->toImmutable(), $lockedRelation, $application->id);
-                $application->update(['payment_id' => $payment->id]);
-                $surplus->update(['available_amount' => $after, 'status' => bccomp($after, '0', 4) === 0 ? 'CONSUMED' : 'PARTIALLY_APPLIED']);
-                $this->auditor->registrar('EXCESS_APPLIED', 'surplus_application', $application->id, null, $surplus->branch_id, $this->payload($surplus, [
-                    'application_id' => $application->id,
-                    'destination_relation_id' => $lockedRelation->id,
+                $application = AplicacionExcedente::query()->create([
+                    'surplus_id' => $surplus->id,
+                    'relation_id' => $lockedRelation->id,
                     'payment_id' => $payment->id,
                     'amount' => $amount,
                     'balance_before' => $before,
                     'balance_after' => $after,
                     'process' => 'RELATION_GENERATION',
                     'idempotency_key' => $idempotencyKey,
-                    'capital_applied' => $payment->capital_applied,
-                    'line_recovered' => $payment->line_recovered,
+                    'applied_at' => now(),
+                ]);
+                $surplus->update(['available_amount' => $after, 'status' => bccomp($after, '0', 4) === 0 ? 'CONSUMED' : 'PARTIALLY_APPLIED']);
+                $this->auditor->registrar('EXCESS_APPLIED', 'surplus_application', $application->id, null, $surplus->branch_id, $this->payload($surplus, [
+                    'application_id' => $application->id,
+                    'destination_relation_id' => $lockedRelation->id,
+                    'payment_id' => $payment->id,
+                    'amount' => $amount,
+                    'aggregate_payment_amount' => $total,
+                    'balance_before' => $before,
+                    'balance_after' => $after,
+                    'process' => 'RELATION_GENERATION',
+                    'idempotency_key' => $idempotencyKey,
                 ]), ['available_amount' => $before]);
-            }, 3);
-        }
+            }
+
+            return $payment;
+        }, 3);
     }
 
     private function assertOwner(ExcedenteDistribuidora $surplus, User $actor): void

@@ -65,8 +65,8 @@ final class GeneracionValeApiTest extends TestCase
         $response->assertSuccessful()->assertJsonPath('data.type', 'PREVALE')->assertJsonPath('data.status', 'GENERATED')
             ->assertJsonPath('data.capital', '10000.0000')->assertJsonPath('data.misvales_total', '12300.0000')
             ->assertJsonPath('data.distributor_profit_total', '500.0000')
-            ->assertJsonPath('data.client_total', '12300.0000')
-            ->assertJsonPath('data.client_payment_per_fortnight', '3075.0000')
+            ->assertJsonPath('data.client_total', '12800.0000')
+            ->assertJsonPath('data.client_payment_per_fortnight', '3200.0000')
             ->assertJsonCount(4, 'data.installments');
         $this->assertMatchesRegularExpression('/^VAL-\d{4}-\d{8}$/', $response->json('data.folio'));
         $this->assertDatabaseCount('vouchers', 1);
@@ -77,14 +77,63 @@ final class GeneracionValeApiTest extends TestCase
 
     public function test_segundo_vale_de_la_distribuidora_es_digital_y_folios_no_se_reutilizan(): void
     {
-        $primero = $this->crear()->json('data.folio');
+        $primeraRespuesta = $this->crear();
+        $primero = $primeraRespuesta->json('data.folio');
+        $this->feriar($primeraRespuesta->json('data.id'));
         $segundo = $this->crear()->assertJsonPath('data.type', 'VALE_DIGITAL')->json('data.folio');
         $this->assertNotSame($primero, $segundo);
     }
 
+    public function test_no_permite_otro_vale_hasta_feriar_el_prevale_y_solo_puede_cancelarse_antes_de_feriar(): void
+    {
+        $primero = $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
+
+        $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'PENDING_PREVOUCHER_MUST_BE_CASHED');
+        $this->postJson('/api/v1/vouchers/preview', [
+            'client_id' => $this->cliente->id,
+            'product_version_id' => $this->producto->id,
+            'installment_count' => 4,
+        ])->assertStatus(409)->assertJsonPath('error.code', 'PENDING_PREVOUCHER_MUST_BE_CASHED');
+
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/vouchers/'.$primero->json('data.id').'/cancel')
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'CANCELLED');
+        $this->assertDatabaseHas('vouchers', ['id' => $primero->json('data.id'), 'status' => 'CANCELLED']);
+
+        $reemplazo = $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
+        $this->feriar($reemplazo->json('data.id'));
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/vouchers/'.$reemplazo->json('data.id').'/cancel')
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'VOUCHER_CANCELLATION_NOT_ALLOWED');
+    }
+
+    public function test_rechaza_quincenas_fuera_del_rango_global_en_previsualizacion_y_generacion(): void
+    {
+        $payload = ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id];
+
+        $this->postJson('/api/v1/vouchers/preview', $payload + ['installment_count' => 1])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE')
+            ->assertJsonPath('error.details.minimum_installment_count', 2)
+            ->assertJsonPath('error.details.maximum_installment_count', 16);
+
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/vouchers', $payload + ['installment_count' => 17])
+            ->assertStatus(422)
+            ->assertJsonPath('error.code', 'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE');
+
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/vouchers', $payload + ['installment_count' => 16])
+            ->assertSuccessful()
+            ->assertJsonCount(16, 'data.installments');
+    }
+
     public function test_primer_vale_de_otro_cliente_de_la_distribuidora_es_digital(): void
     {
-        $this->crear()->assertJsonPath('data.type', 'PREVALE');
+        $primero = $this->crear()->assertJsonPath('data.type', 'PREVALE');
+        $this->feriar($primero->json('data.id'));
         $otroCliente = Cliente::factory()->create(['created_by' => $this->actor->id]);
         AsignacionClienteDistribuidora::query()->create([
             'client_id' => $otroCliente->id,
@@ -122,7 +171,12 @@ final class GeneracionValeApiTest extends TestCase
 
     public function test_secuencia_mariadb_reserva_folios_no_reutilizables(): void
     {
-        $valores = collect(range(1, 20))->map(fn (): string => $this->crear()->assertSuccessful()->json('data.folio'));
+        $valores = collect(range(1, 20))->map(function (): string {
+            $response = $this->crear()->assertSuccessful();
+            $this->feriar($response->json('data.id'));
+
+            return $response->json('data.folio');
+        });
         $this->assertCount(20, $valores->unique());
         $this->assertDatabaseCount('vouchers', 20);
     }
@@ -152,6 +206,57 @@ final class GeneracionValeApiTest extends TestCase
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'CREDIT_50_PERCENT_RULE_NOT_SATISFIED');
     }
 
+    public function test_vale_del_cincuenta_reserva_la_restriccion_hasta_feriarse_o_cancelarse(): void
+    {
+        $prevale = $this->crear()->assertSuccessful();
+        $this->feriar($prevale->json('data.id'));
+        $definition = ConfigurationDefinition::query()->create([
+            'key' => 'CREDIT_TOLERANCE_AMOUNT',
+            'name' => 'Tolerancia',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $this->actor->id,
+        ]);
+        $version = ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definition->id,
+            'version' => 1,
+            'value' => '500.0000',
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba',
+            'created_by' => $this->actor->id,
+            'published_by' => $this->actor->id,
+            'published_at' => now(),
+        ]);
+        $line = LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->firstOrFail();
+        $restriction = RestriccionUsoCredito::factory()->create([
+            'credit_line_id' => $line->id,
+            'distributor_id' => $this->distribuidora->id,
+            'status' => 'ACTIVE',
+            'base_total' => '20000.0000',
+            'tolerance_amount' => '500.0000',
+            'configuration_version_id' => $version->id,
+            'source_id' => (string) Str::uuid(),
+        ]);
+
+        $restrictedVoucher = $this->crear()->assertSuccessful();
+        $this->assertDatabaseHas('credit_usage_restrictions', [
+            'id' => $restriction->id,
+            'status' => 'RESERVED',
+            'reserved_voucher_id' => $restrictedVoucher->json('data.id'),
+        ]);
+        $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'PENDING_RESTRICTED_VOUCHER_MUST_BE_CASHED');
+
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())
+            ->postJson('/api/v1/vouchers/'.$restrictedVoucher->json('data.id').'/cancel')
+            ->assertSuccessful();
+        $this->assertDatabaseHas('credit_usage_restrictions', [
+            'id' => $restriction->id,
+            'status' => 'ACTIVE',
+            'reserved_voucher_id' => null,
+        ]);
+    }
+
     public function test_snapshot_no_cambia_cuando_cambia_el_catalogo(): void
     {
         $id = $this->crear()->json('data.id');
@@ -159,6 +264,34 @@ final class GeneracionValeApiTest extends TestCase
         $vale = Vale::query()->findOrFail($id);
         $this->assertSame('Vale 10000', $vale->financial_snapshot['product_version']['name']);
         $this->assertSame('0.100000', $vale->financial_snapshot['calculation']['loan_commission_percentage']);
+    }
+
+    public function test_cambio_de_categoria_solo_aplica_a_vales_nuevos(): void
+    {
+        $primerValeId = $this->crear()->json('data.id');
+        $this->feriar($primerValeId);
+        $asignacionAnterior = AsignacionCategoriaDistribuidora::query()
+            ->where('distributor_id', $this->distribuidora->id)
+            ->whereNull('ends_at')
+            ->firstOrFail();
+        $asignacionAnterior->update(['ends_at' => now()->subSecond()]);
+
+        $categoriaNueva = Category::query()->create(['code' => 'CAT-NUEVA', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
+        $versionNueva = CategoryVersion::query()->create(['category_id' => $categoriaNueva->id, 'version' => 1, 'name' => 'Avanzada', 'profit_percentage' => '0.080000', 'status' => 'PUBLISHED', 'effective_from' => now()->subMinute(), 'reason' => 'Ascenso de prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
+        AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $this->distribuidora->id, 'category_version_id' => $versionNueva->id, 'starts_at' => now(), 'assigned_by' => $this->actor->id, 'reason' => 'Ascenso de prueba']);
+
+        $segundoValeId = $this->crear()->json('data.id');
+        $primerVale = Vale::query()->findOrFail($primerValeId);
+        $segundoVale = Vale::query()->findOrFail($segundoValeId);
+
+        $this->assertSame('0.050000', $primerVale->distributor_profit_percentage);
+        $this->assertSame('500.0000', $primerVale->distributor_profit_total);
+        $this->assertSame('12800.0000', $primerVale->client_total);
+        $this->assertNotSame($versionNueva->id, $primerVale->category_version_id);
+        $this->assertSame('0.080000', $segundoVale->distributor_profit_percentage);
+        $this->assertSame('800.0000', $segundoVale->distributor_profit_total);
+        $this->assertSame('13100.0000', $segundoVale->client_total);
+        $this->assertSame($versionNueva->id, $segundoVale->category_version_id);
     }
 
     public function test_busqueda_para_vale_solo_devuelve_clientes_de_la_distribuidora_activa(): void
@@ -199,12 +332,19 @@ final class GeneracionValeApiTest extends TestCase
         return $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => ($cliente ?? $this->cliente)->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200]);
     }
 
+    private function feriar(string $voucherId): void
+    {
+        Vale::query()->whereKey($voucherId)->update(['status' => 'CASHED', 'cashed_at' => now()]);
+    }
+
     private function publicarConfiguracionFinanciera(): void
     {
         $valores = [
             'LOAN_COMMISSION_PERCENTAGE' => ['PERCENTAGE', '0.1000'],
             'INTEREST_RATE_PER_FORTNIGHT' => ['PERCENTAGE', '0.0300'],
             'VOUCHER_INSURANCE_AMOUNT' => ['DECIMAL', '100.0000'],
+            'VOUCHER_MIN_FORTNIGHTS_COUNT' => ['INTEGER', 2],
+            'VOUCHER_MAX_FORTNIGHTS_COUNT' => ['INTEGER', 16],
             'LATE_FEE_AMOUNT' => ['DECIMAL', '200.0000'],
         ];
 

@@ -8,6 +8,7 @@ use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\AclaracionPago;
 use App\Models\AlertaRiesgoDistribuidora;
+use App\Models\AplicacionExcedente;
 use App\Models\AsignacionCategoriaDistribuidora;
 use App\Models\AsignacionClienteDistribuidora;
 use App\Models\AuditLog;
@@ -26,6 +27,7 @@ use App\Models\LineaCredito;
 use App\Models\MediaFile;
 use App\Models\MediaFileBinding;
 use App\Models\MovimientoBancario;
+use App\Models\PagoRelacion;
 use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\RelacionDistribuidora;
@@ -36,8 +38,10 @@ use App\Models\SolicitudModificacionVale;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
+use App\Notifications\NotificacionEventoDominio;
 use App\Services\Cliente\ProtectorDatosCliente;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
+use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Pago\ServicioAplicacionPago;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
@@ -51,6 +55,7 @@ use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
@@ -412,6 +417,8 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseCount('distributor_relations', 1);
         $this->assertDatabaseCount('distributor_relation_items', 2);
         $relation = RelacionDistribuidora::query()->firstOrFail();
+        $this->assertSame('6200.0000', $relation->portfolio_total);
+        $this->assertSame('5950.0000', $relation->misvales_total);
         $this->assertSame('5950.0000', $relation->balance);
         $this->assertSame('CONV-TEST', $relation->bank_snapshot['agreement']);
         $this->assertArrayNotHasKey('EARLY_PAYMENT_PERIOD', $relation->header_snapshot['configuration_versions']);
@@ -421,7 +428,15 @@ final class CajaValeApiTest extends TestCase
             $relation->payment_deadline_at->setTimezone('America/Monterrey')->subDay()->endOfDay()->utc()->toIso8601String(),
             $relation->advance_period_end->utc()->toIso8601String(),
         );
-        $this->assertSame('VAL-2026-99999999', $relation->partidas()->firstOrFail()->snapshot['folio']);
+        $snapshot = $relation->partidas()->firstOrFail()->snapshot;
+        $this->assertSame('VAL-2026-99999999', $snapshot['folio']);
+        $this->assertSame('125.0000', $snapshot['distributor_profit']);
+        $this->assertSame('0.050000', $snapshot['distributor_profit_percentage']);
+        $this->assertSame($this->voucher->category_version_id, $snapshot['category_version_id']);
+        $riskAlert = AlertaRiesgoDistribuidora::create(['distributor_id' => $relation->distributor_id, 'branch_id' => $relation->branch_id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'consecutive_defaults' => 3, 'relation_ids' => [$relation->id], 'overdue_balance' => $relation->balance]);
+        $this->assertSame('6200.0000', $riskAlert->relation_details[0]['portfolio_total']);
+        $this->assertSame('250.0000', $riskAlert->relation_details[0]['distributor_profit_total']);
+        $this->assertSame('5950.0000', $riskAlert->relation_details[0]['misvales_total']);
         $this->assertDatabaseCount('relation_process_runs', 2);
     }
 
@@ -455,6 +470,16 @@ final class CajaValeApiTest extends TestCase
             ->assertJsonPath('data.payment_period.summary.distributors', 1)
             ->assertJsonPath('data.payment_period.summary.operations', 1)
             ->assertJsonPath('data.payment_period.summary.total', 3100);
+
+        $runsBeforeRetry = DB::table('relation_process_runs')->count();
+        $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'No debe saltar el vencimiento'])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Antes de cerrar un nuevo corte, primero vence la fecha límite del periodo actual.');
+        $this->assertSame($runsBeforeRetry, DB::table('relation_process_runs')->count());
+        $this->getJson('/api/v1/operations/current-cutoff')
+            ->assertSuccessful()
+            ->assertJsonPath('data.payment_period.process_run_id', $response->json('data.process_run_id'))
+            ->assertJsonPath('data.payment_period.status', 'OPEN');
     }
 
     public function test_corte_repara_calendario_faltante_de_un_vale_ya_cobrado(): void
@@ -488,6 +513,40 @@ final class CajaValeApiTest extends TestCase
         );
         $this->assertDatabaseCount('distributor_relations', 1);
         $this->assertDatabaseCount('distributor_relation_items', 1);
+    }
+
+    public function test_no_permite_nuevo_corte_hasta_procesar_conciliacion_anterior(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-29 12:00:00', 'America/Monterrey'));
+        $this->voucher->update(['status' => 'CASHED', 'cashed_at' => now()]);
+        $this->voucher->parcialidades()->create([
+            'number' => 1,
+            'capital' => '100.0000',
+            'loan_commission' => '10.0000',
+            'interest' => '5.0000',
+            'insurance' => '1.0000',
+            'distributor_profit' => '4.0000',
+            'misvales_payment' => '116.0000',
+            'client_payment' => '120.0000',
+            'due_at' => CarbonImmutable::parse('2026-09-25 00:04:00', 'America/Monterrey'),
+        ]);
+        Sanctum::actingAs($this->user('general_manager'));
+        $runId = $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Primer corte'])
+            ->assertSuccessful()
+            ->json('data.process_run_id');
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $runId,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+
+        $runsBefore = DB::table('relation_process_runs')->count();
+        $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Debe bloquearse'])
+            ->assertStatus(409)
+            ->assertJsonPath('message', 'Antes de cerrar un nuevo corte, Caja debe subir y procesar la conciliación bancaria del periodo anterior.');
+        $this->assertSame($runsBefore, DB::table('relation_process_runs')->count());
     }
 
     public function test_relacion_incluye_una_parcialidad_segun_fecha_limite(): void
@@ -613,6 +672,7 @@ final class CajaValeApiTest extends TestCase
         $service = app(ServicioGeneracionRelacion::class);
         $service->generar($this->corteSeptiembre());
         $primera = RelacionDistribuidora::query()->firstOrFail();
+        $this->marcarCorteComoConciliado($primera);
         $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
         $segunda = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
 
@@ -695,11 +755,71 @@ final class CajaValeApiTest extends TestCase
         $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
         $service = app(ServicioGeneracionRelacion::class);
         $service->generar($this->corteSeptiembre());
+        $this->marcarCorteComoConciliado(RelacionDistribuidora::query()->firstOrFail());
         $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
         $relations = RelacionDistribuidora::query()->orderBy('cutoff_at')->get();
 
         $this->assertSame([1, 2, 3], $this->numerosRelacionados($this->voucher, $relations[0]));
         $this->assertSame([4, 5], $this->numerosRelacionados($this->voucher, $relations[1]));
+    }
+
+    public function test_saldo_pendiente_se_traslada_una_sola_vez_y_la_relacion_anterior_queda_historica(): void
+    {
+        $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+
+        $service->generar($this->corteSeptiembre());
+        $first = RelacionDistribuidora::query()->firstOrFail();
+        $this->assertSame('348.0000', $first->balance);
+
+        $this->marcarCorteComoConciliado($first);
+        $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
+        $first->refresh();
+        $second = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+
+        $this->assertSame('ROLLED_FORWARD', $first->financial_status);
+        $this->assertSame('0.0000', $first->balance);
+        $this->assertSame('348.0000', $first->rolled_forward_amount);
+        $this->assertSame($second->id, $first->rolled_forward_to_id);
+        $this->assertSame('348.0000', $second->carried_balance);
+        $this->assertSame('580.0000', $second->balance);
+
+        $this->marcarCorteComoConciliado($second);
+        $service->generar(CarbonImmutable::parse('2026-11-25 00:05:00', 'America/Monterrey'));
+        $second->refresh();
+        $third = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+
+        $this->assertSame('ROLLED_FORWARD', $second->financial_status);
+        $this->assertSame('580.0000', $second->rolled_forward_amount);
+        $this->assertSame('580.0000', $third->carried_balance);
+        $this->assertSame('812.0000', $third->balance);
+        $this->assertSame(7, RelacionPartidaDistribuidora::query()->count());
+    }
+
+    public function test_pago_con_referencia_historica_se_aplica_a_relacion_vigente_y_primero_al_saldo_trasladado(): void
+    {
+        $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+        $service->generar($this->corteSeptiembre());
+        $historical = RelacionDistribuidora::query()->firstOrFail();
+        $this->marcarCorteComoConciliado($historical);
+        $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
+        $current = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$historical->payment_reference, '100', '2026-10-26 10:00:00', 'BANK-ROLLED-REFERENCE', 'Abono con referencia anterior'],
+        ]), $this->cashier, $this->branch->id);
+
+        $movement = MovimientoBancario::query()->where('bank_folio', 'BANK-ROLLED-REFERENCE')->firstOrFail();
+        $payment = PagoRelacion::query()->where('bank_movement_id', $movement->id)->firstOrFail();
+        $this->assertSame($current->id, $movement->relation_id);
+        $this->assertSame($current->id, $payment->relation_id);
+        $this->assertSame('480.0000', $current->fresh()->balance);
+        $this->assertSame('25.0000', $payment->interest_applied);
+        $this->assertSame('5.0000', $payment->insurance_applied);
+        $this->assertSame('50.0000', $payment->commission_applied);
+        $this->assertSame('20.0000', $payment->capital_applied);
+        $this->assertDatabaseCount('payment_allocations', 6);
     }
 
     public function test_vale_completamente_terminado_deja_de_aportar_parcialidades(): void
@@ -708,6 +828,7 @@ final class CajaValeApiTest extends TestCase
         $service = app(ServicioGeneracionRelacion::class);
 
         $this->assertSame(1, $service->generar($this->corteSeptiembre()));
+        $this->marcarCorteComoConciliado(RelacionDistribuidora::query()->firstOrFail());
         $this->assertSame(0, $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey')));
         $this->assertSame([1, 2, 3], $this->numerosRelacionados($this->voucher));
         $this->assertDatabaseCount('distributor_relations', 1);
@@ -754,6 +875,40 @@ final class CajaValeApiTest extends TestCase
 
         $this->assertSame('SETTLED', $relation->fresh()->financial_status);
         $this->assertSame('ON_TIME', $relation->fresh()->temporal_classification);
+    }
+
+    public function test_liquidacion_anticipada_acredita_puntos_por_capital_nuevo_y_trasladado(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $relation->forceFill([
+            'advance_period_end' => now()->addDay(),
+            'payment_deadline_at' => now()->addDays(2),
+            'carried_balance' => '8415.0000',
+            'carried_interest' => '1000.0000',
+            'carried_insurance' => '300.0000',
+            'carried_commission' => '1035.0000',
+            'carried_capital' => '6080.0000',
+            'portfolio_total' => '11515.0000',
+            'misvales_total' => '11390.0000',
+            'balance' => '11390.0000',
+        ])->save();
+
+        app(ServicioAplicacionPago::class)->aplicarSaldoFavor(
+            '11390.0000',
+            now()->toImmutable(),
+            $relation,
+            (string) Str::uuid(),
+        );
+
+        $this->assertSame('EARLY', $relation->fresh()->temporal_classification);
+        $this->assertDatabaseHas('point_accounts', ['distributor_id' => $relation->distributor_id, 'balance' => 21]);
+        $this->assertDatabaseHas('point_movements', [
+            'distributor_id' => $relation->distributor_id,
+            'source_type' => 'EARLY_RELATION_SETTLEMENT',
+            'source_id' => $relation->id,
+            'points' => 21,
+            'amount' => '8580.0000',
+        ]);
     }
 
     public function test_fin_de_pago_conserva_abonos_clasifica_tres_resultados_y_no_duplica_recargos(): void
@@ -831,6 +986,12 @@ final class CajaValeApiTest extends TestCase
         $relation = RelacionDistribuidora::query()->firstOrFail();
 
         Sanctum::actingAs($this->distributorUser);
+        $this->getJson('/api/v1/relations/'.$relation->id)
+            ->assertSuccessful()
+            ->assertJsonPath('data.portfolio_total', '3100.0000')
+            ->assertJsonPath('data.misvales_total', '2975.0000')
+            ->assertJsonPath('data.partidas.0.snapshot.distributor_profit', '125.0000')
+            ->assertJsonPath('data.partidas.0.snapshot.category_version_id', $this->voucher->category_version_id);
         $this->getJson('/api/v1/relations')->assertSuccessful()->assertJsonPath('data.data.0.payment_reference', $relation->payment_reference);
         $this->get('/api/v1/relations/'.$relation->id.'/download')->assertSuccessful()->assertHeader('content-disposition');
 
@@ -1037,6 +1198,198 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(2, DB::table('relation_payments')->count());
     }
 
+    public function test_saldo_a_favor_programado_entra_como_movimiento_y_se_aplica_hasta_conciliar(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        $sourceImport = ImportacionArchivoBancario::create([
+            'private_path' => 'bank-imports/source.xlsx',
+            'file_hash' => hash('sha256', 'source-credit-balance'),
+            'uploaded_by' => $this->cashier->id,
+            'branch_id' => $this->branch->id,
+            'status' => 'PROCESSED',
+        ]);
+        $sourceMovement = MovimientoBancario::create([
+            'import_id' => $sourceImport->id,
+            'row_number' => 1,
+            'original_row' => [],
+            'payment_reference' => $relation->payment_reference,
+            'amount' => '400.0000',
+            'paid_at' => now(),
+            'bank_folio' => 'BANK-CREDIT-SOURCE-400',
+            'concept' => 'Excedente previo',
+            'classification' => 'SURPLUS',
+            'relation_id' => $relation->id,
+            'distributor_id' => $relation->distributor_id,
+            'surplus_amount' => '400.0000',
+        ]);
+        $surplus = ExcedenteDistribuidora::create([
+            'distributor_id' => $relation->distributor_id,
+            'branch_id' => $relation->branch_id,
+            'origin_relation_id' => $relation->id,
+            'bank_movement_id' => $sourceMovement->id,
+            'original_amount' => '400.0000',
+            'available_amount' => '400.0000',
+            'status' => 'CREDIT_BALANCE',
+        ]);
+
+        $scheduled = app(ServicioExcedente::class)->programarDisponibles($relation, $this->distributorUser);
+
+        $this->assertNotNull($scheduled);
+        $this->assertSame('400.0000', $scheduled->amount);
+        $this->assertSame('CREDIT_BALANCE', $scheduled->payment_type);
+        $this->assertDatabaseMissing('relation_payments', ['relation_id' => $relation->id]);
+        $this->assertSame('2975.0000', $relation->fresh()->balance);
+
+        $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $relation->process_run_id);
+        $file = UploadedFile::fake()->createWithContent('saldo-favor.xlsx', file_get_contents($path));
+        app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id, $relation->process_run_id);
+
+        $this->assertSame('2575.0000', $relation->fresh()->balance);
+        $this->assertSame('CONSUMED', $surplus->fresh()->status);
+        $this->assertDatabaseHas('relation_payments', [
+            'relation_id' => $relation->id,
+            'source_type' => 'CREDIT_BALANCE',
+            'amount' => '400.0000',
+        ]);
+        $this->assertDatabaseHas('bank_movements', [
+            'bank_folio' => $scheduled->bank_folio,
+            'relation_id' => $relation->id,
+            'distributor_id' => $relation->distributor_id,
+            'classification' => 'PARTIAL_PAYMENT',
+            'reconciliation_status' => 'RECONCILED',
+            'applied_amount' => '400.0000',
+        ]);
+    }
+
+    public function test_excel_sin_movimientos_es_valido_para_cerrar_periodo_sin_abonos(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        $this->assertDatabaseCount('simulated_bank_transfers', 0);
+
+        $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $relation->process_run_id);
+        $file = UploadedFile::fake()->createWithContent('sin-movimientos.xlsx', file_get_contents($path));
+        $import = app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id, $relation->process_run_id);
+
+        $this->assertSame('PROCESSED', $import->status);
+        $this->assertSame(0, $import->row_count);
+        $this->assertSame([
+            'partial_payments' => 0,
+            'settlements' => 0,
+            'surpluses' => 0,
+            'unreconciled' => 0,
+            'duplicates' => 0,
+        ], $import->summary);
+        $this->assertDatabaseCount('bank_movements', 0);
+        $this->assertSame('2975.0000', $relation->fresh()->balance);
+    }
+
+    public function test_subir_conciliacion_con_referencia_desconocida_marca_automaticamente_relacion_sin_pago(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        $deadline = now()->subDay()->endOfDay();
+        $relation->update(['payment_deadline_at' => $deadline]);
+        AuditLog::create([
+            'entity_type' => 'operation_cutoff',
+            'event_name' => 'ForzarCorte',
+            'entity_id' => $relation->process_run_id,
+            'actor_id' => $this->cashier->id,
+            'new_value' => [
+                'simulated_cutoff_at' => $relation->cutoff_at->toIso8601String(),
+                'payment_deadline_at' => $deadline->toIso8601String(),
+            ],
+            'result' => 'SUCCESS',
+        ]);
+        foreach (['PaymentDeadlineReached', 'PaymentDeadlineExpired'] as $event) {
+            AuditLog::create([
+                'entity_type' => 'relation_process_run',
+                'event_name' => $event,
+                'entity_id' => $relation->process_run_id,
+                'actor_id' => $this->cashier->id,
+                'new_value' => ['expired_at' => now()->toIso8601String()],
+                'result' => 'SUCCESS',
+            ]);
+        }
+        Sanctum::actingAs($this->cashier);
+
+        $response = $this->withHeader('Idempotency-Key', (string) Str::uuid())->post('/api/v1/bank-imports', [
+            'file' => $this->xlsx([
+                ['REL-NO-EXISTE', '125.00', now()->format('Y-m-d H:i:s'), 'BANK-UNKNOWN-AUTO-125', 'Referencia alterada'],
+            ]),
+            'process_run_id' => $relation->process_run_id,
+        ], ['Accept' => 'application/json']);
+
+        $response->assertCreated()->assertJsonPath('data.summary.unreconciled', 1);
+        $this->assertDatabaseHas('bank_movements', [
+            'bank_folio' => 'BANK-UNKNOWN-AUTO-125',
+            'relation_id' => null,
+            'distributor_id' => null,
+            'classification' => 'UNRECONCILED',
+            'reconciliation_status' => 'UNRECONCILED',
+        ]);
+        $this->assertSame('OVERDUE', $relation->fresh()->financial_status);
+        $this->assertTrue(bccomp($relation->fresh()->surcharge_total, '0', 4) > 0);
+        $this->assertDatabaseHas('relation_late_fees', ['relation_id' => $relation->id, 'type' => 'LATE_FEE']);
+        $evaluation = AuditLog::query()
+            ->where('entity_type', 'distributor_relation')
+            ->where('entity_id', $relation->id)
+            ->where('event_name', 'PaymentDeadlineEvaluated')
+            ->firstOrFail();
+        $this->assertSame('unpaid', $evaluation->new_value['outcome']);
+        $this->assertSame(0, $evaluation->new_value['payments']);
+        $this->assertTrue($evaluation->new_value['late_fee_applied']);
+        $this->assertDatabaseHas('audit_logs', [
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'ForcePaymentDeadlineCompleted',
+            'result' => 'SUCCESS',
+        ]);
+    }
+
+    public function test_referencia_valida_se_asocia_antes_de_aplicar_varios_pagos_a_relacion_liquidada(): void
+    {
+        Storage::fake('local');
+        $relation = $this->createPaymentRelation();
+        $relation->update([
+            'portfolio_total' => '2771.0000',
+            'misvales_total' => '2771.0000',
+            'balance' => '2771.0000',
+        ]);
+
+        $import = app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '3000', '2026-08-12 10:00:00', 'BANK-VALID-3000', 'Liquida y genera excedente'],
+            [$relation->payment_reference, '71', '2026-08-12 10:01:00', 'BANK-VALID-71', 'Excedente posterior'],
+            [$relation->payment_reference, '100', '2026-08-12 10:02:00', 'BANK-VALID-100', 'Segundo excedente posterior'],
+            ['REL-INEXISTENTE', '50', '2026-08-12 10:03:00', 'BANK-UNKNOWN-50', 'Referencia inexistente'],
+        ]), $this->cashier, $this->branch->id, $relation->process_run_id);
+
+        $this->assertSame(3, $import->summary['surpluses']);
+        $this->assertSame(1, $import->summary['unreconciled']);
+        $this->assertSame('0.0000', $relation->fresh()->balance);
+        $this->assertSame('SETTLED', $relation->fresh()->financial_status);
+        $this->assertSame('400.0000', (string) ExcedenteDistribuidora::query()->sum('available_amount'));
+        $this->assertSame(3, PagoRelacion::query()->where('relation_id', $relation->id)->count());
+
+        foreach (['BANK-VALID-3000' => '229.0000', 'BANK-VALID-71' => '71.0000', 'BANK-VALID-100' => '100.0000'] as $folio => $surplus) {
+            $this->assertDatabaseHas('bank_movements', [
+                'bank_folio' => $folio,
+                'relation_id' => $relation->id,
+                'distributor_id' => $relation->distributor_id,
+                'classification' => 'SURPLUS',
+                'reconciliation_status' => 'RECONCILED',
+                'surplus_amount' => $surplus,
+            ]);
+        }
+        $this->assertDatabaseHas('bank_movements', [
+            'bank_folio' => 'BANK-UNKNOWN-50',
+            'relation_id' => null,
+            'distributor_id' => null,
+            'classification' => 'UNRECONCILED',
+            'reconciliation_status' => 'UNRECONCILED',
+        ]);
+    }
+
     public function test_segundo_abono_usa_el_saldo_pendiente_actualizado(): void
     {
         Storage::fake('local');
@@ -1200,6 +1553,28 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('CONSUMED', $surplus->fresh()->status);
         $this->assertDatabaseHas('relation_payments', ['source_type' => 'CREDIT_BALANCE', 'amount' => '1025.0000', 'capital_applied' => '550.0000']);
 
+        $simulations = app(ServicioTransferenciasBancariasSimuladas::class)->listar($this->branch->id, $next->process_run_id);
+        $legacyCredit = $simulations->firstWhere('bank_folio', 'SALDO-FAVOR-'.$next->id);
+        $this->assertNotNull($legacyCredit);
+        $this->assertSame('1025.0000', $legacyCredit->amount);
+        $legacyBalance = $next->fresh()->balance;
+        $legacyPayments = PagoRelacion::query()->where('relation_id', $next->id)->count();
+        $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $next->process_run_id);
+        app(ServicioImportacionBancaria::class)->importar(
+            UploadedFile::fake()->createWithContent('saldo-favor-aplicado.xlsx', file_get_contents($path)),
+            $this->cashier,
+            $this->branch->id,
+            $next->process_run_id,
+        );
+        $this->assertSame($legacyBalance, $next->fresh()->balance);
+        $this->assertSame($legacyPayments, PagoRelacion::query()->where('relation_id', $next->id)->count());
+        $this->assertDatabaseHas('bank_movements', [
+            'bank_folio' => $legacyCredit->bank_folio,
+            'relation_id' => $next->id,
+            'applied_amount' => '1025.0000',
+            'reconciliation_status' => 'RECONCILED',
+        ]);
+
         $movement = MovimientoBancario::create(['import_id' => ImportacionArchivoBancario::firstOrFail()->id, 'row_number' => 3, 'original_row' => [], 'payment_reference' => $relation->payment_reference, 'amount' => '300', 'paid_at' => now(), 'bank_folio' => 'BANK-REFUND', 'concept' => 'Excedente devolución', 'classification' => 'SURPLUS', 'relation_id' => $relation->id, 'surplus_amount' => '300']);
         $refundSurplus = ExcedenteDistribuidora::create(['distributor_id' => $this->distributorUser->distribuidora->id, 'branch_id' => $this->branch->id, 'origin_relation_id' => $relation->id, 'bank_movement_id' => $movement->id, 'original_amount' => '300', 'available_amount' => '300']);
         $request = app(ServicioExcedente::class)->solicitarDevolucion($refundSurplus, $this->distributorUser);
@@ -1263,6 +1638,47 @@ final class CajaValeApiTest extends TestCase
         }
         $this->assertDatabaseCount('distributor_surpluses', 1);
         $this->assertDatabaseCount('relation_payments', 1);
+    }
+
+    public function test_excedentes_posteriores_se_acumulan_sin_reclasificar_la_liquidacion_anticipada(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $firstPaidAt = '2026-08-21 10:00:00';
+
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '3025', $firstPaidAt, 'BANK-EARLY-SURPLUS-50', 'Liquidación anticipada con excedente'],
+        ]), $this->cashier, $this->branch->id);
+
+        $settled = $relation->fresh();
+        $this->assertSame('EARLY', $settled->temporal_classification);
+        $settledAt = $settled->settled_at?->toIso8601String();
+
+        app(ServicioImportacionBancaria::class)->importar($this->xlsx([
+            [$relation->payment_reference, '50', '2026-09-14 10:00:00', 'BANK-SECOND-SURPLUS-50', 'Excedente posterior'],
+        ]), $this->cashier, $this->branch->id);
+
+        $relation->refresh();
+        $this->assertSame('EARLY', $relation->temporal_classification);
+        $this->assertSame($settledAt, $relation->settled_at?->toIso8601String());
+        $this->assertSame('100.0000', (string) ExcedenteDistribuidora::query()->sum('available_amount'));
+        $this->assertSame(['2975.0000', '0.0000'], PagoRelacion::query()->orderBy('applied_at')->pluck('amount')->all());
+        $this->assertDatabaseHas('point_accounts', [
+            'distributor_id' => $relation->distributor_id,
+            'balance' => 6,
+        ]);
+        $this->assertDatabaseCount('point_movements', 1);
+
+        $surpluses = ExcedenteDistribuidora::query()->oldest()->get();
+        $service = app(ServicioExcedente::class);
+        $surpluses->each(fn (ExcedenteDistribuidora $surplus) => $service->elegirCredito($surplus, $this->distributorUser));
+        $destination = $this->futureRelationWithCapital($relation, 'REL-CREDIT-AGGREGATED-100', 2, '500.0000');
+        $service->aplicarDisponibles($destination);
+
+        $creditPayment = PagoRelacion::query()->where('relation_id', $destination->id)->where('source_type', 'CREDIT_BALANCE')->firstOrFail();
+        $this->assertSame('100.0000', $creditPayment->amount);
+        $this->assertSame(1, PagoRelacion::query()->where('relation_id', $destination->id)->where('source_type', 'CREDIT_BALANCE')->count());
+        $this->assertSame(2, AplicacionExcedente::query()->where('relation_id', $destination->id)->where('payment_id', $creditPayment->id)->count());
+        $this->assertSame('400.0000', $destination->fresh()->balance);
     }
 
     public function test_devolucion_respeta_sucursal_separacion_de_funciones_cancelacion_e_historial(): void
@@ -1362,10 +1778,15 @@ final class CajaValeApiTest extends TestCase
     public function test_flujo_tardio_integra_alerta_bloqueo_regularizacion_retiro_y_nuevo_vale(): void
     {
         $d = $this->distributorUser->distribuidora;
+        $generalManager = $this->user('general_manager');
+        $manager = $this->user('branch_manager', $this->branch->id);
+        $otherBranch = Branch::factory()->create();
+        $otherBranchManager = $this->user('branch_manager', $otherBranch->id);
+        Notification::fake();
         $run = (string) Str::uuid();
         DB::table('relation_process_runs')->insert(['id' => $run, 'cutoff_at' => now()->subMonths(3), 'status' => 'COMPLETED', 'attempt' => 1, 'configuration_snapshot' => '{}', 'created_at' => now(), 'updated_at' => now()]);
         foreach ([3, 2, 1] as $m) {
-            RelacionDistribuidora::create(['process_run_id' => $run, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'cutoff_at' => now()->subMonths($m), 'advance_period_start' => now()->subMonths($m), 'advance_period_end' => now()->subMonths($m), 'payment_deadline_at' => now()->subMonths($m)->endOfMonth(), 'payment_reference' => 'REL-RISK-'.$m, 'financial_status' => 'OVERDUE', 'portfolio_total' => '100', 'misvales_total' => '100', 'balance' => '100', 'header_snapshot' => [], 'bank_snapshot' => []]);
+            RelacionDistribuidora::create(['process_run_id' => $run, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'cutoff_at' => now()->subMonths($m), 'advance_period_start' => now()->subMonths($m), 'advance_period_end' => now()->subMonths($m), 'payment_deadline_at' => now()->subMonths($m)->endOfMonth(), 'payment_reference' => 'REL-RISK-'.$m, 'financial_status' => $m === 1 ? 'OVERDUE' : 'ROLLED_FORWARD', 'portfolio_total' => '100', 'misvales_total' => '100', 'balance' => $m === 1 ? '100' : '0', 'rolled_forward_amount' => $m === 1 ? '0' : '100', 'header_snapshot' => [], 'bank_snapshot' => []]);
         }
         $lastRelation = RelacionDistribuidora::query()->where('payment_reference', 'REL-RISK-1')->firstOrFail();
         ImportacionArchivoBancario::create(['private_path' => 'private/risk-e2e.xlsx', 'file_hash' => hash('sha256', 'risk-e2e-file'), 'uploaded_by' => $this->cashier->id, 'branch_id' => $this->branch->id, 'status' => 'PROCESSED', 'created_at' => $lastRelation->payment_deadline_at->addHours(2), 'updated_at' => $lastRelation->payment_deadline_at->addHours(2)]);
@@ -1374,10 +1795,13 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(0, $lateFees->evaluar(now('America/Monterrey')->toImmutable())['applied']);
         $this->assertDatabaseCount('relation_late_fees', 1);
         $service = app(ServicioMorosidadDistribuidora::class);
-        $alert = $service->evaluar($d);
-        $this->assertNotNull($alert);
+        $service->evaluarCorteConciliado($run, $this->branch->id);
+        $alert = AlertaRiesgoDistribuidora::query()->where('distributor_id', $d->id)->firstOrFail();
+        $this->assertSame('400.0000', $alert->overdue_balance);
+        Notification::assertSentTo($generalManager, NotificacionEventoDominio::class);
+        Notification::assertSentTo($manager, NotificacionEventoDominio::class);
+        Notification::assertNotSentTo($otherBranchManager, NotificacionEventoDominio::class);
         $this->assertDatabaseMissing('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'ACTIVE']);
-        $manager = $this->user('branch_manager', $this->branch->id);
         $service->decidir($alert, $manager, true, 'Tres incumplimientos confirmados');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'type' => 'DELINQUENCY', 'status' => 'ACTIVE']);
         $coordinator = $this->user('coordinator', $this->branch->id);
@@ -1387,7 +1811,7 @@ final class CajaValeApiTest extends TestCase
             ->assertStatus(409)
             ->assertJsonPath('error.code', 'DISTRIBUTOR_DELINQUENCY_BLOCK');
         try {
-            $service->solicitarRetiro($d, $coordinator, 'Aun con saldo vencido');
+            $service->solicitarRetiro($d, $this->distributorUser, 'Aun con saldo vencido');
             $this->fail('Debio exigir regularizacion financiera');
         } catch (\RuntimeException $exception) {
             $this->assertSame('DISTRIBUTOR_NOT_REGULARIZED', $exception->getMessage());
@@ -1398,11 +1822,12 @@ final class CajaValeApiTest extends TestCase
             'financial_status' => 'SETTLED',
             'settled_at' => now(),
         ]);
-        $request = $service->solicitarRetiro($d, $coordinator, 'Pagos conciliados y saldo vencido cero');
+        $request = $service->solicitarRetiro($d, $this->distributorUser, 'Pagos conciliados y saldo vencido cero');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'ACTIVE']);
         $service->decidirRetiro($request, $manager, true, 'Regularizacion comprobada');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
 
+        $this->voucher->update(['status' => 'CASHED', 'cashed_at' => now()]);
         $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id, 'commission_rate' => 0.10, 'interest_rate' => 0.03, 'insurance_amount' => 100, 'installment_count' => 4])
             ->assertSuccessful();
     }
@@ -1410,16 +1835,57 @@ final class CajaValeApiTest extends TestCase
     public function test_regularizacion_no_desbloquea_hasta_retiro_autorizado(): void
     {
         $d = $this->distributorUser->distribuidora;
-        $alert = AlertaRiesgoDistribuidora::create(['distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'consecutive_defaults' => 3, 'relation_ids' => [], 'overdue_balance' => '0']);
+        $relation = $this->createPaymentRelation();
+        $relation->update(['balance' => '0.0000', 'financial_status' => 'SETTLED', 'settled_at' => now()]);
+        $alert = AlertaRiesgoDistribuidora::create(['distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'type' => 'THREE_CONSECUTIVE_DEFAULTS', 'consecutive_defaults' => 3, 'relation_ids' => [$relation->id], 'overdue_balance' => '0']);
         $manager = $this->user('branch_manager', $this->branch->id);
         $service = app(ServicioMorosidadDistribuidora::class);
         $service->decidir($alert, $manager, true, 'Historial');
         $coordinator = $this->user('coordinator', $this->branch->id);
         CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinator->id, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'status' => 'ACTIVE', 'valid_from' => now()->subDay(), 'valid_to' => null, 'assigned_by' => $manager->id]);
-        $request = $service->solicitarRetiro($d, $coordinator, 'Saldo vencido cero');
+        $request = $service->solicitarRetiro($d, $this->distributorUser, 'Saldo vencido cero');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'ACTIVE']);
         $service->decidirRetiro($request, $manager, true, 'Autoriza retiro');
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
+    }
+
+    public function test_distribuidora_solicita_por_ciclo_regularizado_y_gerencia_retira_directamente(): void
+    {
+        Notification::fake();
+        $distributor = $this->distributorUser->distribuidora;
+        $manager = $this->user('branch_manager', $this->branch->id);
+        $relation = $this->createPaymentRelation();
+        $alert = AlertaRiesgoDistribuidora::create([
+            'distributor_id' => $distributor->id,
+            'branch_id' => $this->branch->id,
+            'type' => 'THREE_CONSECUTIVE_DEFAULTS',
+            'consecutive_defaults' => 3,
+            'relation_ids' => [$relation->id],
+            'overdue_balance' => $relation->balance,
+        ]);
+        $service = app(ServicioMorosidadDistribuidora::class);
+        $service->decidir($alert, $manager, true, 'Tres incumplimientos');
+
+        app(ServicioAplicacionPago::class)->aplicarSaldoFavor(
+            $relation->balance,
+            now()->toImmutable(),
+            $relation,
+            (string) Str::uuid(),
+        );
+        Notification::assertSentTo($manager, NotificacionEventoDominio::class, fn ($notification) => $notification->content['title'] === 'Deuda de morosidad liquidada: '.$distributor->distributor_number);
+
+        $newRelation = $this->replicatePaymentRelation($relation->fresh(), 'REL-NEW-CYCLE', '1232.0000');
+        $this->assertSame('PENDING', $newRelation->financial_status);
+        $this->assertTrue($service->estadoRetiro($distributor)['regularized_relation'] !== null);
+
+        $request = $service->solicitarRetiro($distributor, $this->distributorUser, 'Deuda del ciclo liquidada');
+        $service->decidirRetiro($request, $manager, false, 'Solicitud rechazada');
+        $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $distributor->id, 'status' => 'ACTIVE']);
+
+        $direct = $service->retirarDirectamente($distributor, $manager, 'Retiro validado por Gerencia');
+        $this->assertSame('AUTHORIZED', $direct->status);
+        $this->assertSame($relation->id, $direct->regularized_relation_id);
+        $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $distributor->id, 'status' => 'RELEASED']);
     }
 
     public function test_morosidad_permite_revisar_ciclos_sucesivos_sin_perder_historial(): void
@@ -1457,6 +1923,17 @@ final class CajaValeApiTest extends TestCase
     private function corteSeptiembre(): CarbonImmutable
     {
         return CarbonImmutable::parse('2026-09-25 00:05:00', 'America/Monterrey');
+    }
+
+    private function marcarCorteComoConciliado(RelacionDistribuidora $relation): void
+    {
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'ForcePaymentDeadlineCompleted',
+            'new_value' => ['status' => 'COMPLETED'],
+            'result' => 'SUCCESS',
+        ]);
     }
 
     private function materializarCalendario(Vale $vale, string $cashedAt, int $installmentCount): Vale
@@ -1657,6 +2134,8 @@ final class CajaValeApiTest extends TestCase
             'LOAN_COMMISSION_PERCENTAGE' => ['PERCENTAGE', '0.100000'],
             'INTEREST_RATE_PER_FORTNIGHT' => ['PERCENTAGE', '0.030000'],
             'VOUCHER_INSURANCE_AMOUNT' => ['DECIMAL', '100.0000'],
+            'VOUCHER_MIN_FORTNIGHTS_COUNT' => ['INTEGER', 2],
+            'VOUCHER_MAX_FORTNIGHTS_COUNT' => ['INTEGER', 16],
         ];
 
         foreach ($values as $key => [$type, $value]) {

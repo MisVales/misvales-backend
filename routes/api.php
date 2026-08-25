@@ -306,6 +306,7 @@ Route::prefix('v1')->group(function () {
         Route::post('vouchers', [ValeController::class, 'store'])->middleware('idempotency');
         Route::get('vouchers', [ValeController::class, 'index']);
         Route::get('vouchers/{vale}', [ValeController::class, 'show']);
+        Route::post('vouchers/{vale}/cancel', [ValeController::class, 'cancel'])->middleware('idempotency');
 
         // Módulo 10 - Caja, modificaciones autorizadas y feriado
         Route::get('dashboard/operations', ResumenOperacionController::class);
@@ -325,6 +326,7 @@ Route::prefix('v1')->group(function () {
         Route::get('relations/{relacion}/download', [RelacionDistribuidoraController::class, 'download']);
 
         // Módulo 12 - Archivo bancario y conciliación automática
+        Route::get('bank-reconciliation-periods', [ConciliacionBancariaController::class, 'pendingPeriods']);
         Route::post('bank-imports', [ConciliacionBancariaController::class, 'import']);
         Route::get('bank-imports', [ConciliacionBancariaController::class, 'imports']);
         Route::post('bank-simulations', [ConciliacionBancariaController::class, 'simulate']);
@@ -355,6 +357,7 @@ Route::prefix('v1')->group(function () {
         Route::get('me/delinquency-status', [RiesgoDistribuidoraController::class, 'me']);
         Route::post('risk-alerts/{alerta}/decision', [RiesgoDistribuidoraController::class, 'decide'])->middleware('idempotency');
         Route::post('distributors/{distribuidora}/delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'requestRemoval'])->middleware('idempotency');
+        Route::post('distributors/{distribuidora}/delinquency-removal', [RiesgoDistribuidoraController::class, 'removeDirectly'])->middleware('idempotency');
         Route::get('delinquency-removal-requests', [RiesgoDistribuidoraController::class, 'removals']);
         Route::post('delinquency-removal-requests/{solicitud}/decision', [RiesgoDistribuidoraController::class, 'decideRemoval'])->middleware('idempotency');
         Route::post('distributors/{distributor}/coordinator-change', [TransferenciaOrganizacionalController::class, 'changeCoordinator'])->middleware('idempotency');

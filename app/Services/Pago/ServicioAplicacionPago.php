@@ -9,6 +9,8 @@ use App\Models\MovimientoLineaCredito;
 use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
 use App\Services\Excedente\AuditorExcedente;
+use App\Services\Puntos\ServicioCanjePuntos;
+use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -16,7 +18,11 @@ use RuntimeException;
 
 final class ServicioAplicacionPago
 {
-    public function __construct(private readonly AuditorExcedente $auditor) {}
+    public function __construct(
+        private readonly AuditorExcedente $auditor,
+        private readonly ServicioCanjePuntos $puntos,
+        private readonly ServicioMorosidadDistribuidora $morosidad,
+    ) {}
 
     public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation): PagoRelacion
     {
@@ -32,6 +38,7 @@ final class ServicioAplicacionPago
     {
         return DB::transaction(function () use ($movement, $relation, $sourceType, $sourceId): PagoRelacion {
             $relation = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
+            $balanceBefore = (string) $relation->balance;
             if (PagoRelacion::where('source_type', $sourceType)->where('source_id', $sourceId)->exists()) {
                 throw new RuntimeException('PAYMENT_ALREADY_ALLOCATED');
             }
@@ -46,7 +53,28 @@ final class ServicioAplicacionPago
                 $available = bcsub($available, $totals['SURCHARGE'], 4);
             }
             $items = $relation->partidas()->with('installment')->get()->sortBy(fn ($i) => sprintf('%s|%s|%05d', $i->installment?->due_at?->toIso8601String() ?? '9999', $i->snapshot['folio'], $i->snapshot['installment']));
-            foreach (['INTEREST' => 'interest', 'INSURANCE' => 'insurance', 'LOAN_COMMISSION' => 'loan_commission', 'CAPITAL' => 'capital'] as $component => $field) {
+            foreach (['INTEREST' => ['interest', 'carried_interest'], 'INSURANCE' => ['insurance', 'carried_insurance'], 'LOAN_COMMISSION' => ['loan_commission', 'carried_commission'], 'CAPITAL' => ['capital', 'carried_capital']] as $component => [$field, $carriedField]) {
+                $componentPaid = (string) PagoRelacion::query()
+                    ->where('relation_id', $relation->id)
+                    ->whereKeyNot($payment->id)
+                    ->sum(match ($component) {
+                        'INTEREST' => 'interest_applied',
+                        'INSURANCE' => 'insurance_applied',
+                        'LOAN_COMMISSION' => 'commission_applied',
+                        'CAPITAL' => 'capital_applied',
+                    });
+                $currentItemsPaid = (string) DB::table('payment_allocations')
+                    ->join('distributor_relation_items', 'distributor_relation_items.id', '=', 'payment_allocations.relation_item_id')
+                    ->where('distributor_relation_items.relation_id', $relation->id)
+                    ->where('payment_allocations.component', $component)
+                    ->sum('payment_allocations.amount');
+                $carriedPaid = bcsub($componentPaid, $currentItemsPaid, 4);
+                $carriedPending = bcsub((string) $relation->{$carriedField}, $carriedPaid, 4);
+                if (bccomp($available, '0', 4) > 0 && bccomp($carriedPending, '0', 4) > 0) {
+                    $amount = bccomp($available, $carriedPending, 4) > 0 ? $carriedPending : $available;
+                    $totals[$component] = bcadd($totals[$component], $amount, 4);
+                    $available = bcsub($available, $amount, 4);
+                }
                 foreach ($items as $item) {
                     if (bccomp($available, '0', 4) <= 0) {
                         break 2;
@@ -73,18 +101,23 @@ final class ServicioAplicacionPago
             }
             $relation->balance = bcsub($relation->balance, $applied, 4);
             $relation->reconciled_total = bcadd($relation->reconciled_total, $applied, 4);
-            if (bccomp($relation->balance, '0', 4) === 0) {
+            $newlySettled = bccomp($balanceBefore, '0', 4) > 0 && bccomp($relation->balance, '0', 4) === 0;
+            if ($newlySettled) {
                 $relation->financial_status = 'SETTLED';
                 $relation->settled_at = $movement->paid_at;
-                $relation->temporal_classification = $movement->paid_at->gte($relation->advance_period_start) && $movement->paid_at->lte($relation->advance_period_end)
+                $relation->temporal_classification = $movement->paid_at->lte($relation->advance_period_end)
                     ? 'EARLY'
                     : ($movement->paid_at->lte($relation->payment_deadline_at) ? 'ON_TIME' : 'LATE');
-            } else {
+            } elseif (bccomp($relation->balance, '0', 4) > 0) {
                 $relation->financial_status = 'PARTIALLY_PAID';
             }$relation->save();
-            if ($relation->financial_status === 'SETTLED') {
-            }
             $payment->update(['surcharge_applied' => $totals['SURCHARGE'], 'interest_applied' => $totals['INTEREST'], 'insurance_applied' => $totals['INSURANCE'], 'commission_applied' => $totals['LOAN_COMMISSION'], 'capital_applied' => $totals['CAPITAL'], 'line_recovered' => $recovered]);
+            if ($newlySettled && $relation->temporal_classification === 'EARLY') {
+                $this->puntos->acreditarLiquidacionAnticipada($relation);
+            }
+            if ($newlySettled) {
+                $this->morosidad->notificarDeudaRegularizada($relation->fresh('distribuidora'));
+            }
             $surplus = bcsub($movement->amount, $applied, 4);
             if ($movement->exists) {
                 $movement->update(['relation_id' => $relation->id, 'classification' => bccomp($surplus, '0', 4) > 0 ? 'SURPLUS' : (bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT'), 'applied_amount' => $applied, 'surplus_amount' => $surplus]);

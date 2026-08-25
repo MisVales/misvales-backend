@@ -19,27 +19,27 @@ final class ServicioPdfRelacion
 
         $rows = $relation->partidas->map(function ($item): array {
             $snapshot = $item->snapshot;
-            $commission = (string) ($snapshot['distributor_profit'] ?? '0');
-            $payment = (string) ($snapshot['client_payment'] ?? $item->portfolio_amount);
+            $distributorProfit = (string) ($snapshot['distributor_profit'] ?? '0');
+            $clientPayment = (string) ($snapshot['client_payment'] ?? $item->portfolio_amount);
             $surcharge = (string) ($snapshot['surcharge'] ?? '0');
-            $baseTotal = (string) ($snapshot['misvales_payment'] ?? $item->misvales_amount);
+            $netPayment = (string) ($snapshot['misvales_payment'] ?? $item->misvales_amount);
 
             return [
                 'product' => (string) ($snapshot['product'] ?? '—'),
                 'client' => (string) ($snapshot['client'] ?? '—'),
                 'payments_made' => ($snapshot['installment'] ?? '—').'/'.($snapshot['total_installments'] ?? '—'),
-                'commission' => $commission,
-                'payment' => $payment,
+                'distributor_profit' => $distributorProfit,
+                'client_payment' => $clientPayment,
                 'surcharge' => $surcharge,
-                'total' => bcadd($baseTotal, $surcharge, 4),
+                'net_payment' => bcadd($netPayment, $surcharge, 4),
             ];
         });
 
         $totals = [
-            'commission' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['commission'], 4), '0.0000'),
-            'payment' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['payment'], 4), '0.0000'),
+            'distributor_profit' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['distributor_profit'], 4), '0.0000'),
+            'client_payment' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['client_payment'], 4), '0.0000'),
             'surcharge' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['surcharge'], 4), '0.0000'),
-            'total' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['total'], 4), '0.0000'),
+            'net_payment' => $rows->reduce(fn (string $sum, array $row): string => bcadd($sum, $row['net_payment'], 4), '0.0000'),
         ];
 
         $html = view('relations.pdf', [

@@ -5,8 +5,10 @@ namespace App\Services\Conciliacion;
 use App\Exceptions\ExcepcionConciliacion;
 use App\Models\ImportacionArchivoBancario;
 use App\Models\MovimientoBancario;
+use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
 use App\Models\User;
+use App\Services\Excedente\ServicioExcedente;
 use App\Services\Pago\ServicioAplicacionPago;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\QueryException;
@@ -31,10 +33,11 @@ final class ServicioImportacionBancaria
     public function __construct(
         private LectorXlsxBancario $reader,
         private ServicioAplicacionPago $payments,
+        private ServicioExcedente $surpluses,
         private AuditorConciliacion $auditor
     ) {}
 
-    public function importar(UploadedFile $file, User $actor, string $branchId): ImportacionArchivoBancario
+    public function importar(UploadedFile $file, User $actor, string $branchId, ?string $processRunId = null): ImportacionArchivoBancario
     {
         $hash = hash_file('sha256', $file->getRealPath());
         $existingImport = ImportacionArchivoBancario::query()->where('file_hash', $hash)->first();
@@ -62,6 +65,7 @@ final class ServicioImportacionBancaria
             'file_hash' => $hash,
             'uploaded_by' => $actor->id,
             'branch_id' => $branchId,
+            'process_run_id' => $processRunId,
             'status' => 'REJECTED',
         ]);
 
@@ -70,9 +74,9 @@ final class ServicioImportacionBancaria
             [$map, $movements] = $this->validarArchivo($rows);
             $summary = ['partial_payments' => 0, 'settlements' => 0, 'surpluses' => 0, 'unreconciled' => 0, 'duplicates' => 0];
 
-            DB::transaction(function () use ($movements, $map, $import, $actor, $branchId, &$summary): void {
+            DB::transaction(function () use ($movements, $map, $import, $actor, $branchId, $processRunId, &$summary): void {
                 foreach ($movements as $row) {
-                    $movement = $this->procesarFila($row['values'], $row['row_number'], $map, $import, $actor);
+                    $movement = $this->procesarFila($row['values'], $row['row_number'], $map, $import, $actor, $processRunId);
                     $summary[$this->summaryKey($movement->classification)]++;
                 }
 
@@ -186,14 +190,11 @@ final class ServicioImportacionBancaria
                 ['rows' => $rowErrors]
             );
         }
-        if ($movements === []) {
-            throw new ExcepcionConciliacion('BANK_FILE_EMPTY', 'El archivo no contiene movimientos bancarios.', 422);
-        }
 
         return [$map, $movements];
     }
 
-    private function procesarFila(array $values, int $rowNumber, array $map, ImportacionArchivoBancario $import, User $actor): MovimientoBancario
+    private function procesarFila(array $values, int $rowNumber, array $map, ImportacionArchivoBancario $import, User $actor, ?string $selectedProcessRunId): MovimientoBancario
     {
         $folio = trim((string) Arr::get($values, $map['folio']));
         $reference = trim((string) Arr::get($values, $map['reference']));
@@ -207,12 +208,22 @@ final class ServicioImportacionBancaria
         $existingMovement = MovimientoBancario::query()->where('idempotency_bank_folio', $folio)->first();
 
         if ($existingMovement !== null) {
+            if ($existingMovement->reconciliation_status === 'UNRECONCILED') {
+                $existingMovement->update([
+                    'process_run_id' => $selectedProcessRunId ?? $existingMovement->process_run_id,
+                    'errors' => null,
+                ]);
+
+                return $this->conciliarMovimiento($existingMovement, $actor, $import->branch_id);
+            }
+
             return $this->registrarDuplicado($import, $rowNumber, $values, $rowData, $existingMovement, $actor);
         }
 
         try {
             $movement = DB::transaction(fn (): MovimientoBancario => MovimientoBancario::query()->create([
                 'import_id' => $import->id,
+                'process_run_id' => $selectedProcessRunId,
                 'row_number' => $rowNumber,
                 'original_row' => $values,
                 'payment_reference' => $reference,
@@ -233,20 +244,43 @@ final class ServicioImportacionBancaria
             return $this->registrarDuplicado($import, $rowNumber, $values, $rowData, $existingMovement, $actor);
         }
 
-        $relation = RelacionDistribuidora::query()->where('payment_reference', $reference)->lockForUpdate()->first();
+        return $this->conciliarMovimiento($movement, $actor, $import->branch_id);
+    }
+
+    private function conciliarMovimiento(MovimientoBancario $movement, User $actor, string $branchId): MovimientoBancario
+    {
+        $relation = RelacionDistribuidora::query()->where('payment_reference', $movement->payment_reference)->lockForUpdate()->first();
         if ($relation === null) {
-            $this->auditor->registrar('BANK_MOVEMENT_UNRECONCILED', 'bank_movement', $movement->id, $actor, $import->branch_id, null, [
-                'bank_folio' => $folio,
-                'payment_reference' => $reference,
-                'amount' => $amount,
+            $this->auditor->registrar('BANK_MOVEMENT_UNRECONCILED', 'bank_movement', $movement->id, $actor, $branchId, null, [
+                'bank_folio' => $movement->bank_folio,
+                'payment_reference' => $movement->payment_reference,
+                'amount' => $movement->amount,
             ]);
 
             return $movement;
         }
 
+        $relation = $this->relacionVigente($relation);
+
         $balanceBefore = $relation->balance;
         $movement->update(['relation_id' => $relation->id, 'distributor_id' => $relation->distributor_id, 'balance_before' => $balanceBefore]);
-        $this->payments->aplicar($movement, $relation);
+        if (str_starts_with($movement->bank_folio, 'SALDO-FAVOR-')) {
+            $creditPayment = $this->surpluses->aplicarDisponibles($relation)
+                ?? PagoRelacion::query()
+                    ->where('relation_id', $relation->id)
+                    ->where('source_type', 'CREDIT_BALANCE')
+                    ->where('source_id', $relation->id)
+                    ->first();
+            $relation->refresh();
+            $applied = $creditPayment?->amount ?? '0.0000';
+            $movement->update([
+                'classification' => bccomp($relation->balance, '0', 4) === 0 ? 'SETTLEMENT' : 'PARTIAL_PAYMENT',
+                'applied_amount' => $applied,
+                'surplus_amount' => '0.0000',
+            ]);
+        } else {
+            $this->payments->aplicar($movement, $relation);
+        }
         $movement->refresh();
         $movement->update(['reconciliation_status' => 'RECONCILED', 'reconciled_by' => $actor->id, 'reconciled_at' => now()]);
 
@@ -255,7 +289,7 @@ final class ServicioImportacionBancaria
             'bank_movement',
             $movement->id,
             $actor,
-            $import->branch_id,
+            $branchId,
             ['balance' => $balanceBefore],
             [
                 'classification' => $movement->classification,
@@ -267,6 +301,24 @@ final class ServicioImportacionBancaria
         );
 
         return $movement->fresh();
+    }
+
+    private function relacionVigente(RelacionDistribuidora $relation): RelacionDistribuidora
+    {
+        $visited = [];
+        while ($relation->financial_status === 'ROLLED_FORWARD' && $relation->rolled_forward_to_id !== null) {
+            if (isset($visited[$relation->id])) {
+                throw new ExcepcionConciliacion('RELATION_ROLLOVER_CYCLE', 'La cadena de traslado de la relación es inválida.', 409);
+            }
+
+            $visited[$relation->id] = true;
+            $relation = RelacionDistribuidora::query()
+                ->whereKey($relation->rolled_forward_to_id)
+                ->lockForUpdate()
+                ->firstOrFail();
+        }
+
+        return $relation;
     }
 
     private function registrarDuplicado(ImportacionArchivoBancario $import, int $rowNumber, array $values, array $rowData, MovimientoBancario $canonical, User $actor): MovimientoBancario

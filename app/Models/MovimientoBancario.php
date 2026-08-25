@@ -15,6 +15,7 @@ final class MovimientoBancario extends Model
 
     protected $fillable = [
         'import_id',
+        'process_run_id',
         'row_number',
         'original_row',
         'payment_reference',

@@ -23,8 +23,8 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(1, $firstCounts['user_role_scopes']);
         self::assertSame(0, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(13, $firstCounts['configuration_definitions']);
-        self::assertSame(12, $firstCounts['configuration_versions']);
+        self::assertSame(18, $firstCounts['configuration_definitions']);
+        self::assertSame(17, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
         self::assertGreaterThan(0, $firstCounts['codigos_postales']);
@@ -112,10 +112,12 @@ final class DatabaseSeedersTest extends TestCase
         }
         self::assertFalse(Schema::hasTable('redemption_periods'));
         self::assertGreaterThan(0, DB::table('permissions')->where('module', 'points')->orWhere('code', 'like', 'points.%')->count());
-        self::assertSame(0, DB::table('configuration_definitions')->whereIn('key', [
+        self::assertSame(3, DB::table('configuration_definitions')->whereIn('key', [
             'POINTS_DIVISOR_AMOUNT',
             'POINTS_MULTIPLIER',
             'POINT_VALUE_AMOUNT',
+        ])->count());
+        self::assertSame(0, DB::table('configuration_definitions')->whereIn('key', [
             'LATE_POINTS_REDUCTION_RATE',
             'EARLY_PAYMENT_PERIOD',
         ])->count());
@@ -180,7 +182,12 @@ final class DatabaseSeedersTest extends TestCase
             'LOAN_COMMISSION_PERCENTAGE' => '0.1000',
             'INTEREST_RATE_PER_FORTNIGHT' => '0.0300',
             'VOUCHER_INSURANCE_AMOUNT' => '100.0000',
+            'VOUCHER_MIN_FORTNIGHTS_COUNT' => 2,
+            'VOUCHER_MAX_FORTNIGHTS_COUNT' => 16,
             'LATE_FEE_AMOUNT' => '200.0000',
+            'POINTS_DIVISOR_AMOUNT' => '1200.0000',
+            'POINTS_MULTIPLIER' => 3,
+            'POINT_VALUE_AMOUNT' => '2.0000',
         ];
     }
 }

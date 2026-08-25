@@ -40,4 +40,9 @@ final class SolicitudRetiroMorosidad extends Model
     {
         return $this->belongsTo(User::class, 'decided_by');
     }
+
+    public function relacionRegularizada(): BelongsTo
+    {
+        return $this->belongsTo(RelacionDistribuidora::class, 'regularized_relation_id');
+    }
 }

@@ -29,6 +29,7 @@ use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Conciliacion\ServicioTicketPagoSimulado;
 use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
 use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
+use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -37,16 +38,27 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class ConciliacionBancariaController extends Controller
 {
-    public function import(ImportarArchivoBancarioRequest $request, ServicioImportacionBancaria $service, ServicioDisponibilidadConciliacion $availability, ServicioFinPeriodoPagoManual $paymentPeriod)
+    public function pendingPeriods(Request $request, ServicioDisponibilidadConciliacion $availability): JsonResponse
+    {
+        $user = $request->user();
+        abort_unless($user->hasPermissionTo('bank_imports.create_branch') || $user->hasPermissionTo('bank_imports.view_global'), 403);
+
+        return response()->json(['data' => $availability->periodosPendientes(
+            $user->hasPermissionTo('bank_imports.view_global') ? null : $this->cashierBranchId($user),
+        )]);
+    }
+
+    public function import(ImportarArchivoBancarioRequest $request, ServicioImportacionBancaria $service, ServicioDisponibilidadConciliacion $availability, ServicioFinPeriodoPagoManual $paymentPeriod, ServicioMorosidadDistribuidora $risk)
     {
         $branchId = $request->user()->branch_id;
         if (! $request->user()->hasRole('cashier') || $branchId === null || ! $request->user()->hasScopeForBranch($branchId)) {
             throw new ExcepcionConciliacion('BANK_IMPORT_SCOPE_DENIED', 'La cajera no tiene una sucursal operativa autorizada.', 403);
         }
-        $availability->asegurarCorteVencido();
+        $processRunId = $availability->asegurarCorteVencido($request->validated('process_run_id'), $branchId);
 
-        $import = $service->importar($request->file('file'), $request->user(), $branchId);
-        $paymentPeriod->forzar($request->user(), 'Cierre automático después de procesar el archivo bancario final');
+        $import = $service->importar($request->file('file'), $request->user(), $branchId, $processRunId);
+        $risk->evaluarCorteConciliado($processRunId, $branchId);
+        $paymentPeriod->forzar($request->user(), 'Cierre automático después de procesar el archivo bancario final', $processRunId);
 
         return (new ImportacionBancariaResource($import))
             ->response()
@@ -88,16 +100,16 @@ final class ConciliacionBancariaController extends Controller
 
     public function simulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): JsonResponse
     {
-        $processRunId = $availability->asegurarCorteVencido();
         $branchId = $this->cashierBranchId($request->user());
+        $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
 
         return response()->json(['data' => $service->listar($branchId, $processRunId)]);
     }
 
     public function exportSimulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): BinaryFileResponse
     {
-        $processRunId = $availability->asegurarCorteVencido();
         $branchId = $this->cashierBranchId($request->user());
+        $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
         $path = $service->exportar($branchId, $processRunId);
 
         return response()->download(

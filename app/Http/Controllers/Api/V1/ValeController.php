@@ -9,6 +9,7 @@ use App\Http\Resources\Api\V1\Vale\ValeResource;
 use App\Models\CoordinatorDistributorAssignment;
 use App\Models\ProductVersion;
 use App\Models\Vale;
+use App\Services\Vale\ServicioCancelacionVale;
 use App\Services\Vale\ServicioGeneracionVale;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -100,5 +101,10 @@ final class ValeController extends Controller
         Gate::authorize('view', $vale);
 
         return new ValeResource($vale->load(['cliente', 'distribuidora.usuario', 'versionProducto', 'versionCategoria', 'parcialidades']));
+    }
+
+    public function cancel(Vale $vale, Request $request, ServicioCancelacionVale $service): ValeResource
+    {
+        return new ValeResource($service->cancelar($vale, $request->user()));
     }
 }

@@ -13,6 +13,9 @@ final class ImportarArchivoBancarioRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['file' => ['required', 'file', 'mimes:xlsx', 'max:10240']];
+        return [
+            'file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
+            'process_run_id' => ['required', 'uuid', 'exists:relation_process_runs,id'],
+        ];
     }
 }

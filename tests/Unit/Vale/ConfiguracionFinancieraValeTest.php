@@ -17,6 +17,8 @@ final class ConfiguracionFinancieraValeTest extends TestCase
             'LOAN_COMMISSION_PERCENTAGE' => $this->configuracion($key, 'PERCENTAGE', '0.1'),
             'INTEREST_RATE_PER_FORTNIGHT' => $this->configuracion($key, 'PERCENTAGE', '0.05'),
             'VOUCHER_INSURANCE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '100'),
+            'VOUCHER_MIN_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 2),
+            'VOUCHER_MAX_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 16),
             'LATE_FEE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '200'),
         });
 
@@ -26,6 +28,8 @@ final class ConfiguracionFinancieraValeTest extends TestCase
             'loan_commission_percentage' => '0.100000',
             'simple_interest_percentage' => '0.050000',
             'insurance_amount' => '100.0000',
+            'minimum_installment_count' => 2,
+            'maximum_installment_count' => 16,
             'late_fee_amount' => '200.0000',
         ], $resultado['values']);
         self::assertSame(1, $resultado['versions']['LOAN_COMMISSION_PERCENTAGE']['version']);
@@ -42,6 +46,8 @@ final class ConfiguracionFinancieraValeTest extends TestCase
             return match ($key) {
                 'LOAN_COMMISSION_PERCENTAGE' => $this->configuracion($key, 'PERCENTAGE', '0.1'),
                 'INTEREST_RATE_PER_FORTNIGHT' => $this->configuracion($key, 'PERCENTAGE', '0.05'),
+                'VOUCHER_MIN_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 2),
+                'VOUCHER_MAX_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 16),
                 'LATE_FEE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '200'),
             };
         });

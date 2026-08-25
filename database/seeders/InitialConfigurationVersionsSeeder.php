@@ -74,7 +74,12 @@ final class InitialConfigurationVersionsSeeder extends Seeder
             'LOAN_COMMISSION_PERCENTAGE' => '0.1000',
             'INTEREST_RATE_PER_FORTNIGHT' => '0.0300',
             'VOUCHER_INSURANCE_AMOUNT' => '100.0000',
+            'VOUCHER_MIN_FORTNIGHTS_COUNT' => 2,
+            'VOUCHER_MAX_FORTNIGHTS_COUNT' => 16,
             'LATE_FEE_AMOUNT' => '200.0000',
+            'POINTS_DIVISOR_AMOUNT' => '1200.0000',
+            'POINTS_MULTIPLIER' => 3,
+            'POINT_VALUE_AMOUNT' => '2.0000',
         ];
     }
 

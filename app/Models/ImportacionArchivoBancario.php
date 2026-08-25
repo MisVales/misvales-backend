@@ -18,6 +18,7 @@ final class ImportacionArchivoBancario extends Model
         'file_hash',
         'uploaded_by',
         'branch_id',
+        'process_run_id',
         'status',
         'row_count',
         'summary',

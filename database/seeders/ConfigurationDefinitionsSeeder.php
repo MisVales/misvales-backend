@@ -60,7 +60,12 @@ final class ConfigurationDefinitionsSeeder extends Seeder
             ['key' => 'LOAN_COMMISSION_PERCENTAGE', 'name' => 'Comisión del préstamo', 'description' => 'Porcentaje global aplicado al capital al emitir un vale nuevo.', 'value_type' => 'PERCENTAGE', 'unit' => 'percentage'],
             ['key' => 'INTEREST_RATE_PER_FORTNIGHT', 'name' => 'Interés por quincena', 'description' => 'Porcentaje global de interés simple aplicado por cada quincena de un vale nuevo.', 'value_type' => 'PERCENTAGE', 'unit' => 'percentage'],
             ['key' => 'VOUCHER_INSURANCE_AMOUNT', 'name' => 'Seguro del vale', 'description' => 'Importe global de seguro aplicado al emitir un vale nuevo.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'VOUCHER_MIN_FORTNIGHTS_COUNT', 'name' => 'Mínimo de quincenas por vale', 'description' => 'Número mínimo de quincenas que puede elegir una distribuidora al otorgar un vale.', 'value_type' => 'INTEGER', 'unit' => 'fortnights'],
+            ['key' => 'VOUCHER_MAX_FORTNIGHTS_COUNT', 'name' => 'Máximo de quincenas por vale', 'description' => 'Número máximo de quincenas que puede elegir una distribuidora al otorgar un vale.', 'value_type' => 'INTEGER', 'unit' => 'fortnights'],
             ['key' => 'LATE_FEE_AMOUNT', 'name' => 'Recargo por falta de pago', 'description' => 'Importe del recargo aplicable por falta de pago.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'POINTS_DIVISOR_AMOUNT', 'name' => 'Divisor para generar puntos', 'description' => 'Capital liquidado anticipadamente requerido para calcular cada bloque de puntos.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
+            ['key' => 'POINTS_MULTIPLIER', 'name' => 'Multiplicador de puntos', 'description' => 'Puntos acreditados por cada bloque completo de capital en una liquidación anticipada.', 'value_type' => 'INTEGER', 'unit' => 'points'],
+            ['key' => 'POINT_VALUE_AMOUNT', 'name' => 'Valor monetario del punto', 'description' => 'Valor vigente en pesos de cada punto al solicitar un canje.', 'value_type' => 'DECIMAL', 'unit' => 'MXN'],
             ['key' => 'RELATION_PAYMENT_BANK', 'name' => 'Datos bancarios para relaciones', 'description' => 'Banco, beneficiario, convenio y CLABE publicados para el pago de relaciones.', 'value_type' => 'JSON', 'unit' => null],
         ];
     }

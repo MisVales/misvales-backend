@@ -18,13 +18,13 @@ final class ServicioEvaluacionRecargo
     }
 
     /** @param list<string> $relationIds */
-    public function evaluarRelacionesSimuladas(CarbonImmutable $now, array $relationIds, CarbonImmutable $importsSince): array
+    public function evaluarRelacionesSimuladas(CarbonImmutable $now, array $relationIds, CarbonImmutable $importsSince, ?string $processRunId = null): array
     {
-        return $this->evaluarInterno($now, $relationIds, $importsSince);
+        return $this->evaluarInterno($now, $relationIds, $importsSince, $processRunId);
     }
 
     /** @param list<string>|null $relationIds */
-    private function evaluarInterno(CarbonImmutable $now, ?array $relationIds = null, ?CarbonImmutable $importsSince = null): array
+    private function evaluarInterno(CarbonImmutable $now, ?array $relationIds = null, ?CarbonImmutable $importsSince = null, ?string $processRunId = null): array
     {
         $config = $this->configuracion->resolver($now->utc());
         $tz = $config['timezone'];
@@ -39,9 +39,12 @@ final class ServicioEvaluacionRecargo
         foreach ($relations as $relation) {
             [$deadlineHour, $deadlineMinute] = array_map('intval', explode(':', $config['bank_deadline_time']));
             $imports = DB::table('bank_file_imports')->where('branch_id', $relation->branch_id)->where('status', 'PROCESSED');
-            $hasFile = $importsSince === null
+            $hasFile = $processRunId !== null
+                ? (clone $imports)->where('process_run_id', $processRunId)->exists()
+                    || (clone $imports)->whereNull('process_run_id')->where('created_at', '>=', $importsSince->setTimezone($tz))->exists()
+                : ($importsSince === null
                 ? $imports->whereBetween('created_at', [$relation->payment_deadline_at, $relation->payment_deadline_at->addDay()->setTimezone($tz)->setTime($deadlineHour, $deadlineMinute)->utc()])->exists()
-                : $imports->where('created_at', '>=', $importsSince->setTimezone($tz))->where('created_at', '<=', CarbonImmutable::now($tz))->exists();
+                : $imports->where('created_at', '>=', $importsSince->setTimezone($tz))->where('created_at', '<=', CarbonImmutable::now($tz))->exists());
 
             if (! $hasFile) {
                 $result['deferred']++;

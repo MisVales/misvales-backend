@@ -3,6 +3,7 @@
 namespace App\Services\Conciliacion;
 
 use App\Exceptions\ExcepcionConciliacion;
+use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
 use App\Models\TransferenciaBancariaSimulada;
 use App\Models\User;
@@ -59,6 +60,8 @@ final class ServicioTransferenciasBancariasSimuladas
 
     public function listar(string $branchId, string $processRunId): Collection
     {
+        $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
+
         return TransferenciaBancariaSimulada::query()
             ->with('relation:id,payment_reference,process_run_id')
             ->where('branch_id', $branchId)
@@ -70,6 +73,8 @@ final class ServicioTransferenciasBancariasSimuladas
 
     public function exportar(string $branchId, string $processRunId): string
     {
+        $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
+
         $transfers = TransferenciaBancariaSimulada::query()
             ->where('branch_id', $branchId)
             ->whereHas('relation', fn ($query) => $query->where('process_run_id', $processRunId))
@@ -129,7 +134,42 @@ final class ServicioTransferenciasBancariasSimuladas
         return match ($type) {
             'ONLINE_BANKING' => 'Banca en línea',
             'COUNTER' => 'Pago en ventanilla',
+            'CREDIT_BALANCE' => 'Saldo a favor',
             default => 'Transferencia',
         };
+    }
+
+    private function asegurarSaldosFavorAplicados(string $branchId, string $processRunId): void
+    {
+        $relations = RelacionDistribuidora::query()
+            ->with('distribuidora.usuario:id')
+            ->where('branch_id', $branchId)
+            ->where('process_run_id', $processRunId)
+            ->get();
+
+        foreach ($relations as $relation) {
+            $payment = PagoRelacion::query()
+                ->where('relation_id', $relation->id)
+                ->where('source_type', 'CREDIT_BALANCE')
+                ->oldest('applied_at')
+                ->first();
+            if ($payment === null || $relation->distribuidora?->usuario === null) {
+                continue;
+            }
+
+            TransferenciaBancariaSimulada::query()->firstOrCreate(
+                ['bank_folio' => 'SALDO-FAVOR-'.$relation->id],
+                [
+                    'branch_id' => $branchId,
+                    'relation_id' => $relation->id,
+                    'created_by' => $relation->distribuidora->usuario->id,
+                    'concept' => 'Aplicación de saldo a favor',
+                    'payment_reference' => $relation->payment_reference,
+                    'amount' => $payment->amount,
+                    'paid_at' => $payment->applied_at,
+                    'payment_type' => 'CREDIT_BALANCE',
+                ],
+            );
+        }
     }
 }

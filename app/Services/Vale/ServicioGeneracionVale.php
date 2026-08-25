@@ -4,6 +4,7 @@ namespace App\Services\Vale;
 
 use App\Contracts\Credito\VerificadorDisponibilidadCredito;
 use App\Enums\EstadoDistribuidora;
+use App\Enums\EstadoRestriccionUsoCredito;
 use App\Enums\EstadoVale;
 use App\Enums\TipoVale;
 use App\Exceptions\ExcepcionVale;
@@ -17,6 +18,7 @@ use App\Models\Distribuidora;
 use App\Models\LineaCredito;
 use App\Models\OutboxEvent;
 use App\Models\ProductVersion;
+use App\Models\RestriccionUsoCredito;
 use App\Models\User;
 use App\Models\Vale;
 use Illuminate\Support\Collection;
@@ -53,7 +55,7 @@ final class ServicioGeneracionVale
             ->get();
     }
 
-    /** @return array{category: array{name: string, percentage: string}, conditions: array{commission_rate: string, interest_rate: string, insurance_amount: string, late_fee_amount: string}} */
+    /** @return array{category: array{name: string, percentage: string}, conditions: array{commission_rate: string, interest_rate: string, insurance_amount: string, minimum_installment_count: int, maximum_installment_count: int, late_fee_amount: string}} */
     public function contextoFinanciero(User $actor): array
     {
         $distribuidora = $this->resolverDistribuidoraActiva($actor);
@@ -66,6 +68,8 @@ final class ServicioGeneracionVale
                 'commission_rate' => $configuracion['loan_commission_percentage'],
                 'interest_rate' => $configuracion['simple_interest_percentage'],
                 'insurance_amount' => $configuracion['insurance_amount'],
+                'minimum_installment_count' => $configuracion['minimum_installment_count'],
+                'maximum_installment_count' => $configuracion['maximum_installment_count'],
                 'late_fee_amount' => $configuracion['late_fee_amount'],
             ],
         ];
@@ -127,6 +131,22 @@ final class ServicioGeneracionVale
 
             $vale->parcialidades()->createMany(array_map(static fn (array $parcialidad): array => $parcialidad + ['due_at' => null], $calculo['installments']));
 
+            if ($vale->credit_restriction_id !== null) {
+                $reserved = RestriccionUsoCredito::query()
+                    ->whereKey($vale->credit_restriction_id)
+                    ->where('status', EstadoRestriccionUsoCredito::ACTIVA)
+                    ->lockForUpdate()
+                    ->update([
+                        'status' => EstadoRestriccionUsoCredito::RESERVADA,
+                        'reserved_voucher_id' => $vale->id,
+                        'reserved_at' => now(),
+                        'lock_version' => DB::raw('lock_version + 1'),
+                    ]);
+                if ($reserved !== 1) {
+                    throw new ExcepcionVale('CREDIT_50_PERCENT_RESTRICTION_ALREADY_RESERVED', 'Existe otro vale pendiente de feriar que reservó la regla temporal del 50%.', 409);
+                }
+            }
+
             AuditHelper::log('VOUCHER_GENERATED', 'vouchers', $vale->id, $actor->id, $vale->branch_id, null, [
                 'folio' => $folio, 'type' => $tipo->value, 'capital' => $vale->capital,
             ]);
@@ -141,6 +161,12 @@ final class ServicioGeneracionVale
         $distribuidora = $this->resolverDistribuidoraActiva($actor);
         if (BloqueoOperativoDistribuidora::query()->where('distributor_id', $distribuidora->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->exists()) {
             throw new ExcepcionVale('DISTRIBUTOR_DELINQUENCY_BLOCK', 'La distribuidora tiene un bloqueo vigente por morosidad.', 409);
+        }
+        if (Vale::query()->where('distributor_id', $distribuidora->id)->where('type', TipoVale::PREVALE)->whereIn('status', [EstadoVale::GENERADO, EstadoVale::VALIDACION_CAJA, EstadoVale::CORRECCION_PENDIENTE, EstadoVale::LIBERADO])->exists()) {
+            throw new ExcepcionVale('PENDING_PREVOUCHER_MUST_BE_CASHED', 'Debes feriar o cancelar el prevale pendiente antes de solicitar otro vale.', 409);
+        }
+        if (RestriccionUsoCredito::query()->where('distributor_id', $distribuidora->id)->where('status', EstadoRestriccionUsoCredito::RESERVADA)->exists()) {
+            throw new ExcepcionVale('PENDING_RESTRICTED_VOUCHER_MUST_BE_CASHED', 'Debes feriar o cancelar el vale pendiente antes de solicitar otro y conservar la validación del 50%.', 409);
         }
 
         $cliente = Cliente::query()->findOrFail($clienteId);
@@ -160,11 +186,24 @@ final class ServicioGeneracionVale
 
         $configuracion = $this->configuracionFinanciera->resolver();
         $valoresGlobales = $configuracion['values'];
+        if ($installmentCount < $valoresGlobales['minimum_installment_count'] || $installmentCount > $valoresGlobales['maximum_installment_count']) {
+            throw new ExcepcionVale(
+                'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE',
+                'El número de quincenas debe estar dentro del rango global vigente.',
+                422,
+                [
+                    'minimum_installment_count' => $valoresGlobales['minimum_installment_count'],
+                    'maximum_installment_count' => $valoresGlobales['maximum_installment_count'],
+                ],
+            );
+        }
         $condiciones = [
             'commission_rate' => $valoresGlobales['loan_commission_percentage'],
             'interest_rate' => $valoresGlobales['simple_interest_percentage'],
             'insurance_amount' => $valoresGlobales['insurance_amount'],
             'installment_count' => $installmentCount,
+            'minimum_installment_count' => $valoresGlobales['minimum_installment_count'],
+            'maximum_installment_count' => $valoresGlobales['maximum_installment_count'],
             'late_fee_amount' => $valoresGlobales['late_fee_amount'],
             'category_rate' => (string) $categoria->profit_percentage,
         ];
@@ -228,12 +267,14 @@ final class ServicioGeneracionVale
                 'interest_rate' => $condiciones['interest_rate'],
                 'insurance_amount' => $condiciones['insurance_amount'],
                 'installment_count' => $condiciones['installment_count'],
+                'minimum_installment_count' => $condiciones['minimum_installment_count'],
+                'maximum_installment_count' => $condiciones['maximum_installment_count'],
                 'category_rate' => $condiciones['category_rate'],
                 'late_fee_amount' => $condiciones['late_fee_amount'],
             ],
             'calculation' => $calculo + [
-                'payment_with_late_fee' => bcadd($calculo['misvales_payment_per_fortnight'], $condiciones['late_fee_amount'], 4),
-                'two_payments_with_late_fee' => bcmul(bcadd($calculo['misvales_payment_per_fortnight'], $condiciones['late_fee_amount'], 4), '2', 4),
+                'payment_with_late_fee' => bcadd($calculo['client_payment_per_fortnight'], $condiciones['late_fee_amount'], 4),
+                'two_payments_with_late_fee' => bcmul(bcadd($calculo['client_payment_per_fortnight'], $condiciones['late_fee_amount'], 4), '2', 4),
             ],
         ];
     }
@@ -247,6 +288,9 @@ final class ServicioGeneracionVale
 
     private function esValeDigital(string $distribuidoraId): bool
     {
-        return Vale::query()->where('distributor_id', $distribuidoraId)->exists();
+        return Vale::query()
+            ->where('distributor_id', $distribuidoraId)
+            ->whereNotIn('status', [EstadoVale::CANCELADO, EstadoVale::RECHAZADO])
+            ->exists();
     }
 }

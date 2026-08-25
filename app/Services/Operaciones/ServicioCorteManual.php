@@ -81,6 +81,10 @@ final class ServicioCorteManual
                 abort(422, 'Ya existe un proceso de cierre en ejecución.');
             }
 
+            if ($this->ultimoCorteSinVencer() !== null) {
+                throw new \RuntimeException('PREVIOUS_CUTOFF_NOT_EXPIRED');
+            }
+
             $resumen = $this->obtenerResumenCorteActual($now);
 
             $relationsGenerated = $this->generador->generar($cutoff);
@@ -130,19 +134,19 @@ final class ServicioCorteManual
     private function siguienteCorte(CarbonImmutable $referenceTime): CarbonImmutable
     {
         $schedule = $this->configuracion->programacionCorte($referenceTime);
-        $lastCompletedCutoff = DB::table('relation_process_runs')
+        $lastExpiredCutoff = DB::table('relation_process_runs')
             ->whereExists(function ($query): void {
                 $query->selectRaw('1')
                     ->from('audit_logs')
                     ->whereColumn('audit_logs.entity_id', 'relation_process_runs.id')
                     ->where('audit_logs.entity_type', 'relation_process_run')
-                    ->where('audit_logs.event_name', 'ForcePaymentDeadlineCompleted')
+                    ->where('audit_logs.event_name', 'PaymentDeadlineExpired')
                     ->where('audit_logs.result', 'SUCCESS');
             })
             ->latest('cutoff_at')
             ->value('cutoff_at');
-        if ($lastCompletedCutoff !== null) {
-            return CarbonImmutable::parse($lastCompletedCutoff, $schedule['timezone'])
+        if ($lastExpiredCutoff !== null) {
+            return CarbonImmutable::parse($lastExpiredCutoff, $schedule['timezone'])
                 ->setTimezone($schedule['timezone'])
                 ->addMonthNoOverflow();
         }
@@ -164,6 +168,11 @@ final class ServicioCorteManual
                     ->where('audit_logs.entity_type', 'operation_cutoff')
                     ->where('audit_logs.event_name', 'ForzarCorte')
                     ->where('audit_logs.result', 'SUCCESS');
+            })
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('distributor_relations')
+                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
             })
             ->latest('cutoff_at')
             ->value('id');
@@ -230,5 +239,34 @@ final class ServicioCorteManual
             'overdue_evaluation_at' => $evaluation?->new_value['overdue_evaluation_at'] ?? $deadlineReached?->new_value['overdue_evaluation_at'] ?? null,
             'outcomes' => $evaluation?->new_value['outcomes'] ?? null,
         ];
+    }
+
+    private function ultimoCorteSinVencer(): ?string
+    {
+        return DB::table('relation_process_runs')
+            ->where('status', 'COMPLETED')
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('audit_logs')
+                    ->whereColumn('audit_logs.entity_id', 'relation_process_runs.id')
+                    ->where('audit_logs.entity_type', 'operation_cutoff')
+                    ->where('audit_logs.event_name', 'ForzarCorte')
+                    ->where('audit_logs.result', 'SUCCESS');
+            })
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('distributor_relations')
+                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
+            })
+            ->whereNotExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('audit_logs as deadline_expired')
+                    ->whereColumn('deadline_expired.entity_id', 'relation_process_runs.id')
+                    ->where('deadline_expired.entity_type', 'relation_process_run')
+                    ->where('deadline_expired.event_name', 'PaymentDeadlineExpired')
+                    ->where('deadline_expired.result', 'SUCCESS');
+            })
+            ->latest('cutoff_at')
+            ->value('id');
     }
 }

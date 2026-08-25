@@ -37,14 +37,19 @@ final class AlertaRiesgoDistribuidora extends Model
 
     public function getRelationDetailsAttribute(): array
     {
-        if (empty($this->relation_ids)) {
-            return [];
-        }
-
         return RelacionDistribuidora::query()
-            ->whereIn('id', $this->relation_ids)
-            ->select('id', 'payment_reference', 'cutoff_at', 'payment_deadline_at', 'misvales_total', 'balance', 'financial_status', 'settled_at')
+            ->with('partidas:id,relation_id,snapshot')
+            ->where('distributor_id', $this->distributor_id)
+            ->select('id', 'payment_reference', 'cutoff_at', 'payment_deadline_at', 'portfolio_total', 'misvales_total', 'reconciled_total', 'balance', 'financial_status', 'settled_at')
+            ->latest('cutoff_at')
             ->get()
+            ->each(function (RelacionDistribuidora $relation): void {
+                $relation->setAttribute('distributor_profit_total', $relation->partidas->reduce(
+                    fn (string $total, $item): string => bcadd($total, (string) ($item->snapshot['distributor_profit'] ?? '0'), 4),
+                    '0.0000',
+                ));
+                $relation->unsetRelation('partidas');
+            })
             ->toArray();
     }
 }

@@ -5,6 +5,7 @@ namespace App\Models;
 use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 final class PagoRelacion extends Model
 {
@@ -22,5 +23,10 @@ final class PagoRelacion extends Model
     public function bankMovement(): BelongsTo
     {
         return $this->belongsTo(MovimientoBancario::class, 'bank_movement_id');
+    }
+
+    public function asignaciones(): HasMany
+    {
+        return $this->hasMany(AsignacionPago::class, 'payment_id');
     }
 }
