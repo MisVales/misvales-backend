@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -9,8 +10,16 @@ use SplFileInfo;
 
 class ErrorCatalogService
 {
+    private const CACHE_KEY = 'admin:error-catalog:v2';
+
     /** @return array<int, array<string, mixed>> */
     public function all(): array
+    {
+        return Cache::remember(self::CACHE_KEY, now()->addHour(), fn (): array => $this->build());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function build(): array
     {
         $entries = [];
 
@@ -22,42 +31,30 @@ class ErrorCatalogService
 
             foreach ($this->extractOccurrences($contents) as $occurrence) {
                 $code = $occurrence['code'];
-                $relativePath = Str::after(str_replace('\\', '/', $file), str_replace('\\', '/', base_path()).'/');
                 $entries[$code] ??= [
                     'code' => $code,
-                    'client_definition' => $occurrence['message'] ?: $this->humanize($code),
-                    'internal_definition' => $this->humanize($code),
-                    'admin_definition' => 'Código emitido por la API. Revise las fuentes registradas y el request_id de la respuesta para diagnóstico.',
+                    'client_messages' => [],
                     'http_statuses' => [],
-                    'sources' => [],
-                    'occurrences' => 0,
                 ];
 
-                if ($occurrence['message'] !== null && $entries[$code]['client_definition'] === $this->humanize($code)) {
-                    $entries[$code]['client_definition'] = $occurrence['message'];
+                if ($occurrence['message'] !== null) {
+                    $entries[$code]['client_messages'][] = $occurrence['message'];
                 }
                 if ($occurrence['status'] !== null) {
                     $entries[$code]['http_statuses'][] = $occurrence['status'];
                 }
-                $entries[$code]['sources'][] = $relativePath;
-                $entries[$code]['occurrences']++;
             }
         }
 
         foreach ($entries as &$entry) {
+            $entry['client_messages'] = array_values(array_unique($entry['client_messages']));
+            sort($entry['client_messages']);
+            if ($entry['client_messages'] === []) {
+                $entry['client_messages'] = [$this->humanize($entry['code'])];
+            }
+            $entry['client_message'] = $entry['client_messages'][0];
             $entry['http_statuses'] = array_values(array_unique($entry['http_statuses']));
             sort($entry['http_statuses']);
-            $entry['sources'] = array_values(array_unique($entry['sources']));
-            sort($entry['sources']);
-            $modules = collect($entry['sources'])
-                ->map(fn (string $source): string => Str::of($source)->after('app/')->beforeLast('/')->replace('/', ' › ')->toString())
-                ->filter()
-                ->unique()
-                ->take(3)
-                ->implode(', ');
-            $statuses = $entry['http_statuses'] === [] ? 'variable' : implode(', ', $entry['http_statuses']);
-            $entry['internal_definition'] = $this->humanize($entry['code']).($modules !== '' ? " Áreas relacionadas: {$modules}." : '');
-            $entry['admin_definition'] = "Respuesta API con HTTP {$statuses}; {$entry['occurrences']} punto(s) de emisión en ".count($entry['sources']).' archivo(s). Correlacione request_id con auditoría y logs.';
         }
         unset($entry);
 
