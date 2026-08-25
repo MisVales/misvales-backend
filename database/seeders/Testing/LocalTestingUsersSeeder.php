@@ -322,7 +322,11 @@ final class LocalTestingUsersSeeder extends Seeder
         }
 
         if (! is_file($source)) {
-            throw new RuntimeException("No se encontró el archivo de demostración requerido: {$source}");
+            $source = storage_path('framework/qa-evidence-facade.png');
+        }
+
+        if (! is_file($source)) {
+            throw new RuntimeException("No se encontró el archivo de demostración requerido ni su respaldo local: {$source}");
         }
 
         $extension = strtolower(pathinfo($source, PATHINFO_EXTENSION));
