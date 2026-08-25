@@ -19,10 +19,16 @@ final class EstadoOperativoController extends Controller
         $checks = ['mariadb' => $this->check(fn () => DB::selectOne('SELECT 1')), 'redis' => $this->check(fn () => Redis::connection('health')->ping()), 'private_storage' => $this->storage(), 'scheduler' => $this->scheduler()];
         $ready = ! in_array(false, $checks, true);
 
-        return response()->json([
+        $payload = [
             'status' => $ready ? 'ready' : 'not_ready',
             'checked_at' => now()->toIso8601String(),
-        ], $ready ? 200 : 503);
+        ];
+
+        if ((bool) config('app.debug')) {
+            $payload['checks'] = [...$checks, 'horizon' => $this->horizonRunning()];
+        }
+
+        return response()->json($payload, $ready ? 200 : 503);
     }
 
     public function metrics(): Response

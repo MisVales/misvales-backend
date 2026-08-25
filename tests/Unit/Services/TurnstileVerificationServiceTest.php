@@ -16,11 +16,13 @@ class TurnstileVerificationServiceTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->service = new TurnstileVerificationService();
+        Config::set('services.turnstile.enabled', true);
+        $this->service = new TurnstileVerificationService;
     }
 
-    public function test_case_a_returns_true_when_both_secret_and_token_are_empty(): void
+    public function test_returns_true_when_turnstile_is_disabled(): void
     {
+        Config::set('services.turnstile.enabled', false);
         Config::set('services.turnstile.secret', null);
         $request = Request::create('/api/v1/auth/login', 'POST');
 

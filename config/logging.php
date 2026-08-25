@@ -81,6 +81,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'runtime' => [
+            'driver' => 'daily',
+            'path' => storage_path('runtime_logs/runtime.log'),
+            'level' => env('RUNTIME_LOG_LEVEL', 'debug'),
+            'days' => env('RUNTIME_LOG_DAYS', 14),
+            'replace_placeholders' => true,
+        ],
+
         'slack' => [
             'driver' => 'slack',
             'url' => env('LOG_SLACK_WEBHOOK_URL'),

@@ -6,6 +6,8 @@ use App\Http\Middleware\EnforceIdempotency;
 use App\Http\Middleware\RequireActiveUser;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\RequirePermission;
+use App\Http\Middleware\RequireVpn;
+use App\Http\Middleware\ResolveVpnContext;
 use App\Http\Middleware\TraceRequest;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Http\Middleware\TrustConfiguredProxies;
@@ -32,6 +34,7 @@ use App\Modules\Organization\Domain\Events\OrganizationEventType;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Credito\AuditorIncrementos;
 use App\Services\SolicitudDistribuidora\AuditorSolicitudDistribuidora;
+use App\Support\RuntimeDiagnostics;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -41,6 +44,7 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Exceptions\ThrottleRequestsException;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpKernel\Exception\AccessDeniedHttpException;
@@ -57,6 +61,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->prepend(TrustConfiguredProxies::class);
+        $middleware->append(ResolveVpnContext::class);
         $middleware->statefulApi();
         $middleware->redirectGuestsTo(
             fn (Request $request): ?string => $request->is('api/*') ? null : route('login'),
@@ -67,6 +72,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.user' => RequireActiveUser::class,
             'mfa.completed' => RequireMfaCompleted::class,
             'permission' => RequirePermission::class,
+            'require.vpn' => RequireVpn::class,
             'branch.scope' => CheckBranchScope::class,
             'idempotency' => EnforceIdempotency::class,
         ]);
@@ -75,15 +81,34 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->append(TraceRequest::class);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
-        $respondError = function (Request $request, string $code, string $message, int $status, array|object $fields = [], array|object $details = []) {
+        $respondError = function (Request $request, string $code, string $message, int $status, array|object $fields = [], array|object $details = [], ?Throwable $exception = null) {
             if ($request->is('api/*')) {
-                return response()->json(['error' => [
+                $payload = ['error' => [
                     'code' => $code,
                     'message' => $message,
                     'fields' => empty($fields) ? (object) [] : $fields,
                     'details' => empty($details) ? (object) [] : $details,
                     'request_id' => $request->attributes->get('request_id') ?? request()->header('X-Request-Id'),
-                ]], $status);
+                    'correlation_id' => $request->attributes->get('correlation_id'),
+                    'trace_id' => $request->attributes->get('trace_id'),
+                ]];
+
+                if ((bool) config('app.debug')) {
+                    $payload['error']['diagnostics'] = [
+                        'request' => RuntimeDiagnostics::request($request),
+                        'exception' => $exception ? RuntimeDiagnostics::exception($exception) : null,
+                    ];
+                }
+
+                Log::channel('runtime')->log($status >= 500 ? 'error' : 'warning', 'API_REQUEST_REJECTED', [
+                    ...RuntimeDiagnostics::request($request),
+                    'error_code' => $code,
+                    'status_code' => $status,
+                    'message' => $message,
+                    'exception' => $exception ? RuntimeDiagnostics::exception($exception) : null,
+                ]);
+
+                return response()->json($payload, $status);
             }
 
             return null;
@@ -97,6 +122,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'totp_code',
             'recovery_code',
         ]);
+        $exceptions->dontReportDuplicates();
 
         $exceptions->shouldRenderJsonWhen(
             fn (Request $request) => $request->is('api/*')
@@ -284,6 +310,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return $respondError($request, 'SESSION_EXPIRED', 'Tu sesión ha expirado. Inicia sesión nuevamente.', 401);
             }
 
+            if ($e->getStatusCode() === 419) {
+                return $respondError($request, 'CSRF_TOKEN_MISMATCH', 'La protección CSRF rechazó la solicitud. Renueva la sesión e inténtalo nuevamente.', 419, [], [], $e);
+            }
+
             return null;
         });
 
@@ -335,7 +365,7 @@ return Application::configure(basePath: dirname(__DIR__))
 
         $exceptions->renderable(function (ApiException $e, Request $request) use ($respondError) {
             // Already handled internally but if it falls here, use our formatter.
-            return $respondError($request, $e->errorCode, $e->getMessage(), $e->httpStatus, $e->fields, $e->details);
+            return $respondError($request, $e->errorCode, $e->getMessage(), $e->httpStatus, $e->fields, $e->details, $e);
         });
 
         $exceptions->renderable(function (Throwable $e, Request $request) use ($respondError) {
@@ -398,10 +428,13 @@ return Application::configure(basePath: dirname(__DIR__))
             // Fallback for everything else
             if ($request->is('api/*')) {
                 return $respondError(
-                    $request, 
-                    'INTERNAL_ERROR', 
-                    'ERROR REAL: ' . $e->getMessage() . ' en ' . $e->getFile() . ' linea ' . $e->getLine(), 
-                    500
+                    $request,
+                    'INTERNAL_ERROR',
+                    'Ocurrió un error inesperado. Inténtalo nuevamente.',
+                    500,
+                    [],
+                    [],
+                    $e,
                 );
             }
         });

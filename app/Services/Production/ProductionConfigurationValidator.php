@@ -38,6 +38,12 @@ final class ProductionConfigurationValidator
         if ((bool) config('cors.supports_credentials') && $this->hasWildcardOrigin()) {
             $violations[] = 'CORS_CREDENTIALS_WITH_WILDCARD';
         }
+        if (! $this->frontendOriginIsAllowed()) {
+            $violations[] = 'FRONTEND_ORIGIN_NOT_ALLOWED';
+        }
+        if (! $this->frontendHostIsStateful()) {
+            $violations[] = 'FRONTEND_HOST_NOT_STATEFUL';
+        }
         if (! (bool) config('ratelimit.enabled')) {
             $violations[] = 'RATE_LIMIT_DISABLED';
         }
@@ -60,5 +66,26 @@ final class ProductionConfigurationValidator
             || ! is_array($patterns)
             || in_array('*', $origins, true)
             || in_array('*', $patterns, true);
+    }
+
+    private function frontendOriginIsAllowed(): bool
+    {
+        $frontendOrigin = rtrim((string) config('production.frontend_url'), '/');
+        $origins = config('cors.allowed_origins', []);
+
+        return $frontendOrigin !== ''
+            && is_array($origins)
+            && in_array($frontendOrigin, $origins, true);
+    }
+
+    private function frontendHostIsStateful(): bool
+    {
+        $frontendHost = parse_url((string) config('production.frontend_url'), PHP_URL_HOST);
+        $statefulDomains = config('sanctum.stateful', []);
+
+        return is_string($frontendHost)
+            && $frontendHost !== ''
+            && is_array($statefulDomains)
+            && in_array($frontendHost, $statefulDomains, true);
     }
 }

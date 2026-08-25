@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Crypt;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rules\Password;
@@ -33,6 +34,11 @@ class InvitationController extends Controller
      */
     public function inspect(Request $request)
     {
+        Log::channel('runtime')->info('INVITATION_INSPECTION_STARTED', [
+            'request_id' => $request->attributes->get('request_id'),
+            'token_present' => $request->filled('token'),
+        ]);
+
         $request->validate([
             'token' => 'required|string',
         ]);
@@ -112,6 +118,13 @@ class InvitationController extends Controller
             ];
         }
 
+        Log::channel('runtime')->info('INVITATION_INSPECTION_COMPLETED', [
+            'request_id' => $request->attributes->get('request_id'),
+            'invitation_id' => $invitation->id,
+            'user_id' => $invitation->user_id,
+            'step' => $responsePayload['step'],
+        ]);
+
         return response()->json($responsePayload);
     }
 
@@ -136,7 +149,7 @@ class InvitationController extends Controller
 
         $user = $invitation->user;
 
-        if ($user->state !== 'PENDING_ACTIVATION') {
+        if (! in_array($user->state, ['INVITED', 'PENDING_ACTIVATION'], true)) {
             throw new ApiException('USER_NOT_PENDING', 'La cuenta ya está activa o no es elegible para activación.', 400);
         }
 
@@ -277,10 +290,11 @@ class InvitationController extends Controller
             $invitation->update([
                 'mfa_setup_completed_at' => $now,
             ]);
-
-            // 5. Limpiar Caché
-            Cache::forget("totp_setup_{$request->exchange_token}");
         });
+
+        // Limpiar el secreto solo después de que la transacción confirme todos los cambios.
+        // Mantenerlo durante la transacción permite reintentar si la escritura en BD falla.
+        Cache::forget("totp_setup_{$exchangeTokenHash}");
 
         if ($developmentMfaBypass) {
             app(SecurityAuditService::class)->log($request, [

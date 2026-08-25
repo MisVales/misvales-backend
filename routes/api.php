@@ -4,6 +4,7 @@ use App\Http\Controllers\AddressController;
 use App\Http\Controllers\Api\V1\ActivacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\ArchivoPrivadoController;
 use App\Http\Controllers\Api\V1\AsignacionCategoriaDistribuidoraController;
+use App\Http\Controllers\Api\V1\Auth\AuthConfigurationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
@@ -23,6 +24,7 @@ use App\Http\Controllers\Api\V1\Credito\MovimientoLineaCreditoConsultaController
 use App\Http\Controllers\Api\V1\Credito\SolicitudIncrementoLineaConsultaController;
 use App\Http\Controllers\Api\V1\CuentaBancariaClienteController;
 use App\Http\Controllers\Api\V1\DistribuidoraController;
+use App\Http\Controllers\Api\V1\ErrorCatalogController;
 use App\Http\Controllers\Api\V1\EstadoOperativoController;
 use App\Http\Controllers\Api\V1\ExcedenteController;
 use App\Http\Controllers\Api\V1\InvitationListController;
@@ -61,8 +63,11 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::get('health/readiness', [EstadoOperativoController::class, 'readiness'])->middleware('throttle:60,1');
-    Route::get('metrics', [EstadoOperativoController::class, 'metrics'])->middleware('throttle:60,1');
+    Route::get('metrics', [EstadoOperativoController::class, 'metrics'])->middleware([
+        'auth:sanctum', 'active.user', 'mfa.completed', 'permission:audit.view_global', 'require.vpn:always', 'throttle:60,1',
+    ]);
     Route::prefix('auth')->group(function () {
+        Route::get('configuration', AuthConfigurationController::class)->middleware('throttle:60,1');
         Route::post('invitations/inspect', [InvitationController::class, 'inspect'])->middleware('throttle:inspect_invitation');
         Route::post('invitations/resend', [InvitationController::class, 'resend'])->middleware('throttle:resend_invitation');
         Route::post('invitations/setup', [InvitationController::class, 'setup']);
@@ -95,7 +100,7 @@ Route::prefix('v1')->group(function () {
     });
 
     // Perfil y Permisos
-    Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
+    Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed', 'require.vpn'])->group(function () {
 
         // Módulo 4 - Solicitud Distribuidora
         Route::get('distributor-applications', [SolicitudDistribuidoraController::class, 'index']);
@@ -165,6 +170,7 @@ Route::prefix('v1')->group(function () {
 
         // Auditoría
         Route::get('security-events', [SecurityEventController::class, 'index']);
+        Route::get('error-catalog', ErrorCatalogController::class);
 
         // Invitaciones
         Route::get('invitations', [InvitationListController::class, 'index']);

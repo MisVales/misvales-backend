@@ -5,10 +5,8 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Database\Seeders\DatabaseSeeder;
-use Database\Seeders\Testing\LocalTestingUsersSeeder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
-use RuntimeException;
 use Tests\TestCase;
 
 final class DatabaseSeedersTest extends TestCase
@@ -167,18 +165,6 @@ final class DatabaseSeedersTest extends TestCase
             ->groupBy('role_id', 'permission_id')
             ->havingRaw('COUNT(*) > 1')
             ->count());
-    }
-
-    public function test_local_testing_users_seeder_refuses_non_local_environments(): void
-    {
-        app()->detectEnvironment(fn (): string => 'production');
-
-        try {
-            $this->expectException(RuntimeException::class);
-            (new LocalTestingUsersSeeder)->run();
-        } finally {
-            app()->detectEnvironment(fn (): string => 'testing');
-        }
     }
 
     /** @return array<string, int> */

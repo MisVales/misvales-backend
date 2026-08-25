@@ -19,6 +19,7 @@
     </source>
     <php>
         <env name="APP_ENV" value="testing"/>
+        <env name="VPN_NETWORKS" value="127.0.0.1/32"/>
         <env name="APP_TIMEZONE" value="America/Monterrey"/>
         <env name="RATELIMIT" value="true"/>
         <env name="APP_MAINTENANCE_DRIVER" value="file"/>
