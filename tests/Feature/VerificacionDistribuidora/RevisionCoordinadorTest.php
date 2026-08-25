@@ -68,6 +68,34 @@ class RevisionCoordinadorTest extends Modulo5TestCase
         $this->assertDatabaseHas('verification_visits', ['application_id' => $app->id, 'verifier_id' => $verifier->id]);
     }
 
+    public function test_asignacion_con_iso_utc_conserva_la_hora_local_seleccionada(): void
+    {
+        $branch = Branch::factory()->create();
+        $coordinator = User::factory()->create();
+        $verifier = User::factory()->create(['state' => 'ACTIVE']);
+        $verifier->assignRole('verifier', $branch->id);
+        $application = DistributorApplication::factory()->create([
+            'branch_id' => $branch->id,
+            'coordinator_id' => $coordinator->id,
+            'status' => ApplicationStatus::COORDINATOR_REVIEW,
+        ]);
+
+        $this->travelTo(CarbonImmutable::parse('2026-08-25 16:28:00', 'America/Monterrey'));
+
+        $this->actingAsMfaUser($coordinator, ['coordinator'], $branch->id)
+            ->postJson("/api/v1/distributor-applications/{$application->id}/assign-verifier", [
+                'verifier_id' => $verifier->id,
+                'scheduled_for' => '2026-08-25T22:30:00.000Z',
+                'lock_version' => $application->lock_version,
+            ])
+            ->assertOk();
+
+        $visit = VerificationVisit::query()->where('application_id', $application->id)->firstOrFail();
+
+        $this->assertSame('2026-08-25 16:30:00', $visit->scheduled_for->format('Y-m-d H:i:s'));
+        $this->assertSame('America/Monterrey', $visit->scheduled_for->timezoneName);
+    }
+
     public function test_hoy_permite_asignar_desde_el_siguiente_bloque_de_quince_minutos(): void
     {
         $now = CarbonImmutable::parse('2026-08-24 12:01:00', 'America/Monterrey');
