@@ -92,9 +92,7 @@ class TurnstileVerificationService
                 throw new ApiException(
                     'INVALID_TURNSTILE',
                     'La verificación de seguridad es inválida o ha expirado.',
-                    422,
-                    [],
-                    ['cloudflare_errors' => $errorCodes]
+                    422
                 );
             }
         } catch (ApiException $e) {

@@ -561,7 +561,9 @@ class AuthController extends Controller
         }
 
         // Revocar token de Sanctum anterior (si sigue vivo)
-        $user->tokens()->where('id', $data['access_token_id'])->delete();
+        if (! empty($data['access_token_id'])) {
+            $user->tokens()->where('id', $data['access_token_id'])->delete();
+        }
 
         // Emitir nuevo Access Token
         $token = $user->createToken('auth_token_'.Str::random(10));
