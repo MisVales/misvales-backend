@@ -31,6 +31,7 @@ use App\Http\Controllers\Api\V1\InvitationListController;
 use App\Http\Controllers\Api\V1\LineaCreditoController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\PermissionController;
+use App\Http\Controllers\Api\V1\PreparacionActivacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\ProductoController;
 use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
@@ -263,6 +264,10 @@ Route::prefix('v1')->group(function () {
         Route::post('distributor-applications/{application}/authorize', [AutorizacionSolicitudController::class, 'autorizar']);
 
         // Módulo 6 - Activación y administración de distribuidoras
+        Route::get('distributor-activation/authorized-applications', [PreparacionActivacionDistribuidoraController::class, 'solicitudes'])
+            ->middleware('permission:distributors.activate');
+        Route::get('distributor-activation/categories', [PreparacionActivacionDistribuidoraController::class, 'categorias'])
+            ->middleware('permission:distributors.activate');
         Route::post('distributor-applications/{application}/activation', [ActivacionDistribuidoraController::class, 'store'])
             ->middleware(['permission:distributors.activate', 'idempotency']);
         Route::get('distributors', [DistribuidoraController::class, 'index'])

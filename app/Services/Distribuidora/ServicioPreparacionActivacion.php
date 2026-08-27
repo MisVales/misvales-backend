@@ -57,6 +57,7 @@ class ServicioPreparacionActivacion
                 'code' => $version->category->code,
                 'name' => $version->name,
                 'description' => $version->description,
+                'profit_percentage' => $version->profit_percentage,
                 'effective_from' => $version->effective_from?->toIso8601String(),
                 'effective_to' => $version->effective_to?->toIso8601String(),
             ]);
