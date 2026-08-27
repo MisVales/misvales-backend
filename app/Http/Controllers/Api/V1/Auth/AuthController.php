@@ -560,8 +560,8 @@ class AuthController extends Controller
             return $this->refreshFailure($request, 'INVALID_SESSION', 'Sesión cerrada por inactividad.');
         }
 
-        // El token anterior expira naturalmente por su campo expires_at.
-        // No se elimina para evitar requerir permisos DELETE en la tabla personal_access_tokens.
+        // Revocar token de Sanctum anterior (si sigue vivo)
+        $user->tokens()->where('id', $data['access_token_id'])->delete();
 
         // Emitir nuevo Access Token
         $token = $user->createToken('auth_token_'.Str::random(10));
