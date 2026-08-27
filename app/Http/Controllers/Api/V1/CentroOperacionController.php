@@ -305,10 +305,10 @@ final class CentroOperacionController extends Controller
     {
         abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
 
-        $validated = $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
+        $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
 
         try {
-            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $validated['motivo'] ?? null)]);
+            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'RELATION_CONFIGURATION_INCOMPLETE') {
                 return response()->json(['message' => 'Falta configuración en el sistema (horarios/días) para poder generar el corte.'], 422);

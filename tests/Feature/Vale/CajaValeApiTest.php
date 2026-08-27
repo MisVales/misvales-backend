@@ -41,6 +41,7 @@ use App\Models\UserRoleScope;
 use App\Models\Vale;
 use App\Notifications\NotificacionEventoDominio;
 use App\Services\Cliente\ProtectorDatosCliente;
+use App\Services\Conciliacion\LectorXlsxBancario;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
 use App\Services\Excedente\ServicioExcedente;
@@ -762,7 +763,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(0, $service->generar($this->corteSeptiembre()));
 
         $this->assertDatabaseCount('distributor_relations', 1);
-        $this->assertDatabaseCount('distributor_relation_items', 3);
+        $this->assertDatabaseCount('distributor_relation_items', 1);
         $this->assertSame(8, $this->voucher->parcialidades()->count());
     }
 
@@ -844,20 +845,13 @@ final class CajaValeApiTest extends TestCase
     public function test_corte_forzado_toma_solo_la_siguiente_parcialidad_de_cada_vale(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-29 10:00:00', 'America/Monterrey'));
-        $normal = $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
-        app(ServicioGeneracionRelacion::class)->generar($this->corteSeptiembre());
-
-        $forzado = $this->materializarCalendario($this->valeDeOtraDistribuidora('VAL-FORCED-CUTOFF'), '2026-08-29 10:00:00', 8);
+        $vale = $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
         Sanctum::actingAs($this->user('general_manager'));
-        $this->getJson('/api/v1/operations/current-cutoff')
-            ->assertSuccessful()
-            ->assertJsonPath('data.summary.operations', 3);
         $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Comparar con corte normal'])
             ->assertSuccessful()
             ->assertJsonPath('data.simulated_cutoff_at', '2026-09-25T06:05:00+00:00');
 
-        $this->assertSame([1, 2, 3], $this->numerosRelacionados($normal));
-        $this->assertSame([1], $this->numerosRelacionados($forzado));
+        $this->assertSame([1], $this->numerosRelacionados($vale));
     }
 
     public function test_resumen_de_corte_no_exige_banco_pero_forzar_corte_si_lo_exige(): void
@@ -1302,6 +1296,27 @@ final class CajaValeApiTest extends TestCase
             ->assertJsonPath('error.code', 'RECONCILIATION_PERIOD_NOT_AVAILABLE');
         $this->get('/api/v1/bank-simulations/'.$created->json('data.id').'/ticket')
             ->assertUnprocessable();
+    }
+
+    public function test_pago_simulado_del_corte_vigente_aparece_en_el_excel_del_mismo_proceso(): void
+    {
+        $relation = $this->createPaymentRelation();
+        Sanctum::actingAs($this->distributorUser);
+        $this->postJson('/api/v1/bank-simulations', [
+            'relation_id' => $relation->id,
+            'amount' => '116.00',
+            'payment_type' => 'TRANSFER',
+            'concept' => 'Pago de la parcialidad vigente',
+        ])->assertCreated();
+
+        $service = app(ServicioTransferenciasBancariasSimuladas::class);
+        $this->assertCount(1, $service->listar($this->branch->id, $relation->process_run_id));
+        $path = $service->exportar($this->branch->id, $relation->process_run_id);
+        $rows = app(LectorXlsxBancario::class)->leer($path);
+
+        $this->assertCount(2, $rows);
+        $this->assertSame($relation->payment_reference, $rows[1][2]);
+        $this->assertSame('116', (string) $rows[1][3]);
     }
 
     public function test_xlsx_del_cliente_concilia_referencia_pago_fecha_y_hora(): void

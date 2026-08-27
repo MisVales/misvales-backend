@@ -87,7 +87,7 @@ final class ServicioCorteManual
 
             $resumen = $this->obtenerResumenCorteActual($now);
 
-            $relationsGenerated = $this->generador->generar($cutoff, true);
+            $relationsGenerated = $this->generador->generar($cutoff);
 
             $runId = DB::table('relation_process_runs')
                 ->where('status', 'COMPLETED')

@@ -3,7 +3,6 @@
 namespace App\Services\Relacion;
 
 use App\Models\AuditLog;
-use App\Models\Distribuidora;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
 use App\Notifications\NotificacionEventoDominio;
@@ -22,13 +21,24 @@ final class ServicioGeneracionRelacion
         private readonly ServicioCalendarioParcialidadesVale $calendarioParcialidades,
     ) {}
 
-    public function generar(CarbonImmutable $corte, bool $oneInstallmentPerVoucher = false): int
+    public function generar(CarbonImmutable $corte): int
     {
         $this->calendarioParcialidades->repararCobradosSinCalendario();
         $config = $this->configuracion->resolver(CarbonImmutable::now('UTC'));
         $corte = $corte->setTimezone($config['timezone']);
         $cutoff = $corte->utc();
         $this->asegurarCorteAnteriorConciliado($cutoff);
+        if (DB::table('relation_process_runs')
+            ->where('status', 'COMPLETED')
+            ->where('cutoff_at', $cutoff)
+            ->whereExists(function ($query): void {
+                $query->selectRaw('1')
+                    ->from('distributor_relations')
+                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
+            })
+            ->exists()) {
+            return 0;
+        }
         $paymentDeadline = $corte
             ->addDays($config['payment_deadline_days'])
             ->setTimeFromTimeString($config['payment_deadline_time']);
@@ -37,7 +47,7 @@ final class ServicioGeneracionRelacion
         DB::table('relation_process_runs')->insert(['id' => $runId, 'cutoff_at' => $cutoff, 'status' => 'RUNNING', 'attempt' => $attempt, 'configuration_snapshot' => json_encode($config), 'created_at' => now(), 'updated_at' => now()]);
 
         try {
-            $count = DB::transaction(fn (): int => $this->procesar($runId, $corte, $cutoff, $paymentDeadline, $config, $oneInstallmentPerVoucher));
+            $count = DB::transaction(fn (): int => $this->procesar($runId, $corte, $cutoff, $paymentDeadline, $config));
             DB::table('relation_process_runs')->where('id', $runId)->update(['status' => 'COMPLETED', 'updated_at' => now()]);
 
             return $count;
@@ -76,45 +86,23 @@ final class ServicioGeneracionRelacion
         }
     }
 
-    private function procesar(string $runId, CarbonImmutable $corte, CarbonImmutable $cutoff, CarbonImmutable $paymentDeadline, array $config, bool $oneInstallmentPerVoucher): int
+    private function procesar(string $runId, CarbonImmutable $corte, CarbonImmutable $cutoff, CarbonImmutable $paymentDeadline, array $config): int
     {
         $installments = ParcialidadVale::query()
-            ->with(['vale.parcialidades', 'vale.distribuidora.usuario', 'vale.distribuidora.sucursal', 'vale.distribuidora.lineaCredito', 'vale.distribuidora.coordinadorVigente.coordinator', 'vale.distribuidora.solicitud.domicilioActual', 'vale.cliente', 'vale.versionProducto', 'vale.versionCategoria'])
+            ->with(['vale.distribuidora.usuario', 'vale.distribuidora.sucursal', 'vale.distribuidora.lineaCredito', 'vale.distribuidora.coordinadorVigente.coordinator', 'vale.distribuidora.solicitud.domicilioActual', 'vale.cliente', 'vale.versionProducto', 'vale.versionCategoria'])
             ->whereNotNull('due_at')
-            ->when(! $oneInstallmentPerVoucher, fn ($query) => $query->where('due_at', '<=', $paymentDeadline))
             ->whereHas('vale', fn ($q) => $q->where('status', 'CASHED')->whereNotNull('cashed_at')->where('cashed_at', '<=', $cutoff))
             ->whereDoesntHave('relationItem')
             ->orderBy('voucher_id')
             ->orderBy('number')
             ->lockForUpdate()
-            ->get();
-        if ($oneInstallmentPerVoucher) {
-            $installments = $installments->unique('voucher_id')->values();
-        }
-        $groups = $installments->groupBy(fn ($item) => $item->vale->distributor_id);
-        $distributorIds = $groups->keys()->merge(
-            RelacionDistribuidora::query()
-                ->where('cutoff_at', '<', $cutoff)
-                ->where('balance', '>', 0)
-                ->pluck('distributor_id'),
-        )->unique()->values();
-        $alreadyGenerated = RelacionDistribuidora::query()
-            ->where('cutoff_at', $cutoff)
-            ->whereIn('distributor_id', $distributorIds)
-            ->pluck('distributor_id');
-        $distributorIds = $distributorIds->diff($alreadyGenerated)->values();
-        $distributors = Distribuidora::query()
-            ->with(['usuario', 'sucursal', 'lineaCredito', 'coordinadorVigente.coordinator', 'solicitud.domicilioActual'])
-            ->whereKey($distributorIds)
             ->get()
-            ->keyBy('id');
-
-        foreach ($distributorIds as $distributorId) {
-            $items = $groups->get($distributorId, collect());
-            $d = $items->first()?->vale?->distribuidora ?? $distributors->get($distributorId);
-            if ($d === null) {
-                continue;
-            }
+            ->unique('voucher_id')
+            ->values();
+        $groups = $installments->groupBy(fn ($item) => $item->vale->distributor_id);
+        foreach ($groups as $items) {
+            $first = $items->first();
+            $d = $first->vale->distribuidora;
             $line = $d->lineaCredito;
             $previousRelations = RelacionDistribuidora::query()
                 ->where('distributor_id', $d->id)
@@ -149,7 +137,7 @@ final class ServicioGeneracionRelacion
                 if (bccomp($misvalesCommission, '0.0000', 4) < 0) {
                     throw new \RuntimeException('RELATION_FINANCIAL_SNAPSHOT_INCONSISTENT');
                 }
-                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'installment_schedule' => $item->vale->parcialidades->map(fn (ParcialidadVale $installment): array => ['number' => $installment->number, 'client_payment' => $installment->client_payment, 'misvales_payment' => $installment->misvales_payment, 'due_at' => $installment->due_at?->toIso8601String()])->values()->all(), 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $item->distributor_profit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $item->client_payment, 'surcharge' => '0.0000', 'client_payment' => $item->client_payment, 'misvales_payment' => $item->misvales_payment, 'reconciled_payments' => '0.0000', 'balance' => $item->misvales_payment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $item->client_payment, 'misvales_amount' => $item->misvales_payment, 'created_at' => now()]);
+                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $item->distributor_profit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $item->client_payment, 'surcharge' => '0.0000', 'client_payment' => $item->client_payment, 'misvales_payment' => $item->misvales_payment, 'reconciled_payments' => '0.0000', 'balance' => $item->misvales_payment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $item->client_payment, 'misvales_amount' => $item->misvales_payment, 'created_at' => now()]);
             }
             foreach ($outstandingRelations as $outstandingRelation) {
                 $outstandingRelation->update(['financial_status' => 'ROLLED_FORWARD', 'balance' => '0.0000', 'rolled_forward_to_id' => $relation->id, 'rolled_forward_at' => now(), 'rolled_forward_amount' => $outstandingRelation->balance]);
@@ -165,7 +153,7 @@ final class ServicioGeneracionRelacion
             ]));
         }
 
-        return $distributorIds->count();
+        return $groups->count();
     }
 
     private function saldoPendientePorComponente(?RelacionDistribuidora $relation): array
