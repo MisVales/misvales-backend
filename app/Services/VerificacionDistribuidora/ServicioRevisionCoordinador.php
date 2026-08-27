@@ -14,6 +14,8 @@ use Illuminate\Support\Facades\DB;
 
 class ServicioRevisionCoordinador
 {
+    public function __construct(private readonly PoliticaHorarioVerificacion $schedulePolicy) {}
+
     private const VISIT_DURATION_MINUTES = 30;
 
     private const ARRIVAL_BUFFER_BEFORE_MINUTES = 15;
@@ -166,6 +168,7 @@ class ServicioRevisionCoordinador
 
             $scheduled = CarbonImmutable::parse($scheduledFor)
                 ->setTimezone(config('app.timezone'));
+            $this->schedulePolicy->validar($scheduled);
             $separationMinutes = self::ARRIVAL_BUFFER_BEFORE_MINUTES
                 + self::VISIT_DURATION_MINUTES
                 + self::TRAVEL_BUFFER_AFTER_MINUTES;

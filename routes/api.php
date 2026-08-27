@@ -243,6 +243,7 @@ Route::prefix('v1')->group(function () {
         Route::post('distributor-applications/{application}/assign-verifier', [VerificacionDistribuidoraController::class, 'asignarVerificador']);
         Route::get('distributor-applications/{application}/available-verifiers', [VerificacionDistribuidoraController::class, 'listarVerificadoresDisponibles']);
         Route::get('distributor-applications/{application}/verifiers/{verifier}/schedule', [VerificacionDistribuidoraController::class, 'consultarAgendaVerificador']);
+        Route::get('verification-schedule-policy', [VerificacionDistribuidoraController::class, 'politicaHorario']);
         Route::get('verification-visits/assigned', [VerificacionDistribuidoraController::class, 'consultarAsignadas']);
         Route::get('verification-visits/{visit}', [VerificacionDistribuidoraController::class, 'consultarVisita']);
         Route::post('verification-visits/{visit}/start', [VerificacionDistribuidoraController::class, 'iniciarVisita']);

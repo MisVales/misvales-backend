@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\DB;
 
 class ServicioVerificacionDistribuidora
 {
+    public function __construct(private readonly PoliticaHorarioVerificacion $schedulePolicy) {}
+
     public function consultarAsignadas(string $verifierId): Collection
     {
         return VerificationVisit::with([
@@ -101,6 +103,7 @@ class ServicioVerificacionDistribuidora
 
             $timezone = 'America/Monterrey';
             $now = CarbonImmutable::now($timezone);
+            $this->schedulePolicy->validarHoraDeInicio($now);
             $scheduled = $visit->scheduled_for?->toImmutable()->setTimezone($timezone);
             if ($scheduled === null) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_SCHEDULED', 'La visita no tiene fecha y hora programadas.', 409);

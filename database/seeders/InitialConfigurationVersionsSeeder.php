@@ -70,6 +70,8 @@ final class InitialConfigurationVersionsSeeder extends Seeder
             'PAYMENT_DEADLINE_TIME' => '23:59:59',
             'BANK_UPLOAD_DEADLINE_TIME' => '08:00',
             'POST_DUE_EVALUATION_TIME' => '08:30',
+            'VERIFICATION_START_TIME' => '08:00',
+            'VERIFICATION_MAX_START_TIME' => '23:45',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
             'LOAN_COMMISSION_PERCENTAGE' => '0.1000',
             'INTEREST_RATE_PER_FORTNIGHT' => '0.0300',
