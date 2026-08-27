@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Tests\Feature;
 
+use PDO;
 use Tests\TestCase;
 
 final class ProductionConfigurationCommandTest extends TestCase
@@ -56,6 +57,16 @@ final class ProductionConfigurationCommandTest extends TestCase
     public function test_repository_does_not_ship_the_fixed_credential_bootstrap(): void
     {
         self::assertFileDoesNotExist(base_path('create_coordinator.php'));
+    }
+
+    public function test_mysql_read_and_write_connections_timeout_after_three_seconds(): void
+    {
+        if (! extension_loaded('pdo_mysql')) {
+            $this->markTestSkipped('pdo_mysql is required to inspect the connection timeout.');
+        }
+
+        self::assertSame(3, config('database.connections.mysql.read.options')[PDO::ATTR_TIMEOUT]);
+        self::assertSame(3, config('database.connections.mysql.write.options')[PDO::ATTR_TIMEOUT]);
     }
 
     private function configureSafeProductionBaseline(): void
