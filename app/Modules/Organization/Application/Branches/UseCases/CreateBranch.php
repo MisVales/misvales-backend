@@ -29,9 +29,10 @@ final readonly class CreateBranch
         ?float $lng,
         string $actorId,
     ): Branch {
+        $sequenceResult = DB::selectFromWriteConnection('SELECT NEXT VALUE FOR branches_code_sequence AS val');
         $branchCode = BranchCode::fromString(sprintf(
             'SUC-%03d',
-            (int) DB::scalar('SELECT NEXT VALUE FOR branches_code_sequence'),
+            (int) ($sequenceResult[0]->val ?? 1),
         ));
         $validatedAddress = new ValidatedAddress(
             formatted: $address,

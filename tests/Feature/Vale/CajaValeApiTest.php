@@ -27,6 +27,7 @@ use App\Models\LineaCredito;
 use App\Models\MediaFile;
 use App\Models\MediaFileBinding;
 use App\Models\MovimientoBancario;
+use App\Models\MovimientoLineaCredito;
 use App\Models\PagoRelacion;
 use App\Models\Product;
 use App\Models\ProductVersion;
@@ -48,6 +49,7 @@ use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
 use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
+use App\Services\Vale\CalculadorFinancieroVale;
 use App\Services\Vale\ServicioCalendarioParcialidadesVale;
 use Carbon\CarbonImmutable;
 use Database\Seeders\RolesAndPermissionsSeeder;
@@ -293,6 +295,74 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('SETTLED', $relation->financial_status);
         $this->assertSame('EARLY', $relation->temporal_classification);
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '12500.0000']);
+    }
+
+    public function test_liquidacion_de_ocho_parcialidades_recupera_capital_exacto_y_el_reintento_no_duplica_linea(): void
+    {
+        Storage::fake('local');
+        $calculation = app(CalculadorFinancieroVale::class)->calcular(
+            '5000.0000',
+            '0.100000',
+            '0.050000',
+            8,
+            '100.0000',
+            '0.060000',
+        );
+        $this->voucher->forceFill([
+            'capital' => $calculation['capital'],
+            'loan_commission_amount' => $calculation['loan_commission_amount'],
+            'simple_interest_percentage' => $calculation['simple_interest_percentage'],
+            'fortnights_count' => 8,
+            'insurance_amount' => $calculation['insurance_amount'],
+            'interest_total' => $calculation['interest_total'],
+            'misvales_total' => $calculation['misvales_total'],
+            'misvales_payment_per_fortnight' => $calculation['misvales_payment_per_fortnight'],
+            'distributor_profit_total' => $calculation['distributor_profit_total'],
+            'distributor_profit_per_fortnight' => $calculation['distributor_profit_per_fortnight'],
+            'client_payment_per_fortnight' => $calculation['client_payment_per_fortnight'],
+            'client_total' => $calculation['client_total'],
+        ])->save();
+        LineaCredito::query()->whereKey($this->voucher->credit_line_id)->update(['used_balance' => '0.0000']);
+        $this->voucher->parcialidades()->delete();
+
+        Sanctum::actingAs($this->cashier);
+        $released = $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/release", ['lock_version' => 1])->assertSuccessful();
+        $this->postIdempotent("/api/v1/cashier/vouchers/{$this->voucher->id}/cash", [
+            'bank_transaction_number' => '202608210099',
+            'lock_version' => $released->json('data.lock_version'),
+        ])->assertSuccessful();
+        $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '5000.0000']);
+
+        $cutoff = CarbonImmutable::now('America/Monterrey');
+        $this->voucher->parcialidades()->createMany(array_map(
+            static fn (array $installment): array => $installment + ['due_at' => $cutoff->subDay()],
+            $calculation['installments'],
+        ));
+        self::assertSame(1, app(ServicioGeneracionRelacion::class)->generar($cutoff));
+        $relation = RelacionDistribuidora::query()->firstOrFail();
+        self::assertSame('7300.0000', $relation->balance);
+
+        $file = $this->xlsx([[
+            $relation->payment_reference,
+            '7300.00',
+            $cutoff->addDay()->format('Y-m-d H:i:s'),
+            'BANK-CAPITAL-EXACTO-001',
+            'Liquidación exacta',
+        ]]);
+        $import = app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+
+        self::assertSame('0.0000', $relation->fresh()->balance);
+        self::assertSame('5000.0000', (string) DB::table('payment_allocations')->where('component', 'CAPITAL')->sum('amount'));
+        $this->assertDatabaseHas('relation_payments', ['capital_applied' => '5000.0000', 'line_recovered' => '5000.0000']);
+        $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '0.0000']);
+        self::assertSame(1, MovimientoLineaCredito::query()->where('type', 'PAYMENT_RECOVERY')->count());
+
+        $replayed = app(ServicioImportacionBancaria::class)->importar($file, $this->cashier, $this->branch->id);
+        self::assertSame($import->id, $replayed->id);
+        self::assertTrue($replayed->replayed);
+        self::assertSame(1, PagoRelacion::query()->count());
+        self::assertSame(1, MovimientoLineaCredito::query()->where('type', 'PAYMENT_RECOVERY')->count());
+        $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '0.0000']);
     }
 
     public function test_estado_sucursal_transaccion_y_saldo_se_validan_al_feriar(): void

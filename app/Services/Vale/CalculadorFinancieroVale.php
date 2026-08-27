@@ -17,9 +17,12 @@ final class CalculadorFinancieroVale
         $comisionMonto = $this->redondear(bcmul($capital, $comision, 10));
         $interesQuincena = $this->redondear(bcmul($capital, $interes, 10));
         $interesTotal = $this->redondear(bcmul(bcmul($capital, $interes, 10), (string) $quincenas, 10));
-        $totalMisVales = $this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]);
+        $totalBase = $this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]);
         $gananciaTotal = $this->redondear(bcmul($capital, $ganancia, 10));
-        $totalCliente = bcadd($totalMisVales, $gananciaTotal, 4);
+        $totalMisVales = bcsub($totalBase, $gananciaTotal, 4);
+        if (bccomp($totalMisVales, '0.0000', 4) < 0) {
+            throw new InvalidArgumentException('La ganancia de categoría no puede exceder el pago base.');
+        }
 
         $componentes = [
             'capital' => $this->distribuir($capital, $quincenas),
@@ -28,7 +31,7 @@ final class CalculadorFinancieroVale
             'insurance' => $this->distribuir($seguro, $quincenas),
             'distributor_profit' => $this->distribuir($gananciaTotal, $quincenas),
             'misvales_payment' => $this->distribuir($totalMisVales, $quincenas),
-            'client_payment' => $this->distribuir($totalCliente, $quincenas),
+            'client_payment' => $this->distribuir($totalBase, $quincenas),
         ];
 
         $parcialidades = [];
@@ -53,7 +56,7 @@ final class CalculadorFinancieroVale
             'distributor_profit_per_fortnight' => $componentes['distributor_profit'][0],
             'net_payment_after_distributor_profit_per_fortnight' => $componentes['misvales_payment'][0],
             'client_payment_per_fortnight' => $componentes['client_payment'][0],
-            'client_total' => $totalCliente,
+            'client_total' => $totalBase,
             'installments' => $parcialidades,
         ];
     }

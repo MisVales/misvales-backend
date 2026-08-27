@@ -21,9 +21,10 @@ class TurnstileVerificationService
             return true;
         }
 
-        $secret = config('services.turnstile.secret');
-        $hasSecret = ! empty($secret) && is_string($secret) && trim($secret) !== '';
-        $hasToken = ! empty($token) && is_string($token) && trim($token) !== '';
+        $secret = trim((string) config('services.turnstile.secret'), " \t\n\r\0\x0B\"'");
+        $token = trim((string) $token, " \t\n\r\0\x0B\"'");
+        $hasSecret = $secret !== '';
+        $hasToken = $token !== '';
 
         // Caso D: Turnstile habilitado en backend pero el cliente no envió token
         if ($hasSecret && ! $hasToken) {
@@ -74,11 +75,18 @@ class TurnstileVerificationService
 
             $response = $httpClient->post($verifyUrl, $payload);
 
+            // Si falló con remoteip, reintentar sin remoteip (evita falsos negativos en VPN/IPv6)
+            if ((! $response->successful() || ! $response->json('success')) && isset($payload['remoteip'])) {
+                unset($payload['remoteip']);
+                $response = $httpClient->post($verifyUrl, $payload);
+            }
+
             if (! $response->successful() || ! $response->json('success')) {
                 $errorCodes = $response->json('error-codes', []);
                 Log::warning('Fallo en validación de Turnstile', [
                     'ip' => $request->ip(),
                     'error_codes' => $errorCodes,
+                    'cf_response' => $response->json(),
                 ]);
 
                 throw new ApiException(

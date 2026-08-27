@@ -79,7 +79,10 @@ final class ServicioAplicacionPago
                     if (bccomp($available, '0', 4) <= 0) {
                         break 2;
                     }$paid = (string) DB::table('payment_allocations')->where('relation_item_id', $item->id)->where('component', $component)->sum('amount');
-                    $pending = bcsub((string) $item->snapshot[$field], $paid, 4);
+                    $snapshotField = $component === 'LOAN_COMMISSION' && array_key_exists('misvales_commission', $item->snapshot)
+                        ? 'misvales_commission'
+                        : $field;
+                    $pending = bcsub((string) $item->snapshot[$snapshotField], $paid, 4);
                     $amount = bccomp($available, $pending, 4) > 0 ? $pending : $available;
                     if (bccomp($amount, '0', 4) <= 0) {
                         continue;
@@ -91,7 +94,9 @@ final class ServicioAplicacionPago
             $line = $relation->distribuidora->lineaCredito()->lockForUpdate()->first();
             $recovered = $totals['CAPITAL'];
             if ($line && bccomp($recovered, '0', 4) > 0) {
-                $recovered = bccomp($recovered, $line->used_balance, 4) > 0 ? $line->used_balance : $recovered;
+                if (bccomp($recovered, $line->used_balance, 4) > 0) {
+                    throw new RuntimeException('CREDIT_LINE_RECOVERY_EXCEEDS_USED_BALANCE');
+                }
                 $before = $line->used_balance;
                 $line->used_balance = bcsub($line->used_balance, $recovered, 4);
                 $line->lock_version++;

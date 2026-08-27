@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
@@ -9,8 +10,16 @@ use SplFileInfo;
 
 class ErrorCatalogService
 {
+    private const CACHE_KEY = 'admin:error-catalog:v2';
+
     /** @return array<int, array<string, mixed>> */
     public function all(): array
+    {
+        return Cache::remember(self::CACHE_KEY, now()->addHour(), fn (): array => $this->build());
+    }
+
+    /** @return array<int, array<string, mixed>> */
+    private function build(): array
     {
         $entries = [];
 

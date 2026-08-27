@@ -2,6 +2,7 @@
 
 namespace App\Services\Audit;
 
+use App\Helpers\AuditHelper;
 use App\Models\SecurityEvent;
 use Illuminate\Http\Request;
 
@@ -19,7 +20,7 @@ class SecurityAuditService
 
         // En un entorno de producción masivo, esto debería despacharse a un Job.
         // Por ahora, se guarda directamente en la BD.
-        SecurityEvent::create([
+        $event = SecurityEvent::create([
             'user_id' => $data['user_id'] ?? $request->user()?->id,
             'actor_user_id' => $data['actor_user_id'] ?? $request->user()?->id,
             'branch_id' => $data['branch_id'] ?? null,
@@ -35,6 +36,17 @@ class SecurityAuditService
             'metadata' => $metadata,
             'occurred_at' => now(),
         ]);
+
+        AuditHelper::log(
+            eventName: $data['event_type'],
+            entityType: $data['entity_type'] ?? 'SecurityEvent',
+            entityId: $data['entity_id'] ?? $event->id,
+            actorId: $data['actor_user_id'] ?? $request->user()?->id,
+            branchId: $data['branch_id'] ?? null,
+            new: $metadata,
+            result: $data['outcome'] ?? 'SUCCESS',
+            evidence: ['security_event_id' => $event->id],
+        );
     }
 
     public function parseDevice(?string $userAgent): string

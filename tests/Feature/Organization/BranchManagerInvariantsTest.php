@@ -83,6 +83,33 @@ class BranchManagerInvariantsTest extends TestCase
         $this->assertStringContainsString('ya cuenta con un gerente', $response->json('error.message'));
     }
 
+    public function test_manager_invitation_catalog_omits_branches_with_an_active_manager(): void
+    {
+        $occupiedBranch = Branch::where('is_headquarters', false)->firstOrFail();
+        $availableBranch = Branch::factory()->create([
+            'is_headquarters' => false,
+            'status' => 'ACTIVE',
+            'created_by' => $this->admin->id,
+        ]);
+        $manager = User::factory()->create();
+
+        UserRoleScope::create([
+            'id' => Str::uuid(),
+            'user_id' => $manager->id,
+            'role_id' => $this->branchManagerRole->id,
+            'branch_id' => $occupiedBranch->id,
+            'status' => 'ACTIVE',
+        ]);
+
+        $response = $this->actingAs($this->admin)
+            ->getJson('/api/v1/branches?eligible_for_manager=true');
+
+        $response->assertOk();
+        $ids = collect($response->json('data'))->pluck('id');
+        $this->assertFalse($ids->contains($occupiedBranch->id));
+        $this->assertTrue($ids->contains($availableBranch->id));
+    }
+
     public function test_current_branch_directory_lists_active_branches_with_pagination(): void
     {
         $branch = Branch::where('is_headquarters', false)->where('status', 'ACTIVE')->firstOrFail();

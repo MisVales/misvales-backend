@@ -3,12 +3,17 @@
 namespace Tests\Unit\Services;
 
 use App\Services\ErrorCatalogService;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Config;
 use Tests\TestCase;
 
 class ErrorCatalogServiceTest extends TestCase
 {
     public function test_catalog_contains_emitted_api_and_business_error_codes(): void
     {
+        Config::set('cache.default', 'array');
+        Cache::store('array')->flush();
+
         $items = app(ErrorCatalogService::class)->all();
         $codes = array_column($items, 'code');
 

@@ -38,11 +38,11 @@ class ProgressiveLockoutService
         }
 
         // Sistema de castigo progresivo
-        if ($attempts >= 15) {
+        if ($attempts >= 20) {
             Cache::put($lockKey, time() + 900, now()->addMinutes(15)); // 15 minutos
-        } elseif ($attempts >= 10) {
+        } elseif ($attempts >= 15) {
             Cache::put($lockKey, time() + 300, now()->addMinutes(5)); // 5 minutos
-        } elseif ($attempts >= 5) {
+        } elseif ($attempts >= 10) {
             Cache::put($lockKey, time() + 60, now()->addMinutes(1)); // 1 minuto
         }
     }

@@ -93,6 +93,11 @@ class AuthModuleIntegrationTest extends TestCase
             'outcome' => 'FAILURE',
             'user_id' => $user->id,
         ]);
+        $this->assertDatabaseHas('audit_logs', [
+            'event_name' => 'LOGIN_FAILED',
+            'entity_type' => 'SecurityEvent',
+            'result' => 'FAILURE',
+        ]);
 
         $event = SecurityEvent::first();
         $this->assertEquals('192.168.1.5', $event->ip_address);
