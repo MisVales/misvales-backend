@@ -6,6 +6,7 @@ use App\Contracts\Credito\VerificadorDisponibilidadCredito;
 use App\Enums\EstadoDistribuidora;
 use App\Enums\EstadoRestriccionUsoCredito;
 use App\Enums\EstadoVale;
+use App\Enums\TipoMovimientoLineaCredito;
 use App\Enums\TipoVale;
 use App\Exceptions\ExcepcionVale;
 use App\Helpers\AuditHelper;
@@ -16,6 +17,7 @@ use App\Models\CategoryVersion;
 use App\Models\Cliente;
 use App\Models\Distribuidora;
 use App\Models\LineaCredito;
+use App\Models\MovimientoLineaCredito;
 use App\Models\OutboxEvent;
 use App\Models\ProductVersion;
 use App\Models\RestriccionUsoCredito;
@@ -86,7 +88,7 @@ final class ServicioGeneracionVale
     {
         return DB::transaction(function () use ($actor, $clienteId, $versionProductoId, $installmentCount): Vale {
             $distribuidora = Distribuidora::query()->where('user_id', $actor->id)->firstOrFail();
-            LineaCredito::query()->where('distributor_id', $distribuidora->id)->lockForUpdate()->firstOrFail();
+            $linea = LineaCredito::query()->where('distributor_id', $distribuidora->id)->lockForUpdate()->firstOrFail();
 
             $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
             $calculo = $contexto['calculation'];
@@ -131,6 +133,32 @@ final class ServicioGeneracionVale
 
             $vale->parcialidades()->createMany(array_map(static fn (array $parcialidad): array => $parcialidad + ['due_at' => null], $calculo['installments']));
 
+            $usadoAntes = (string) $linea->used_balance;
+            $usadoDespues = bcadd($usadoAntes, (string) $vale->capital, 4);
+            if (bccomp($usadoDespues, (string) $linea->total_authorized, 4) > 0) {
+                throw new ExcepcionVale('CREDIT_INSUFFICIENT', 'La emisión excedería la línea autorizada.', 409);
+            }
+            $linea->forceFill(['used_balance' => $usadoDespues, 'lock_version' => $linea->lock_version + 1])->save();
+            $secuencia = ((int) MovimientoLineaCredito::query()->where('credit_line_id', $linea->id)->max('sequence')) + 1;
+            MovimientoLineaCredito::query()->create([
+                'credit_line_id' => $linea->id,
+                'distributor_id' => $linea->distributor_id,
+                'sequence' => $secuencia,
+                'type' => TipoMovimientoLineaCredito::VOUCHER_ISSUED,
+                'amount' => $vale->capital,
+                'total_authorized_before' => $linea->total_authorized,
+                'total_authorized_after' => $linea->total_authorized,
+                'used_balance_before' => $usadoAntes,
+                'used_balance_after' => $usadoDespues,
+                'source_type' => 'VOUCHER_ISSUANCE',
+                'source_id' => $vale->id,
+                'reason' => 'Capital comprometido al emitir el vale',
+                'performed_by' => $actor->id,
+                'authorized_by' => $actor->id,
+                'idempotency_key' => 'voucher-issued:'.$vale->id,
+                'occurred_at' => now(),
+            ]);
+
             if ($vale->credit_restriction_id !== null) {
                 $reserved = RestriccionUsoCredito::query()
                     ->whereKey($vale->credit_restriction_id)
@@ -149,6 +177,7 @@ final class ServicioGeneracionVale
 
             AuditHelper::log('VOUCHER_GENERATED', 'vouchers', $vale->id, $actor->id, $vale->branch_id, null, [
                 'folio' => $folio, 'type' => $tipo->value, 'capital' => $vale->capital,
+                'used_balance_before' => $usadoAntes, 'used_balance_after' => $usadoDespues,
             ]);
             OutboxEvent::query()->create(['event_type' => 'VoucherGenerated', 'payload' => ['voucher_id' => $vale->id, 'folio' => $folio], 'status' => 'PENDING']);
 
