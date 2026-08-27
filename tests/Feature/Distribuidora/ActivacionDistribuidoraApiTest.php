@@ -133,6 +133,17 @@ class ActivacionDistribuidoraApiTest extends TestCase
         Mail::assertQueued(ActivationInvitationMail::class, 1);
     }
 
+    public function test_gerente_puede_consultar_categorias_publicadas_para_activar_sin_permiso_de_catalogos(): void
+    {
+        [$gerente, , $version] = $this->escenarioAutorizado();
+        Sanctum::actingAs($gerente);
+
+        $this->getJson('/api/v1/distributor-activation/categories')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.category_version_id', $version->id)
+            ->assertJsonPath('data.0.profit_percentage', $version->profit_percentage);
+    }
+
     public function test_distribuidora_consulta_su_linea_inicial_por_la_relacion_con_su_usuario(): void
     {
         [$gerente, $solicitud, $version] = $this->escenarioAutorizado();

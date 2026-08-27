@@ -21,7 +21,7 @@ class PreparacionActivacionDistribuidoraController extends Controller
 
     public function categorias(Request $request, ServicioPreparacionActivacion $servicio): JsonResponse
     {
-        abort_unless($request->user()->hasPermissionTo('distributors.assign_category'), 403);
+        abort_unless($request->user()->hasPermissionTo('distributors.activate'), 403);
 
         return response()->json(['data' => $servicio->categoriasDisponibles()]);
     }
