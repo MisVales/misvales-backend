@@ -60,12 +60,9 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->trustProxies(
-            at: array_filter(
-                array_map(
-                    'trim',
-                    explode(',', (string) (app()->bound('config') ? config('production.trusted_proxies') : env('TRUSTED_PROXIES')))
-                )
-            )
+            at: ['10.124.0.10'],
+            headers: Request::HEADER_X_FORWARDED_FOR
+                | Request::HEADER_X_FORWARDED_PROTO,
         );
         $middleware->append(ResolveVpnContext::class);
         $middleware->statefulApi();
