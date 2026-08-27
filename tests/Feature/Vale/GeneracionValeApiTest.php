@@ -71,6 +71,16 @@ final class GeneracionValeApiTest extends TestCase
         $this->assertMatchesRegularExpression('/^VAL-\d{4}-\d{8}$/', $response->json('data.folio'));
         $this->assertDatabaseCount('vouchers', 1);
         $this->assertDatabaseCount('voucher_installments', 4);
+        $this->assertDatabaseHas('credit_lines', [
+            'distributor_id' => $this->distribuidora->id,
+            'used_balance' => '15000.0000',
+        ]);
+        $this->assertDatabaseHas('credit_line_movements', [
+            'source_id' => $response->json('data.id'),
+            'type' => 'VOUCHER_ISSUED',
+            'used_balance_before' => '5000.0000',
+            'used_balance_after' => '15000.0000',
+        ]);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'VoucherGenerated']);
         $this->assertSame('0.100000', $response->json('data.financial_snapshot.calculation.loan_commission_percentage'));
     }
@@ -80,6 +90,14 @@ final class GeneracionValeApiTest extends TestCase
         $primeraRespuesta = $this->crear();
         $primero = $primeraRespuesta->json('data.folio');
         $this->feriar($primeraRespuesta->json('data.id'));
+        $this->assertDatabaseHas('credit_lines', [
+            'distributor_id' => $this->distribuidora->id,
+            'used_balance' => '15000.0000',
+        ]);
+        $this->assertDatabaseMissing('credit_line_movements', [
+            'source_id' => $primeraRespuesta->json('data.id'),
+            'type' => 'VOUCHER_CASHED',
+        ]);
         $segundo = $this->crear()->assertJsonPath('data.type', 'VALE_DIGITAL')->json('data.folio');
         $this->assertNotSame($primero, $segundo);
     }
@@ -100,6 +118,16 @@ final class GeneracionValeApiTest extends TestCase
             ->assertSuccessful()
             ->assertJsonPath('data.status', 'CANCELLED');
         $this->assertDatabaseHas('vouchers', ['id' => $primero->json('data.id'), 'status' => 'CANCELLED']);
+        $this->assertDatabaseHas('credit_lines', [
+            'distributor_id' => $this->distribuidora->id,
+            'used_balance' => '5000.0000',
+        ]);
+        $this->assertDatabaseHas('credit_line_movements', [
+            'source_id' => $primero->json('data.id'),
+            'type' => 'VOUCHER_CANCELLED',
+            'used_balance_before' => '15000.0000',
+            'used_balance_after' => '5000.0000',
+        ]);
 
         $reemplazo = $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
         $this->feriar($reemplazo->json('data.id'));

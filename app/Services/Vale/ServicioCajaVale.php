@@ -103,25 +103,36 @@ final class ServicioCajaVale
             }
 
             $linea = LineaCredito::query()->lockForUpdate()->findOrFail($vale->credit_line_id);
-            $resultado = $this->credito->evaluar($vale->distributor_id, (string) $vale->capital, $vale->id);
-            if (! $resultado->capital_is_available) {
-                throw new ExcepcionVale('CREDIT_INSUFFICIENT', 'La línea ya no cubre el capital del vale.', 409);
-            }
-            if (! $resultado->capital_satisfies_restriction) {
-                throw new ExcepcionVale('CREDIT_50_PERCENT_RULE_NOT_SATISFIED', 'El vale ya no satisface la restricción vigente.', 409);
-            }
-
             $usadoAntes = (string) $linea->used_balance;
-            $usadoDespues = bcadd($usadoAntes, (string) $vale->capital, 4);
-            if (bccomp($usadoDespues, (string) $linea->total_authorized, 4) > 0) {
-                throw new ExcepcionVale('CREDIT_INSUFFICIENT', 'El feriado excedería la línea autorizada.', 409);
-            }
-            $linea->forceFill(['used_balance' => $usadoDespues, 'lock_version' => $linea->lock_version + 1])->save();
-            $secuencia = ((int) MovimientoLineaCredito::query()->where('credit_line_id', $linea->id)->max('sequence')) + 1;
-            MovimientoLineaCredito::query()->create(['credit_line_id' => $linea->id, 'distributor_id' => $linea->distributor_id, 'sequence' => $secuencia, 'type' => TipoMovimientoLineaCredito::VOUCHER_CASHED, 'amount' => $vale->capital, 'total_authorized_before' => $linea->total_authorized, 'total_authorized_after' => $linea->total_authorized, 'used_balance_before' => $usadoAntes, 'used_balance_after' => $usadoDespues, 'source_type' => 'VOUCHER', 'source_id' => $vale->id, 'reason' => 'Capital feriado en caja', 'performed_by' => $cajera->id, 'authorized_by' => $cajera->id, 'idempotency_key' => 'voucher-cashed:'.$vale->id, 'occurred_at' => now()]);
+            $creditoComprometido = MovimientoLineaCredito::query()
+                ->where('source_type', 'VOUCHER_ISSUANCE')
+                ->where('source_id', $vale->id)
+                ->exists();
+            $restrictionId = $vale->credit_restriction_id;
 
-            if ($resultado->restriction_id) {
-                RestriccionUsoCredito::query()->whereKey($resultado->restriction_id)->whereIn('status', ['ACTIVE', 'RESERVED'])->update(['status' => 'CONSUMED', 'reserved_voucher_id' => $vale->id, 'reserved_at' => DB::raw('COALESCE(reserved_at, NOW())'), 'consumed_at' => now(), 'lock_version' => DB::raw('lock_version + 1')]);
+            if (! $creditoComprometido) {
+                // Compatibilidad con vales generados antes de reservar el crédito al emitirlos.
+                $resultado = $this->credito->evaluar($vale->distributor_id, (string) $vale->capital, $vale->id);
+                if (! $resultado->capital_is_available) {
+                    throw new ExcepcionVale('CREDIT_INSUFFICIENT', 'La línea ya no cubre el capital del vale.', 409);
+                }
+                if (! $resultado->capital_satisfies_restriction) {
+                    throw new ExcepcionVale('CREDIT_50_PERCENT_RULE_NOT_SATISFIED', 'El vale ya no satisface la restricción vigente.', 409);
+                }
+                $restrictionId = $resultado->restriction_id;
+                $usadoDespues = bcadd($usadoAntes, (string) $vale->capital, 4);
+                if (bccomp($usadoDespues, (string) $linea->total_authorized, 4) > 0) {
+                    throw new ExcepcionVale('CREDIT_INSUFFICIENT', 'El feriado excedería la línea autorizada.', 409);
+                }
+                $linea->forceFill(['used_balance' => $usadoDespues, 'lock_version' => $linea->lock_version + 1])->save();
+                $secuencia = ((int) MovimientoLineaCredito::query()->where('credit_line_id', $linea->id)->max('sequence')) + 1;
+                MovimientoLineaCredito::query()->create(['credit_line_id' => $linea->id, 'distributor_id' => $linea->distributor_id, 'sequence' => $secuencia, 'type' => TipoMovimientoLineaCredito::VOUCHER_CASHED, 'amount' => $vale->capital, 'total_authorized_before' => $linea->total_authorized, 'total_authorized_after' => $linea->total_authorized, 'used_balance_before' => $usadoAntes, 'used_balance_after' => $usadoDespues, 'source_type' => 'VOUCHER', 'source_id' => $vale->id, 'reason' => 'Capital feriado en caja (vale legado)', 'performed_by' => $cajera->id, 'authorized_by' => $cajera->id, 'idempotency_key' => 'voucher-cashed:'.$vale->id, 'occurred_at' => now()]);
+            } else {
+                $usadoDespues = $usadoAntes;
+            }
+
+            if ($restrictionId) {
+                RestriccionUsoCredito::query()->whereKey($restrictionId)->whereIn('status', ['ACTIVE', 'RESERVED'])->update(['status' => 'CONSUMED', 'reserved_voucher_id' => $vale->id, 'reserved_at' => DB::raw('COALESCE(reserved_at, NOW())'), 'consumed_at' => now(), 'lock_version' => DB::raw('lock_version + 1')]);
             }
             $cashedAt = CarbonImmutable::now();
             TransaccionCajaVale::query()->create(['voucher_id' => $vale->id, 'bank_transaction_number' => $numeroTransaccion, 'cashier_id' => $cajera->id, 'branch_id' => $vale->branch_id, 'cashed_at' => $cashedAt]);
