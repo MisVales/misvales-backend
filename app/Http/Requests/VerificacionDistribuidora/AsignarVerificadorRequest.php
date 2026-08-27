@@ -39,8 +39,8 @@ class AsignarVerificadorRequest extends FormRequest
                 $validator->errors()->add('scheduled_for', 'Selecciona un horario a partir del siguiente bloque de 15 minutos.');
             }
 
-            if ($scheduled->hour < 8 || $scheduled->hour > 19 || $scheduled->minute % 15 !== 0) {
-                $validator->errors()->add('scheduled_for', 'Selecciona un horario cada 15 minutos entre las 08:00 y las 19:00.');
+            if ($scheduled->hour < 8 || $scheduled->hour > 23 || $scheduled->minute % 15 !== 0) {
+                $validator->errors()->add('scheduled_for', 'Selecciona un horario cada 15 minutos entre las 08:00 y las 23:45.');
             }
         }];
     }
