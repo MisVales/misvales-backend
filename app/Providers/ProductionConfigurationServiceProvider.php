@@ -46,6 +46,8 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
             if (config($key) !== $value) {
                 throw new RuntimeException("Production configuration {$key} must be {$value}.");
             }
+        }
+
         foreach (['db_primary_host', 'db_replica_host', 'redis_host'] as $name) {
             $host = strtolower(trim((string) $required[$name]));
             if (in_array($host, ['localhost', '127.0.0.1', '::1'], true)) {
