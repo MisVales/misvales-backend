@@ -866,6 +866,28 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(7, RelacionPartidaDistribuidora::query()->count());
     }
 
+    public function test_genera_nueva_relacion_con_adeudo_aunque_ya_no_haya_parcialidades_nuevas(): void
+    {
+        $this->materializarCalendario($this->voucher, '2026-04-01 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+
+        $service->generar($this->corteSeptiembre());
+        $first = RelacionDistribuidora::query()->firstOrFail();
+        $originalItems = $first->partidas()->count();
+        $this->assertSame(8, $originalItems);
+
+        $this->marcarCorteComoConciliado($first);
+        $generated = $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
+        $second = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+
+        $this->assertSame(1, $generated);
+        $this->assertNotSame($first->id, $second->id);
+        $this->assertSame(0, $second->partidas()->count());
+        $this->assertSame($first->rolled_forward_amount, $second->carried_balance);
+        $this->assertSame($second->carried_balance, $second->balance);
+        $this->assertSame($originalItems, RelacionPartidaDistribuidora::query()->count());
+    }
+
     public function test_pago_con_referencia_historica_se_aplica_a_relacion_vigente_y_primero_al_saldo_trasladado(): void
     {
         $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);

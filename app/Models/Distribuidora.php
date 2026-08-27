@@ -84,6 +84,11 @@ class Distribuidora extends Model
         return $this->hasOne(LineaCredito::class, 'distributor_id');
     }
 
+    public function relaciones(): HasMany
+    {
+        return $this->hasMany(RelacionDistribuidora::class, 'distributor_id');
+    }
+
     public function cuentaBancariaVigente(): HasOne
     {
         return $this->hasOne(CuentaBancariaDistribuidora::class, 'distributor_id')

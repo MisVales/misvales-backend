@@ -336,6 +336,7 @@ Route::prefix('v1')->group(function () {
         Route::get('relations', [RelacionDistribuidoraController::class, 'index']);
         Route::get('relations/{relacion}', [RelacionDistribuidoraController::class, 'show']);
         Route::get('relations/{relacion}/download', [RelacionDistribuidoraController::class, 'download']);
+        Route::get('distributors/{distribuidora}/account-statement', [RelacionDistribuidoraController::class, 'accountStatement']);
 
         // Módulo 12 - Archivo bancario y conciliación automática
         Route::get('bank-reconciliation-periods', [ConciliacionBancariaController::class, 'pendingPeriods']);

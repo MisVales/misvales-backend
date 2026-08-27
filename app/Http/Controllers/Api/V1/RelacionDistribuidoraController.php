@@ -4,7 +4,9 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\CoordinatorDistributorAssignment;
+use App\Models\Distribuidora;
 use App\Models\RelacionDistribuidora;
+use App\Services\Relacion\ServicioPdfEstadoCuenta;
 use App\Services\Relacion\ServicioPdfRelacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
@@ -66,6 +68,19 @@ final class RelacionDistribuidoraController extends Controller
         return response($pdf->generar($relacion), 200, [
             'Content-Type' => 'application/pdf',
             'Content-Disposition' => 'attachment; filename="relacion-'.$relacion->payment_reference.'.pdf"',
+        ]);
+    }
+
+    public function accountStatement(Distribuidora $distribuidora, Request $request, ServicioPdfEstadoCuenta $pdf): Response
+    {
+        $visible = RelacionDistribuidora::query()->where('distributor_id', $distribuidora->id);
+        $this->scope($visible, $request);
+        abort_unless($visible->exists(), 404);
+        abort_unless($request->user()->hasPermissionTo('relations.download_own') || $request->user()->hasPermissionTo('relations.download_branch') || $request->user()->hasPermissionTo('relations.download_global'), 403);
+
+        return response($pdf->generar($distribuidora), 200, [
+            'Content-Type' => 'application/pdf',
+            'Content-Disposition' => 'attachment; filename="estado-de-cuenta-'.$distribuidora->distributor_number.'.pdf"',
         ]);
     }
 

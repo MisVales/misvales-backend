@@ -3,6 +3,7 @@
 namespace App\Services\Relacion;
 
 use App\Models\AuditLog;
+use App\Models\Distribuidora;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
 use App\Notifications\NotificacionEventoDominio;
@@ -78,9 +79,24 @@ final class ServicioGeneracionRelacion
     private function procesar(string $runId, CarbonImmutable $corte, CarbonImmutable $cutoff, CarbonImmutable $paymentDeadline, array $config): int
     {
         $groups = ParcialidadVale::query()->with(['vale.distribuidora.usuario', 'vale.distribuidora.sucursal', 'vale.distribuidora.lineaCredito', 'vale.distribuidora.coordinadorVigente.coordinator', 'vale.distribuidora.solicitud.domicilioActual', 'vale.cliente', 'vale.versionProducto', 'vale.versionCategoria'])->whereNotNull('due_at')->where('due_at', '<=', $paymentDeadline)->whereHas('vale', fn ($q) => $q->where('status', 'CASHED')->whereNotNull('cashed_at')->where('cashed_at', '<=', $cutoff))->whereDoesntHave('relationItem')->orderBy('due_at')->orderBy('number')->lockForUpdate()->get()->groupBy(fn ($item) => $item->vale->distributor_id);
-        foreach ($groups as $items) {
-            $first = $items->first();
-            $d = $first->vale->distribuidora;
+        $distributorIds = $groups->keys()->merge(
+            RelacionDistribuidora::query()
+                ->where('cutoff_at', '<', $cutoff)
+                ->where('balance', '>', 0)
+                ->pluck('distributor_id'),
+        )->unique()->values();
+        $distributors = Distribuidora::query()
+            ->with(['usuario', 'sucursal', 'lineaCredito', 'coordinadorVigente.coordinator', 'solicitud.domicilioActual'])
+            ->whereKey($distributorIds)
+            ->get()
+            ->keyBy('id');
+
+        foreach ($distributorIds as $distributorId) {
+            $items = $groups->get($distributorId, collect());
+            $d = $items->first()?->vale?->distribuidora ?? $distributors->get($distributorId);
+            if ($d === null) {
+                continue;
+            }
             $line = $d->lineaCredito;
             $previousRelations = RelacionDistribuidora::query()
                 ->where('distributor_id', $d->id)
@@ -131,7 +147,7 @@ final class ServicioGeneracionRelacion
             ]));
         }
 
-        return $groups->count();
+        return $distributorIds->count();
     }
 
     private function saldoPendientePorComponente(?RelacionDistribuidora $relation): array
