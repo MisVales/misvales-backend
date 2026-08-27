@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\RegistroOperacional;
 use App\Models\User;
+use App\Services\Audit\DatabaseIncidentRecorder;
 use App\Services\Observabilidad\SanitizadorDatos;
 use App\Services\Operaciones\ServicioCorteManual;
 use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
@@ -85,6 +86,9 @@ final class CentroOperacionController extends Controller
         $actor = $request->user();
         $canViewGlobal = $actor->hasPermissionTo('audit.view_global');
         abort_unless($canViewGlobal || $actor->hasPermissionTo('audit.view_branch'), 403);
+        if ($canViewGlobal) {
+            app(DatabaseIncidentRecorder::class)->importPending();
+        }
 
         $branchScopeKey = 'global';
         if (! $canViewGlobal) {
@@ -165,6 +169,10 @@ final class CentroOperacionController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'per_page' => ['nullable', 'integer', 'min:1', 'max:100'],
         ]);
+
+        if ($request->user()->hasPermissionTo('audit.view_global')) {
+            app(DatabaseIncidentRecorder::class)->importPending();
+        }
 
         $query = $this->authorizedAuditQuery($request)
             ->with(['actor:id,name,email', 'branch:id,name,code'])

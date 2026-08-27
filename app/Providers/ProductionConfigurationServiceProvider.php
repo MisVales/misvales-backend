@@ -36,7 +36,7 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
         $expected = [
             'database.default' => 'mysql',
             'cache.default' => 'redis',
-            'queue.default' => 'redis',
+            'queue.default' => 'sync',
             'database.redis.client' => 'phpredis',
             'session.driver' => 'redis',
             'filesystems.default' => 's3',

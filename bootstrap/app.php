@@ -30,6 +30,7 @@ use App\Modules\Organization\Domain\Branches\Exceptions\HeadquartersBranchProtec
 use App\Modules\Organization\Domain\Branches\Exceptions\InvalidBranchAddress;
 use App\Modules\Organization\Domain\Events\OrganizationEvent;
 use App\Modules\Organization\Domain\Events\OrganizationEventType;
+use App\Services\Audit\DatabaseIncidentRecorder;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Credito\AuditorIncrementos;
 use App\Services\SolicitudDistribuidora\AuditorSolicitudDistribuidora;
@@ -355,6 +356,32 @@ return Application::configure(basePath: dirname(__DIR__))
 
                 // Generic handler for unique constraint
                 return $respondError($request, 'RESOURCE_VERSION_CONFLICT', 'Este registro fue modificado por otro usuario. Actualiza la información e inténtalo nuevamente.', 409);
+            }
+
+            $sqlState = (string) $e->getCode();
+            $driverCode = (int) ($e->errorInfo[1] ?? 0);
+            $connectionFailure = str_starts_with($sqlState, '08')
+                || in_array($driverCode, [1040, 1042, 1043, 1047, 1129, 1130, 1152, 1153, 1154, 1158, 1159, 1160, 1161, 1203, 1226, 2002, 2003, 2005, 2006, 2013], true);
+
+            if ($connectionFailure) {
+                try {
+                    app(DatabaseIncidentRecorder::class)->record($request, $e);
+                } catch (Throwable $recordingFailure) {
+                    Log::channel('runtime')->critical('DATABASE_INCIDENT_RECORDING_FAILED', [
+                        'request_id' => $request->attributes->get('request_id'),
+                        'exception' => RuntimeDiagnostics::exception($recordingFailure),
+                    ]);
+                }
+
+                return $respondError(
+                    $request,
+                    'SERVICE_DEPENDENCY_UNAVAILABLE',
+                    'Algún servicio está fallando. Notifica al área administrativa.',
+                    503,
+                    [],
+                    [],
+                    $e,
+                );
             }
         });
 
