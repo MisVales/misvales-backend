@@ -1,7 +1,10 @@
 <?php
 
 return [
-    'trusted_proxies' => env('TRUSTED_PROXIES'),
+    'trusted_proxies' => implode(',', array_filter([
+        env('TRUSTED_PROXIES'),
+        env('INTERNAL_LOAD_BALANCER_PROXIES', '10.124.0.0/16'),
+    ])),
     'frontend_url' => env('FRONTEND_URL', 'http://localhost:4200'),
     'initial_manager' => [
         'enabled' => env('INITIAL_GENERAL_MANAGER_ENABLED', false),

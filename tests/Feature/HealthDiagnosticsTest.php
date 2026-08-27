@@ -8,7 +8,7 @@ final class HealthDiagnosticsTest extends TestCase
 {
     public function test_up_muestra_diagnostico_basico_sin_exponer_autorizacion(): void
     {
-        $response = $this->withHeaders([
+        $response = $this->withServerVariables(['REMOTE_ADDR' => '10.124.0.10'])->withHeaders([
             'User-Agent' => 'MisVales-QA/1.0',
             'CF-Connecting-IP' => '203.0.113.10',
             'X-Forwarded-For' => '203.0.113.10, 10.0.0.1',
@@ -18,7 +18,7 @@ final class HealthDiagnosticsTest extends TestCase
         $response->assertOk()
             ->assertSee('MisVales API está disponible')
             ->assertSee('MisVales-QA/1.0')
-            ->assertSee('203.0.113.10')
+            ->assertSeeInOrder(['IP resuelta por Laravel', '203.0.113.10'])
             ->assertDontSee('secreto-que-no-debe-aparecer');
     }
 }
