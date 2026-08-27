@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Services\Audit\SecurityAuditService;
 use App\Services\Auth\MfaService;
 use App\Services\Auth\ProgressiveLockoutService;
+use App\Services\Auth\SessionContextService;
 use App\Services\Auth\SessionPolicyService;
 use App\Services\Auth\SessionTokenIdentifier;
 use App\Services\Auth\WebAuthnService;
@@ -666,11 +667,7 @@ class AuthController extends Controller
             'message' => 'Autenticación exitosa.',
             'access_token' => $token->plainTextToken,
             'expires_in' => $policy['access_token'] * 60, // En segundos
-            'user' => [
-                'id' => $user->id,
-                'name' => $user->name,
-                'email' => $user->email,
-            ],
+            ...app(SessionContextService::class)->for($user, $request),
         ])->withCookie($this->makeRefreshCookie($rawRefreshToken, $policy['refresh_token']));
     }
 
@@ -805,4 +802,3 @@ class AuthController extends Controller
         return 'Other Device';
     }
 }
-
