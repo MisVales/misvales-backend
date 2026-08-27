@@ -66,13 +66,12 @@ final class ServicioCorteManual
         ];
     }
 
-    public function forzarCorte(User $actor, ?string $motivo = null, ?CarbonImmutable $cutoffOverride = null): array
+    public function forzarCorte(User $actor, ?string $motivo = null): array
     {
         // 3. Protección de concurrencia: Evitar dos ejecuciones simultáneas del cierre forzado.
-        return Cache::lock('operation_force_cutoff', 10)->block(5, function () use ($actor, $motivo, $cutoffOverride) {
+        return Cache::lock('operation_force_cutoff', 10)->block(5, function () use ($actor, $motivo) {
             $now = CarbonImmutable::now('UTC');
-            $cutoff = $cutoffOverride ?? $this->siguienteCorte($now);
-            $this->validarCorteSimulado($cutoff);
+            $cutoff = $this->siguienteCorte($now);
 
             $running = DB::table('relation_process_runs')
                 ->where('status', 'RUNNING')
@@ -88,7 +87,7 @@ final class ServicioCorteManual
 
             $resumen = $this->obtenerResumenCorteActual($now);
 
-            $relationsGenerated = $this->generador->generar($cutoff);
+            $relationsGenerated = $this->generador->generar($cutoff, true);
 
             $runId = DB::table('relation_process_runs')
                 ->where('status', 'COMPLETED')
@@ -157,23 +156,6 @@ final class ServicioCorteManual
         $candidate = $localNow->startOfDay()->day($schedule['cutoff_day'])->setTime($hour, $minute);
 
         return $candidate->lessThanOrEqualTo($localNow) ? $candidate->addMonthNoOverflow() : $candidate;
-    }
-
-    private function validarCorteSimulado(CarbonImmutable $cutoff): void
-    {
-        $latestCutoff = DB::table('relation_process_runs')
-            ->where('status', 'COMPLETED')
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
-            })
-            ->latest('cutoff_at')
-            ->value('cutoff_at');
-
-        if ($latestCutoff !== null && $cutoff->utc()->lessThan(CarbonImmutable::parse($latestCutoff, 'UTC'))) {
-            throw new \RuntimeException('SIMULATED_CUTOFF_NOT_AFTER_PREVIOUS');
-        }
     }
 
     private function periodoPagoForzadoActual(): ?array

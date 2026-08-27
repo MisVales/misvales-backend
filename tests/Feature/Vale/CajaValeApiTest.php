@@ -770,6 +770,7 @@ final class CajaValeApiTest extends TestCase
     {
         Storage::fake('local');
         Notification::fake();
+        $this->travelTo(CarbonImmutable::parse('2026-08-27 12:00:00', 'America/Monterrey'));
         $manager = $this->user('general_manager');
 
         $maria = $this->voucher;
@@ -778,14 +779,6 @@ final class CajaValeApiTest extends TestCase
 
         $elena = null;
         $jose = null;
-        $cutoffs = [
-            '2026-09-01 00:05:00',
-            '2026-09-16 00:05:00',
-            '2026-10-01 00:05:00',
-            '2026-10-16 00:05:00',
-            '2026-10-31 00:05:00',
-            '2026-11-15 00:05:00',
-        ];
         $expected = [
             [[1], [], []],
             [[2], [], []],
@@ -795,14 +788,15 @@ final class CajaValeApiTest extends TestCase
             [[6], [4], [1]],
         ];
 
-        foreach ($cutoffs as $index => $cutoffAt) {
+        foreach (range(1, 6) as $cycle) {
+            $index = $cycle - 1;
             if ($index === 2) {
                 $elena = $this->clonarValeParaCliente('VAL-ELENA-8', 'Elena');
-                $this->materializarCalendario($elena, '2026-09-30 00:05:00', 8);
+                $this->materializarCalendario($elena, '2026-11-24 00:05:00', 8);
             }
             if ($index === 5) {
                 $jose = $this->clonarValeParaCliente('VAL-JOSE-8', 'José');
-                $this->materializarCalendario($jose, '2026-11-14 00:05:00', 8);
+                $this->materializarCalendario($jose, '2027-02-24 00:05:00', 8);
             }
 
             Sanctum::actingAs($manager);
@@ -810,7 +804,6 @@ final class CajaValeApiTest extends TestCase
             $response = $this->withHeader('Idempotency-Key', $idempotencyKey)
                 ->postJson('/api/v1/operations/force-cutoff', [
                     'motivo' => 'Escenario controlado corte '.($index + 1),
-                    'simulated_cutoff_at' => CarbonImmutable::parse($cutoffAt, 'America/Monterrey')->toIso8601String(),
                 ])
                 ->assertSuccessful()
                 ->assertJsonPath('data.relations_generated', 1);
@@ -828,7 +821,6 @@ final class CajaValeApiTest extends TestCase
                 $this->withHeader('Idempotency-Key', $idempotencyKey)
                     ->postJson('/api/v1/operations/force-cutoff', [
                         'motivo' => 'Escenario controlado corte 6',
-                        'simulated_cutoff_at' => CarbonImmutable::parse($cutoffAt, 'America/Monterrey')->toIso8601String(),
                     ])
                     ->assertSuccessful()
                     ->assertJsonPath('data.process_run_id', $relation->process_run_id);
@@ -849,7 +841,7 @@ final class CajaValeApiTest extends TestCase
         );
     }
 
-    public function test_forzar_corte_usa_la_misma_seleccion_que_el_corte_normal(): void
+    public function test_corte_forzado_toma_solo_la_siguiente_parcialidad_de_cada_vale(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-29 10:00:00', 'America/Monterrey'));
         $normal = $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
@@ -864,8 +856,8 @@ final class CajaValeApiTest extends TestCase
             ->assertSuccessful()
             ->assertJsonPath('data.simulated_cutoff_at', '2026-09-25T06:05:00+00:00');
 
-        $this->assertSame($this->numerosRelacionados($normal), $this->numerosRelacionados($forzado));
-        $this->assertSame([1, 2, 3], $this->numerosRelacionados($forzado));
+        $this->assertSame([1, 2, 3], $this->numerosRelacionados($normal));
+        $this->assertSame([1], $this->numerosRelacionados($forzado));
     }
 
     public function test_resumen_de_corte_no_exige_banco_pero_forzar_corte_si_lo_exige(): void
