@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\RegistroOperacional;
+use App\Models\User;
 use App\Services\Observabilidad\SanitizadorDatos;
 use App\Services\Operaciones\ServicioCorteManual;
 use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
@@ -13,6 +14,7 @@ use App\Services\Reportes\ServicioReportes;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 
 final class CentroOperacionController extends Controller
 {
@@ -80,43 +82,69 @@ final class CentroOperacionController extends Controller
 
     public function auditOptions(Request $request): JsonResponse
     {
-        $query = $this->authorizedAuditQuery($request);
+        $actor = $request->user();
+        $canViewGlobal = $actor->hasPermissionTo('audit.view_global');
+        abort_unless($canViewGlobal || $actor->hasPermissionTo('audit.view_branch'), 403);
 
-        $events = (clone $query)
-            ->select(['event_name', 'entity_type'])
-            ->whereNotNull('event_name')
-            ->where('event_name', '<>', '')
-            ->distinct()
-            ->orderBy('entity_type')
-            ->orderBy('event_name')
-            ->get()
-            ->map(fn (AuditLog $audit): array => [
-                'event_name' => $audit->event_name,
-                'entity_type' => $audit->entity_type,
-            ])
-            ->values();
+        $branchScopeKey = 'global';
+        if (! $canViewGlobal) {
+            $branchIds = $actor->roleScopes()
+                ->where('status', 'ACTIVE')
+                ->whereNull('revoked_at')
+                ->whereNotNull('branch_id')
+                ->pluck('branch_id')
+                ->sort()
+                ->values()
+                ->all();
+            $branchScopeKey = 'branches_'.md5(json_encode($branchIds));
+        }
 
-        $actorRoles = (clone $query)
-            ->whereNotNull('actor_role')
-            ->where('actor_role', '<>', '')
-            ->distinct()
-            ->orderBy('actor_role')
-            ->pluck('actor_role')
-            ->values();
+        $cacheKey = "audit_filter_options_{$branchScopeKey}";
 
-        $results = (clone $query)
-            ->whereNotNull('result')
-            ->where('result', '<>', '')
-            ->distinct()
-            ->orderBy('result')
-            ->pluck('result')
-            ->values();
+        $data = Cache::remember($cacheKey, 600, function () use ($request): array {
+            $query = $this->authorizedAuditQuery($request);
 
-        return response()->json(['data' => [
-            'events' => $events,
-            'actor_roles' => $actorRoles,
-            'results' => $results,
-        ]]);
+            $events = (clone $query)
+                ->select(['event_name', 'entity_type'])
+                ->whereNotNull('event_name')
+                ->where('event_name', '<>', '')
+                ->distinct()
+                ->orderBy('entity_type')
+                ->orderBy('event_name')
+                ->get()
+                ->map(fn (AuditLog $audit): array => [
+                    'event_name' => $audit->event_name,
+                    'entity_type' => $audit->entity_type,
+                ])
+                ->values()
+                ->all();
+
+            $actorRoles = (clone $query)
+                ->whereNotNull('actor_role')
+                ->where('actor_role', '<>', '')
+                ->distinct()
+                ->orderBy('actor_role')
+                ->pluck('actor_role')
+                ->values()
+                ->all();
+
+            $results = (clone $query)
+                ->whereNotNull('result')
+                ->where('result', '<>', '')
+                ->distinct()
+                ->orderBy('result')
+                ->pluck('result')
+                ->values()
+                ->all();
+
+            return [
+                'events' => $events,
+                'actor_roles' => $actorRoles,
+                'results' => $results,
+            ];
+        });
+
+        return response()->json(['data' => $data]);
     }
 
     public function audits(Request $request, SanitizadorDatos $sanitizer): JsonResponse
@@ -143,18 +171,30 @@ final class CentroOperacionController extends Controller
             ->latest();
 
         if ($request->filled('search')) {
-            $s = '%'.trim((string) $request->string('search')).'%';
-            $query->where(function ($q) use ($s) {
+            $rawSearch = trim((string) $request->string('search'));
+            $s = '%'.$rawSearch.'%';
+
+            // Precargar IDs de usuarios para evitar subconsultas correlacionadas lentas fila a fila
+            $matchingActorIds = User::query()
+                ->where('name', 'like', $s)
+                ->orWhere('email', 'like', $s)
+                ->limit(50)
+                ->pluck('id')
+                ->all();
+
+            $query->where(function ($q) use ($s, $rawSearch, $matchingActorIds): void {
                 $q->where('event_name', 'like', $s)
                     ->orWhere('entity_type', 'like', $s)
                     ->orWhere('reason', 'like', $s)
                     ->orWhere('ip_address', 'like', $s)
-                    ->orWhere('request_id', 'like', $s)
-                    ->orWhere('trace_id', 'like', $s)
-                    ->orWhere('correlation_id', 'like', $s)
-                    ->orWhereHas('actor', function ($aq) use ($s) {
-                        $aq->where('name', 'like', $s)->orWhere('email', 'like', $s);
-                    });
+                    ->orWhere('request_id', $rawSearch)
+                    ->orWhere('trace_id', $rawSearch)
+                    ->orWhere('correlation_id', $rawSearch)
+                    ->orWhere('entity_id', $rawSearch);
+
+                if (! empty($matchingActorIds)) {
+                    $q->orWhereIn('actor_id', $matchingActorIds);
+                }
             });
         }
 
