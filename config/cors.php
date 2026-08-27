@@ -1,5 +1,18 @@
 <?php
 
+$configuredOrigins = array_values(array_filter(array_map(
+    static fn (string $origin): string => rtrim(trim($origin), '/'),
+    explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:4200'))
+)));
+
+$frontendOrigin = rtrim(trim((string) env('FRONTEND_URL', 'http://localhost:4200')), '/');
+
+if ($frontendOrigin !== '') {
+    $configuredOrigins[] = $frontendOrigin;
+}
+
+$configuredOrigins = array_values(array_unique($configuredOrigins));
+
 return [
 
     /*
@@ -19,12 +32,7 @@ return [
 
     'allowed_methods' => ['*'],
 
-    'allowed_origins' => array_values(array_filter(
-        array_map(
-            'trim',
-            explode(',', env('CORS_ALLOWED_ORIGINS', 'http://localhost:4200'))
-        )
-    )),
+    'allowed_origins' => $configuredOrigins,
 
     // La API sólo acepta orígenes explícitos; las credenciales no deben
     // habilitarse para patrones amplios ni dominios de terceros.

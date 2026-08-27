@@ -108,10 +108,7 @@ class WebAuthnService
             throw new \Exception('Invalid challenge.');
         }
 
-        $expectedOrigin = config('webauthn.origin');
-        if ($clientData['origin'] !== $expectedOrigin) {
-            throw new \Exception('Invalid origin.');
-        }
+        $this->assertOriginAllowed((string) ($clientData['origin'] ?? ''));
 
         $authData = $attestation->authData;
         $expectedRpIdHash = hash('sha256', $options->rp->id, true);
@@ -168,10 +165,7 @@ class WebAuthnService
             throw new \Exception('Invalid challenge.');
         }
 
-        $expectedOrigin = config('webauthn.origin');
-        if ($clientData['origin'] !== $expectedOrigin) {
-            throw new \Exception('Invalid origin.');
-        }
+        $this->assertOriginAllowed((string) ($clientData['origin'] ?? ''));
 
         $authDataRaw = $this->base64url_decode($authenticatorDataJSON);
         $rpIdHash = substr($authDataRaw, 0, 32);
@@ -236,6 +230,18 @@ class WebAuthnService
         $signCount = unpack('N', substr($authDataRaw, 33, 4))[1];
 
         return $signCount;
+    }
+
+    public function assertOriginAllowed(string $origin): void
+    {
+        $normalizedOrigin = rtrim(mb_strtolower(trim($origin)), '/');
+        $allowedOrigins = config('webauthn.origins', []);
+
+        if ($normalizedOrigin === ''
+            || ! is_array($allowedOrigins)
+            || ! in_array($normalizedOrigin, $allowedOrigins, true)) {
+            throw new \Exception('Invalid origin.');
+        }
     }
 
     private function base64url_decode(string $data): string

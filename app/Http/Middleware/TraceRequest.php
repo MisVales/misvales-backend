@@ -3,11 +3,13 @@
 namespace App\Http\Middleware;
 
 use App\Jobs\PersistOperationalHttpRequest;
+use App\Support\RuntimeDiagnostics;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Symfony\Component\HttpFoundation\Response;
+use Throwable;
 
 class TraceRequest
 {
@@ -28,7 +30,19 @@ class TraceRequest
         $request->attributes->set('trace_id', $traceId);
         Log::withContext(['request_id' => $requestId, 'correlation_id' => $correlationId, 'trace_id' => $traceId]);
 
-        $response = $next($request);
+        Log::channel('runtime')->info('HTTP_REQUEST_STARTED', RuntimeDiagnostics::request($request));
+
+        try {
+            $response = $next($request);
+        } catch (Throwable $exception) {
+            Log::channel('runtime')->error('HTTP_REQUEST_FAILED', [
+                ...RuntimeDiagnostics::request($request),
+                'duration_ms' => (int) ((hrtime(true) - $started) / 1_000_000),
+                'exception' => RuntimeDiagnostics::exception($exception),
+            ]);
+
+            throw $exception;
+        }
 
         $durationMs = (int) ((hrtime(true) - $started) / 1_000_000);
         $dbDurationMs = round((float) $request->attributes->get('db_duration_ms', 0.0), 2);
@@ -67,13 +81,25 @@ class TraceRequest
             try {
                 PersistOperationalHttpRequest::dispatch($record)
                     ->onConnection(config('observability.queue_connection'));
-            } catch (\Throwable $exception) {
+            } catch (Throwable $exception) {
                 Log::warning('No fue posible encolar el log operacional HTTP.', [
                     'exception' => $exception::class,
                     'request_id' => $requestId,
                 ]);
             }
         }
+
+        Log::channel('runtime')->log(
+            $response->getStatusCode() >= 500 ? 'error' : ($response->getStatusCode() >= 400 ? 'warning' : 'info'),
+            'HTTP_REQUEST_COMPLETED',
+            [
+                ...RuntimeDiagnostics::request($request),
+                'status_code' => $response->getStatusCode(),
+                'duration_ms' => $durationMs,
+                'db_query_count' => (int) $request->attributes->get('db_query_count', 0),
+                'db_duration_ms' => $dbDurationMs,
+            ]
+        );
 
         return $response;
     }

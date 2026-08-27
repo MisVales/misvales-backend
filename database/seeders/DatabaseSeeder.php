@@ -31,11 +31,5 @@ class DatabaseSeeder extends Seeder
             ? MinimalGeographySeeder::class
             : SepomexSeeder::class);
 
-        if (app()->environment('local', 'development')) {
-            $this->call([
-                LocalDevSeeder::class,
-                ValesEjemploSeeder::class,
-            ]);
-        }
     }
 }

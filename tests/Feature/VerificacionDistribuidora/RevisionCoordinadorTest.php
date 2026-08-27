@@ -68,7 +68,7 @@ class RevisionCoordinadorTest extends Modulo5TestCase
         $this->assertDatabaseHas('verification_visits', ['application_id' => $app->id, 'verifier_id' => $verifier->id]);
     }
 
-    public function test_asignacion_con_iso_utc_conserva_la_hora_local_seleccionada(): void
+    public function test_asignacion_con_iso_utc_conserva_la_hora_de_monterrey_al_guardar(): void
     {
         $branch = Branch::factory()->create();
         $coordinator = User::factory()->create();

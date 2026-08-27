@@ -24,8 +24,7 @@ final class SolicitudDistribuidoraPolicy
 
     public function create(User $user): bool
     {
-        return $user->hasRole('coordinator')
-            && $user->hasPermissionTo('distributor_applications.create');
+        return $user->hasPermissionTo('distributor_applications.create');
     }
 
     public function view(User $user, SolicitudDistribuidora $solicitud): bool

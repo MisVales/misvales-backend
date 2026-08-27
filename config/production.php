@@ -28,4 +28,9 @@ return [
         'mail_username' => env('MAIL_USERNAME'),
         'mail_password' => env('MAIL_PASSWORD'),
     ],
+    'turnstile' => [
+        'enabled' => env('TURNSTILE_ENABLED', false),
+        'site_key' => env('TURNSTILE_SITE_KEY'),
+        'secret' => env('TURNSTILE_SECRET'),
+    ],
 ];

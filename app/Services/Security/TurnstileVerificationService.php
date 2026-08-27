@@ -17,18 +17,13 @@ class TurnstileVerificationService
      */
     public function verify(Request $request, ?string $token): bool
     {
+        if (! (bool) config('services.turnstile.enabled', false)) {
+            return true;
+        }
+
         $secret = config('services.turnstile.secret');
         $hasSecret = ! empty($secret) && is_string($secret) && trim($secret) !== '';
         $hasToken = ! empty($token) && is_string($token) && trim($token) !== '';
-
-        if (app()->environment('local')) {
-            return true;
-        }
-
-        // Caso A: Turnstile deshabilitado en backend y no enviado por cliente
-        if (! $hasSecret && ! $hasToken) {
-            return true;
-        }
 
         // Caso D: Turnstile habilitado en backend pero el cliente no envió token
         if ($hasSecret && ! $hasToken) {
@@ -39,9 +34,8 @@ class TurnstileVerificationService
             );
         }
 
-        // Caso C: Inconsistencia (Frontend envió token pero el backend no tiene TURNSTILE_SECRET)
-        if (! $hasSecret && $hasToken) {
-            Log::critical('Inconsistencia Turnstile: Se recibió turnstile_token pero TURNSTILE_SECRET no está configurado en el servidor.');
+        if (! $hasSecret) {
+            Log::critical('Turnstile está habilitado pero TURNSTILE_SECRET no está configurado.');
             throw new ApiException(
                 'CONFIG_ERROR',
                 'Error de configuración en el servicio de seguridad.',

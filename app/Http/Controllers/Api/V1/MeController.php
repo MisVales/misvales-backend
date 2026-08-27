@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Http\Middleware\ResolveVpnContext;
 use App\Modules\Organization\Domain\Assignments\Exceptions\RoleScopeNotAllowed;
 use App\Modules\Organization\Domain\Assignments\Services\OrganizationAssignmentRules;
 use App\Modules\Organization\Domain\Assignments\ValueObjects\OrganizationScope;
@@ -68,6 +69,11 @@ class MeController extends Controller
             $effectivePermissions = array_merge($effectivePermissions, $rolePermissions);
         }
 
+        $vpn = (bool) $request->attributes->get(ResolveVpnContext::ATTRIBUTE, false);
+        $isManager = collect($scopes)->contains(
+            fn (array $scope): bool => in_array($scope['role'], ['general_manager', 'branch_manager'], true)
+        );
+
         return response()->json([
             'user' => [
                 'id' => $user->id,
@@ -77,6 +83,8 @@ class MeController extends Controller
             ],
             'scopes' => $scopes,
             'effective_permissions' => array_values(array_unique($effectivePermissions)),
+            'access_context' => ['vpn' => $vpn],
+            'capabilities' => ['manager_actions' => $isManager && $vpn],
         ]);
     }
 }
