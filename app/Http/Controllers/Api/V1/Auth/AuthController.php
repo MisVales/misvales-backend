@@ -74,7 +74,7 @@ class AuthController extends Controller
         }
 
         // 2. Rate Limiting General (Punto 41)
-        if ($rateLimitEnabled && RateLimiter::tooManyAttempts($throttleKey, 5)) {
+        if ($rateLimitEnabled && RateLimiter::tooManyAttempts($throttleKey, 15)) {
             $seconds = RateLimiter::availableIn($throttleKey);
 
             throw new ApiException('RATE_LIMIT_EXCEEDED', "Demasiados intentos. Intente nuevamente en {$seconds} segundos.", 429);
@@ -193,7 +193,7 @@ class AuthController extends Controller
 
         if (! $mfaService->verifyTotp($secret, $request->totp_code, $user->id)) {
             $user->failed_login_attempts += 1;
-            if ($user->failed_login_attempts >= 5) {
+            if ($user->failed_login_attempts >= 10) {
                 $user->locked_until = now()->addMinutes(15);
                 Cache::forget("mfa_challenge_{$challengeHash}");
             }
@@ -412,7 +412,7 @@ class AuthController extends Controller
             return $this->issueSessionTokens($user, $request, 'PASSKEY', $policyService);
         } catch (\Exception $e) {
             $user->failed_login_attempts += 1;
-            if ($user->failed_login_attempts >= 5) {
+            if ($user->failed_login_attempts >= 10) {
                 $user->locked_until = now()->addMinutes(15);
                 Cache::forget("mfa_challenge_{$challengeHash}");
                 Cache::forget("passkey_login_{$challengeHash}");
@@ -750,8 +750,6 @@ class AuthController extends Controller
             config('production.frontend_url'),
             config('app.url'),
         ];
-
-        file_put_contents(storage_path('logs/origin.log'), json_encode(['origin' => $normalizedOrigin, 'allowed' => $allowedOrigins]));
 
         if (in_array(
             $normalizedOrigin,

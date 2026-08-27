@@ -162,15 +162,15 @@ class AppServiceProvider extends ServiceProvider
             : Limit::none();
 
         RateLimiter::for('login', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(Limit::perMinute(5)->by($request->input('email', $request->ip())));
+            return $configuredLimit(Limit::perMinute(10)->by($request->input('email', $request->ip())));
         });
 
         RateLimiter::for('totp', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(Limit::perMinute(5)->by($request->user()?->id ?: $request->ip()));
+            return $configuredLimit(Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
         });
 
         RateLimiter::for('recovery_code', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(Limit::perMinute(3)->by($request->user()?->id ?: $request->ip()));
+            return $configuredLimit(Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
         });
 
         RateLimiter::for('realtime_reads', function (Request $request) use ($configuredLimit) {
@@ -184,7 +184,7 @@ class AppServiceProvider extends ServiceProvider
         });
 
         RateLimiter::for('forgot_password', function (Request $request) use ($configuredLimit) {
-            return $configuredLimit(Limit::perMinute(3)->by($request->ip()));
+            return $configuredLimit(Limit::perMinute(5)->by($request->ip()));
         });
 
         RateLimiter::for('reset_password', function (Request $request) use ($configuredLimit) {
