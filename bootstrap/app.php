@@ -10,7 +10,6 @@ use App\Http\Middleware\RequireVpn;
 use App\Http\Middleware\ResolveVpnContext;
 use App\Http\Middleware\TraceRequest;
 use App\Http\Middleware\TrackSessionActivity;
-use App\Http\Middleware\TrustConfiguredProxies;
 use App\Models\SolicitudDistribuidora;
 use App\Models\UserRoleScope;
 use App\Modules\Organization\Application\Events\OrganizationEventPublisher;
@@ -60,7 +59,14 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
-        $middleware->prepend(TrustConfiguredProxies::class);
+        $middleware->trustProxies(
+            at: array_filter(
+                array_map(
+                    'trim',
+                    explode(',', (string) (app()->bound('config') ? config('production.trusted_proxies') : env('TRUSTED_PROXIES')))
+                )
+            )
+        );
         $middleware->append(ResolveVpnContext::class);
         $middleware->statefulApi();
         $middleware->redirectGuestsTo(
