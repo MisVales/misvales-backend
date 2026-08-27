@@ -28,12 +28,12 @@ return new class extends Migration
             $now = now();
             $configurations = [
                 'VERIFICATION_START_TIME' => [
-                    'name' => 'Hora verificador mínima',
+                    'name' => 'Hora inicio de visitas',
                     'description' => 'Primera hora global disponible para asignar e iniciar una visita de verificación.',
                     'value' => '08:00',
                 ],
                 'VERIFICATION_MAX_START_TIME' => [
-                    'name' => 'Hora verificador máxima',
+                    'name' => 'Hora final de visitas',
                     'description' => 'Última hora global disponible para asignar e iniciar una visita de verificación.',
                     'value' => '23:45',
                 ],

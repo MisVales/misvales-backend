@@ -2,6 +2,7 @@
 
 namespace App\Http\Requests\VerificacionDistribuidora;
 
+use App\Services\VerificacionDistribuidora\PoliticaHorarioVerificacion;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Validator;
@@ -29,18 +30,23 @@ class AsignarVerificadorRequest extends FormRequest
                 return;
             }
 
-            $timezone = config('app.timezone');
+            $policyService = app(PoliticaHorarioVerificacion::class);
+            $policy = $policyService->obtener();
+            $timezone = $policy['timezone'] ?? config('app.timezone');
+
             $scheduled = CarbonImmutable::parse((string) $this->input('scheduled_for'))->setTimezone($timezone);
             $now = CarbonImmutable::now($timezone);
-            $minutesToNextSlot = 15 - ($now->minute % 15);
+            $slotMinutes = (int) ($policy['slot_minutes'] ?? 15);
+            $minutesToNextSlot = $slotMinutes - ($now->minute % $slotMinutes);
             $earliest = $now->addMinutes($minutesToNextSlot)->startOfMinute();
 
             if ($scheduled->lessThan($earliest)) {
-                $validator->errors()->add('scheduled_for', 'Selecciona un horario a partir del siguiente bloque de 15 minutos.');
+                $validator->errors()->add('scheduled_for', 'Selecciona un horario a partir del siguiente bloque de '.$slotMinutes.' minutos.');
             }
 
-            if ($scheduled->hour < 8 || $scheduled->hour > 23 || $scheduled->minute % 15 !== 0) {
-                $validator->errors()->add('scheduled_for', 'Selecciona un horario cada 15 minutos entre las 08:00 y las 23:45.');
+            $time = $scheduled->format('H:i');
+            if ($time < $policy['start_time'] || $time > $policy['max_start_time'] || $scheduled->minute % $slotMinutes !== 0) {
+                $validator->errors()->add('scheduled_for', "Selecciona un horario cada {$slotMinutes} minutos entre las {$policy['start_time']} y las {$policy['max_start_time']}.");
             }
         }];
     }
