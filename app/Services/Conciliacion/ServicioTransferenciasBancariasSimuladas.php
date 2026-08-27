@@ -8,7 +8,9 @@ use App\Models\RelacionDistribuidora;
 use App\Models\TransferenciaBancariaSimulada;
 use App\Models\User;
 use Carbon\CarbonImmutable;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Collection;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Common\Entity\Style\Color;
@@ -62,10 +64,8 @@ final class ServicioTransferenciasBancariasSimuladas
     {
         $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
 
-        return TransferenciaBancariaSimulada::query()
+        return $this->movimientosDelPeriodo($branchId, $processRunId)
             ->with('relation:id,payment_reference,process_run_id')
-            ->where('branch_id', $branchId)
-            ->whereHas('relation', fn ($query) => $query->where('process_run_id', $processRunId))
             ->latest('paid_at')
             ->limit(100)
             ->get();
@@ -75,9 +75,7 @@ final class ServicioTransferenciasBancariasSimuladas
     {
         $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
 
-        $transfers = TransferenciaBancariaSimulada::query()
-            ->where('branch_id', $branchId)
-            ->whereHas('relation', fn ($query) => $query->where('process_run_id', $processRunId))
+        $transfers = $this->movimientosDelPeriodo($branchId, $processRunId)
             ->oldest('paid_at')
             ->get();
 
@@ -171,5 +169,24 @@ final class ServicioTransferenciasBancariasSimuladas
                 ],
             );
         }
+    }
+
+    /**
+     * Un movimiento pertenece al periodo en que se realizó, no al periodo en que
+     * nació la relación. Esto permite conciliar pagos de relaciones anteriores.
+     */
+    private function movimientosDelPeriodo(string $branchId, string $processRunId): Builder
+    {
+        $run = DB::table('relation_process_runs')->where('id', $processRunId)->firstOrFail();
+        $previousCutoff = DB::table('relation_process_runs')
+            ->where('status', 'COMPLETED')
+            ->where('cutoff_at', '<', $run->cutoff_at)
+            ->latest('cutoff_at')
+            ->value('cutoff_at');
+
+        return TransferenciaBancariaSimulada::query()
+            ->where('branch_id', $branchId)
+            ->where('paid_at', '<=', $run->cutoff_at)
+            ->when($previousCutoff !== null, fn (Builder $query) => $query->where('paid_at', '>', $previousCutoff));
     }
 }

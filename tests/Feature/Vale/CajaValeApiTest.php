@@ -1319,6 +1319,57 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('116', (string) $rows[1][3]);
     }
 
+    public function test_corte_sin_relaciones_nuevas_incluye_en_excel_pago_de_relacion_anterior(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-27 10:00:00', 'America/Monterrey'));
+        $relation = $this->createPaymentRelation();
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+        $this->marcarCorteComoConciliado($relation);
+
+        Sanctum::actingAs($this->distributorUser);
+        $this->postJson('/api/v1/bank-simulations', [
+            'relation_id' => $relation->id,
+            'amount' => '116.00',
+            'payment_type' => 'TRANSFER',
+            'concept' => 'Pago pendiente de la relación anterior',
+            'paid_at' => '2026-08-28 10:00:00',
+        ])->assertCreated();
+
+        Sanctum::actingAs($this->user('general_manager'));
+        $newRunId = $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Reflejar pagos pendientes'])
+            ->assertSuccessful()
+            ->assertJsonPath('data.relations_generated', 0)
+            ->json('data.process_run_id');
+
+        $this->assertNotNull($newRunId);
+        $this->assertDatabaseMissing('distributor_relations', ['process_run_id' => $newRunId]);
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $newRunId,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+
+        Sanctum::actingAs($this->cashier);
+        $this->getJson('/api/v1/bank-reconciliation-periods')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.process_run_id', $newRunId)
+            ->assertJsonPath('data.0.relations', 0);
+        $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $newRunId);
+        $rows = app(LectorXlsxBancario::class)->leer($path);
+
+        $this->assertCount(2, $rows);
+        $this->assertSame($relation->payment_reference, $rows[1][2]);
+        $this->assertSame('116', (string) $rows[1][3]);
+    }
+
     public function test_xlsx_del_cliente_concilia_referencia_pago_fecha_y_hora(): void
     {
         Storage::fake('local');

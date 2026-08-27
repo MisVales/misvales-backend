@@ -31,11 +31,6 @@ final class ServicioGeneracionRelacion
         if (DB::table('relation_process_runs')
             ->where('status', 'COMPLETED')
             ->where('cutoff_at', $cutoff)
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
-            })
             ->exists()) {
             return 0;
         }

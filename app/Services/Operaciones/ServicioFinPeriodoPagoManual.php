@@ -209,12 +209,7 @@ final class ServicioFinPeriodoPagoManual
         $forcedCutoffs = AuditLog::query()
             ->where('entity_type', 'operation_cutoff')
             ->where('event_name', 'ForzarCorte')
-            ->where('result', 'SUCCESS')
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'audit_logs.entity_id');
-            });
+            ->where('result', 'SUCCESS');
         if ($processRunId !== null) {
             $forcedCutoffs->where('entity_id', $processRunId);
         }
