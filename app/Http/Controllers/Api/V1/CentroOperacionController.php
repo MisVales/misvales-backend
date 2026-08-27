@@ -11,6 +11,7 @@ use App\Services\Operaciones\ServicioCorteManual;
 use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
 use App\Services\Reportes\ServicioInicioReportes;
 use App\Services\Reportes\ServicioReportes;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -305,10 +306,17 @@ final class CentroOperacionController extends Controller
     {
         abort_unless($request->user()->hasPermissionTo('reports.view_global'), 403);
 
-        $request->validate(['motivo' => ['nullable', 'string', 'max:255']]);
+        $validated = $request->validate([
+            'motivo' => ['nullable', 'string', 'max:255'],
+            'simulated_cutoff_at' => ['nullable', 'date'],
+        ]);
 
         try {
-            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $request->input('motivo'))]);
+            $simulatedCutoff = isset($validated['simulated_cutoff_at'])
+                ? CarbonImmutable::parse($validated['simulated_cutoff_at'])
+                : null;
+
+            return response()->json(['data' => $corteManual->forzarCorte($request->user(), $validated['motivo'] ?? null, $simulatedCutoff)]);
         } catch (\RuntimeException $e) {
             if ($e->getMessage() === 'RELATION_CONFIGURATION_INCOMPLETE') {
                 return response()->json(['message' => 'Falta configuración en el sistema (horarios/días) para poder generar el corte.'], 422);
@@ -318,6 +326,9 @@ final class CentroOperacionController extends Controller
             }
             if ($e->getMessage() === 'PREVIOUS_CUTOFF_NOT_RECONCILED') {
                 return response()->json(['message' => 'Antes de cerrar un nuevo corte, Caja debe subir y procesar la conciliación bancaria del periodo anterior.'], 409);
+            }
+            if ($e->getMessage() === 'SIMULATED_CUTOFF_NOT_AFTER_PREVIOUS') {
+                return response()->json(['message' => 'La fecha simulada no puede ser anterior al último corte generado.'], 422);
             }
             throw $e;
         }

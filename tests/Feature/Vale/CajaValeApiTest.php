@@ -61,6 +61,8 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -342,7 +344,7 @@ final class CajaValeApiTest extends TestCase
         $relation = RelacionDistribuidora::query()->firstOrFail();
         self::assertSame('7300.0000', $relation->balance);
 
-        $file = $this->xlsx([[
+        $file = $this->xlsxValido([[
             $relation->payment_reference,
             '7300.00',
             $cutoff->addDay()->format('Y-m-d H:i:s'),
@@ -762,6 +764,89 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseCount('distributor_relations', 1);
         $this->assertDatabaseCount('distributor_relation_items', 3);
         $this->assertSame(8, $this->voucher->parcialidades()->count());
+    }
+
+    public function test_seis_cortes_forzados_reales_llegan_a_maria_seis_elena_cuatro_y_jose_uno_sin_duplicar(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+        $manager = $this->user('general_manager');
+
+        $maria = $this->voucher;
+        $maria->cliente->forceFill(['first_name' => 'María', 'first_last_name' => 'Prueba'])->save();
+        $this->materializarCalendario($maria, '2026-08-31 00:05:00', 8);
+
+        $elena = null;
+        $jose = null;
+        $cutoffs = [
+            '2026-09-01 00:05:00',
+            '2026-09-16 00:05:00',
+            '2026-10-01 00:05:00',
+            '2026-10-16 00:05:00',
+            '2026-10-31 00:05:00',
+            '2026-11-15 00:05:00',
+        ];
+        $expected = [
+            [[1], [], []],
+            [[2], [], []],
+            [[3], [1], []],
+            [[4], [2], []],
+            [[5], [3], []],
+            [[6], [4], [1]],
+        ];
+
+        foreach ($cutoffs as $index => $cutoffAt) {
+            if ($index === 2) {
+                $elena = $this->clonarValeParaCliente('VAL-ELENA-8', 'Elena');
+                $this->materializarCalendario($elena, '2026-09-30 00:05:00', 8);
+            }
+            if ($index === 5) {
+                $jose = $this->clonarValeParaCliente('VAL-JOSE-8', 'José');
+                $this->materializarCalendario($jose, '2026-11-14 00:05:00', 8);
+            }
+
+            Sanctum::actingAs($manager);
+            $idempotencyKey = (string) Str::uuid();
+            $response = $this->withHeader('Idempotency-Key', $idempotencyKey)
+                ->postJson('/api/v1/operations/force-cutoff', [
+                    'motivo' => 'Escenario controlado corte '.($index + 1),
+                    'simulated_cutoff_at' => CarbonImmutable::parse($cutoffAt, 'America/Monterrey')->toIso8601String(),
+                ])
+                ->assertSuccessful()
+                ->assertJsonPath('data.relations_generated', 1);
+
+            $relation = RelacionDistribuidora::query()
+                ->where('process_run_id', $response->json('data.process_run_id'))
+                ->firstOrFail();
+            $this->assertSame($expected[$index][0], $this->numerosRelacionados($maria, $relation));
+            $this->assertSame($expected[$index][1], $elena === null ? [] : $this->numerosRelacionados($elena, $relation));
+            $this->assertSame($expected[$index][2], $jose === null ? [] : $this->numerosRelacionados($jose, $relation));
+
+            if ($index === 5) {
+                $relationsBeforeReplay = RelacionDistribuidora::query()->count();
+                $itemsBeforeReplay = RelacionPartidaDistribuidora::query()->count();
+                $this->withHeader('Idempotency-Key', $idempotencyKey)
+                    ->postJson('/api/v1/operations/force-cutoff', [
+                        'motivo' => 'Escenario controlado corte 6',
+                        'simulated_cutoff_at' => CarbonImmutable::parse($cutoffAt, 'America/Monterrey')->toIso8601String(),
+                    ])
+                    ->assertSuccessful()
+                    ->assertJsonPath('data.process_run_id', $relation->process_run_id);
+                $this->assertSame($relationsBeforeReplay, RelacionDistribuidora::query()->count());
+                $this->assertSame($itemsBeforeReplay, RelacionPartidaDistribuidora::query()->count());
+                break;
+            }
+
+            $this->pagarConciliarYCerrarCiclo($relation, $index + 1, $manager);
+        }
+
+        $this->assertSame(8, $maria->parcialidades()->count());
+        $this->assertSame(8, $elena?->parcialidades()->count());
+        $this->assertSame(8, $jose?->parcialidades()->count());
+        $this->assertSame(
+            RelacionPartidaDistribuidora::query()->count(),
+            RelacionPartidaDistribuidora::query()->distinct()->count('voucher_installment_id'),
+        );
     }
 
     public function test_forzar_corte_usa_la_misma_seleccion_que_el_corte_normal(): void
@@ -2070,6 +2155,59 @@ final class CajaValeApiTest extends TestCase
         return $vale;
     }
 
+    private function clonarValeParaCliente(string $folio, string $firstName): Vale
+    {
+        $client = Cliente::factory()->create([
+            'created_by' => $this->distributorUser->id,
+            'first_name' => $firstName,
+            'first_last_name' => 'Prueba',
+        ]);
+        AsignacionClienteDistribuidora::factory()->create([
+            'client_id' => $client->id,
+            'distributor_id' => $this->voucher->distributor_id,
+            'branch_id' => $this->branch->id,
+            'starts_at' => now()->subDay(),
+            'ends_at' => null,
+            'assigned_by' => $this->distributorUser->id,
+        ]);
+        $vale = $this->clonarVale($folio);
+        $vale->forceFill(['client_id' => $client->id])->save();
+
+        return $vale;
+    }
+
+    private function pagarConciliarYCerrarCiclo(RelacionDistribuidora $relation, int $cycle, User $manager): void
+    {
+        Sanctum::actingAs($manager);
+        $this->postIdempotent('/api/v1/operations/force-payment-deadline', ['motivo' => "Preparar conciliación ciclo {$cycle}"])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'DEADLINE_REACHED');
+        $this->postIdempotent('/api/v1/operations/force-payment-deadline', ['motivo' => "Habilitar archivo ciclo {$cycle}"])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'DEFERRED');
+
+        Sanctum::actingAs($this->cashier);
+        $file = $this->xlsx([[
+            $relation->payment_reference,
+            $relation->balance,
+            $relation->payment_deadline_at->format('Y-m-d H:i:s'),
+            "SCENARIO-CYCLE-{$cycle}",
+            "Liquidación completa ciclo {$cycle}",
+        ]]);
+        $this->post('/api/v1/bank-imports', [
+            'file' => $file,
+            'process_run_id' => $relation->process_run_id,
+        ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->assertSame('0.0000', $relation->fresh()->balance);
+        $this->assertDatabaseHas('audit_logs', [
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'ForcePaymentDeadlineCompleted',
+            'result' => 'SUCCESS',
+        ]);
+    }
+
     private function valeDeOtraDistribuidora(string $folio): Vale
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);
@@ -2207,6 +2345,20 @@ final class CajaValeApiTest extends TestCase
         }$xml .= '</sheetData></worksheet>';
         $zip->addFromString('xl/worksheets/sheet1.xml', $xml);
         $zip->close();
+
+        return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+    }
+
+    private function xlsxValido(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'bank-valid').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $writer->addRow(Row::fromValues($headers));
+        foreach ($rows as $row) {
+            $writer->addRow(Row::fromValues($row));
+        }
+        $writer->close();
 
         return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
     }
