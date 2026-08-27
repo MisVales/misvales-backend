@@ -13,6 +13,7 @@ class ErrorCatalogServiceTest extends TestCase
     {
         Config::set('cache.default', 'array');
         Cache::store('array')->flush();
+
         $items = app(ErrorCatalogService::class)->all();
         $codes = array_column($items, 'code');
 
@@ -24,11 +25,10 @@ class ErrorCatalogServiceTest extends TestCase
         $this->assertSame($codes, array_values(array_unique($codes)));
 
         foreach ($items as $item) {
-            $this->assertNotSame('', $item['client_message']);
-            $this->assertNotEmpty($item['client_messages']);
-            $this->assertArrayHasKey('http_statuses', $item);
-            $this->assertArrayNotHasKey('sources', $item);
-            $this->assertArrayNotHasKey('internal_definition', $item);
+            $this->assertNotSame('', $item['client_definition']);
+            $this->assertNotSame('', $item['internal_definition']);
+            $this->assertNotSame('', $item['admin_definition']);
+            $this->assertNotEmpty($item['sources']);
         }
     }
 }

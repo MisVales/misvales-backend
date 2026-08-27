@@ -29,7 +29,7 @@ class AsignarVerificadorRequest extends FormRequest
                 return;
             }
 
-            $timezone = 'America/Monterrey';
+            $timezone = config('app.timezone');
             $scheduled = CarbonImmutable::parse((string) $this->input('scheduled_for'))->setTimezone($timezone);
             $now = CarbonImmutable::now($timezone);
             $minutesToNextSlot = 15 - ($now->minute % 15);

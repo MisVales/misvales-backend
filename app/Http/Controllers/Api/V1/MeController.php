@@ -25,6 +25,7 @@ class MeController extends Controller
             // Solo alcances activos y no vencidos
             $query->where('status', 'ACTIVE')
                 ->whereNull('revoked_at')
+                ->with('branch:id,name,code')
                 ->with(['role' => function ($roleQuery) {
                     $roleQuery->with('permissions');
                 }]);
@@ -60,6 +61,8 @@ class MeController extends Controller
                 'role' => $scope->role->code,
                 'role_name' => $scope->role->name,
                 'branch_id' => $scope->branch_id,
+                'branch_name' => $scope->branch?->name,
+                'branch_code' => $scope->branch?->code,
                 'scope_type' => $scope->scope_type,
                 'scope_id' => $scope->scope_id,
                 'permissions' => $rolePermissions,
