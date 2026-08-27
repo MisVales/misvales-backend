@@ -13,6 +13,7 @@ use App\Http\Requests\VerificacionDistribuidora\RegistrarDiferenciasRequest;
 use App\Http\Resources\VerificacionDistribuidora\VerificationVisitResource;
 use App\Services\VerificacionDistribuidora\ServicioRevisionCoordinador;
 use App\Services\VerificacionDistribuidora\ServicioVerificacionDistribuidora;
+use App\Services\VerificacionDistribuidora\PoliticaHorarioVerificacion;
 use Illuminate\Http\JsonResponse;
 
 class VerificacionDistribuidoraController extends Controller
@@ -56,6 +57,11 @@ class VerificacionDistribuidoraController extends Controller
             $range['from'],
             $range['to'],
         )]);
+    }
+
+    public function politicaHorario(PoliticaHorarioVerificacion $policy): JsonResponse
+    {
+        return response()->json(['data' => $policy->obtener()]);
     }
 
     // ---- Métodos de Verificador ----

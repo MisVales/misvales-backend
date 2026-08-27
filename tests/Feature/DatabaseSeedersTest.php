@@ -21,8 +21,8 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(2, $firstCounts['user_role_scopes']);
         self::assertSame(0, $firstCounts['mfa_credentials']);
         self::assertSame(1, $firstCounts['branches']);
-        self::assertSame(18, $firstCounts['configuration_definitions']);
-        self::assertSame(17, $firstCounts['configuration_versions']);
+        self::assertSame(20, $firstCounts['configuration_definitions']);
+        self::assertSame(19, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
         self::assertGreaterThan(0, $firstCounts['municipios']);
         self::assertGreaterThan(0, $firstCounts['codigos_postales']);
