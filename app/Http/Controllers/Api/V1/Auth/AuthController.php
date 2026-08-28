@@ -122,17 +122,6 @@ class AuthController extends Controller
         $lockoutService->clearLockout($ip, $email);
         RateLimiter::clear($throttleKey);
 
-        if (config('auth.development_mfa_bypass')) {
-            app(SecurityAuditService::class)->log($request, [
-                'event_type' => 'MFA_BYPASSED_DEVELOPMENT',
-                'severity' => 'WARNING',
-                'outcome' => 'SUCCESS',
-                'user_id' => $user->id,
-            ]);
-
-            return $this->issueSessionTokens($user, $request, 'DEVELOPMENT_BYPASS', $policyService);
-        }
-
         $challengeToken = Str::random(64);
         $challengeHash = hash('sha256', $challengeToken);
 
@@ -158,7 +147,58 @@ class AuthController extends Controller
             'mfa_challenge_token' => $challengeToken,
             'expires_in' => 300,
             'available_mfa' => $availableMfa,
+            'development_mfa_bypass' => (bool) config('auth.development_mfa_bypass'),
         ]);
+    }
+
+    public function skipDevelopmentMfa(Request $request, SessionPolicyService $policyService)
+    {
+        if (! app()->environment('local') || ! config('auth.development_mfa_bypass')) {
+            throw new ApiException('NOT_FOUND', 'Recurso no encontrado.', 404);
+        }
+
+        $validated = $request->validate([
+            'mfa_challenge_token' => 'required|string',
+            'factor' => 'required|in:TOTP,PASSKEY',
+        ]);
+        $challengeHash = hash('sha256', $validated['mfa_challenge_token']);
+        $sessionState = Cache::get("mfa_challenge_{$challengeHash}");
+        if (! is_array($sessionState)) {
+            throw new ApiException('EXPIRED_MFA_CHALLENGE', 'El desafío MFA es inválido o ha expirado.', 400);
+        }
+
+        $user = User::find($sessionState['user_id'] ?? null);
+        if (! $user || $user->state !== 'ACTIVE') {
+            throw new ApiException('INVALID_SESSION', 'Usuario no encontrado.', 404);
+        }
+
+        if ($validated['factor'] === 'TOTP') {
+            $sessionState['totp_verified'] = true;
+            Cache::put("mfa_challenge_{$challengeHash}", $sessionState, now()->addMinutes(5));
+
+            return response()->json([
+                'message' => 'TOTP omitido en demo local. Continúa con Passkey.',
+                'next_step' => 'PASSKEY',
+                'mfa_challenge_token' => $validated['mfa_challenge_token'],
+                'expires_in' => 300,
+                'development_mfa_bypass' => true,
+            ]);
+        }
+
+        if (! ($sessionState['totp_verified'] ?? false)) {
+            throw new ApiException('REQUIRES_TOTP_FIRST', 'Primero debes completar u omitir TOTP.', 403);
+        }
+
+        Cache::forget("mfa_challenge_{$challengeHash}");
+        app(SecurityAuditService::class)->log($request, [
+            'event_type' => 'MFA_BYPASSED_DEVELOPMENT',
+            'severity' => 'WARNING',
+            'outcome' => 'SUCCESS',
+            'user_id' => $user->id,
+            'metadata' => ['mfa_type' => 'TOTP_AND_PASSKEY'],
+        ]);
+
+        return $this->issueSessionTokens($user, $request, 'DEVELOPMENT_BYPASS', $policyService);
     }
 
     /**
@@ -805,4 +845,3 @@ class AuthController extends Controller
         return 'Other Device';
     }
 }
-

@@ -28,6 +28,20 @@ class TurnstileVerificationTest extends TestCase
             ->assertJsonPath('error.code', 'INVALID_CREDENTIALS');
     }
 
+    public function test_local_demo_token_does_not_call_cloudflare(): void
+    {
+        Config::set('services.turnstile.local_demo', true);
+        Http::fake();
+
+        $this->postJson('/api/v1/auth/login', [
+            'email' => 'usuario@misvales.com',
+            'password' => 'PasswordSegura123!',
+            'turnstile_token' => 'local-demo-turnstile',
+        ])->assertUnauthorized();
+
+        Http::assertNothingSent();
+    }
+
     public function test_case_c_inconsistency_server_error_when_token_sent_but_no_secret_configured()
     {
         Config::set('services.turnstile.secret', null);

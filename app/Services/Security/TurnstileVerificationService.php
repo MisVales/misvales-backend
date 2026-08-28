@@ -21,6 +21,14 @@ class TurnstileVerificationService
             return true;
         }
 
+        if ((bool) config('services.turnstile.local_demo', false)) {
+            if (hash_equals('local-demo-turnstile', trim((string) $token))) {
+                return true;
+            }
+
+            throw new ApiException('TURNSTILE_REQUIRED', 'Completa la verificación local de seguridad.', 422);
+        }
+
         $secret = trim((string) config('services.turnstile.secret'), " \t\n\r\0\x0B\"'");
         $token = trim((string) $token, " \t\n\r\0\x0B\"'");
         $hasSecret = $secret !== '';

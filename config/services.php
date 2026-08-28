@@ -48,6 +48,7 @@ return [
         'site_key' => env('TURNSTILE_SITE_KEY') ?: env('TURNSTILE_SITEKEY'),
         'secret' => env('TURNSTILE_SECRET') ?: env('TURNSTILE_SECRET_KEY'),
         'url' => 'https://challenges.cloudflare.com/turnstile/v0/siteverify',
+        'local_demo' => env('APP_ENV') === 'local' && env('TURNSTILE_LOCAL_DEMO', false),
         'verify_ssl' => env('TURNSTILE_VERIFY_SSL', true),
         'ca_bundle' => env('TURNSTILE_CA_BUNDLE'),
     ],

@@ -78,6 +78,7 @@ Route::prefix('v1')->group(function () {
 
         Route::post('login', [AuthController::class, 'login']); // Protegido manual por el controlador y el servicio ciego
         Route::post('mfa/totp/verify', [AuthController::class, 'verifyTotp'])->middleware('throttle:totp');
+        Route::post('mfa/development/skip', [AuthController::class, 'skipDevelopmentMfa'])->middleware('throttle:totp');
         Route::post('mfa/passkey/options', [AuthController::class, 'passkeyOptions'])->middleware('throttle:totp');
         Route::post('mfa/passkey/verify', [AuthController::class, 'passkeyVerify'])->middleware('throttle:totp');
         Route::post('mfa/recovery-code/verify', [AuthController::class, 'verifyRecoveryCode'])->middleware('throttle:recovery_code');

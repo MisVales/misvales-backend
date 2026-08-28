@@ -22,6 +22,7 @@ class DatabaseSeeder extends Seeder
             InitialAdministratorSeeder::class,
             RolePermissionsSeeder::class,
             HeadquartersBranchSeeder::class,
+            LocalDemoUsersSeeder::class,
             ConfigurationDefinitionsSeeder::class,
             InitialConfigurationVersionsSeeder::class,
             InitialCatalogSeeder::class,

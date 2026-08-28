@@ -5,12 +5,34 @@ declare(strict_types=1);
 namespace Tests\Feature;
 
 use Database\Seeders\DatabaseSeeder;
+use Database\Seeders\LocalDemoUsersSeeder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Schema;
 use Tests\TestCase;
 
 final class DatabaseSeedersTest extends TestCase
 {
+    public function test_local_demo_seeder_creates_six_active_accounts_with_shared_password(): void
+    {
+        $this->seed(DatabaseSeeder::class);
+        $this->app->detectEnvironment(fn (): string => 'local');
+        $this->seed(LocalDemoUsersSeeder::class);
+
+        self::assertSame(6, DB::table('users')->count());
+        foreach (DB::table('users')->pluck('password') as $password) {
+            self::assertTrue(Hash::check('1234', $password));
+        }
+        $this->assertEqualsCanonicalizing([
+            'admin@misvales.local',
+            'cajera@misvales.local',
+            'coordinador@misvales.local',
+            'gerente.general@misvales.local',
+            'gerente.sucursal@misvales.local',
+            'verificador@misvales.local',
+        ], DB::table('users')->pluck('normalized_email')->all());
+    }
+
     public function test_database_seeder_builds_the_foundation_and_is_idempotent(): void
     {
         $this->seed(DatabaseSeeder::class);
