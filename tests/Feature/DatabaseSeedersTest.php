@@ -24,13 +24,29 @@ final class DatabaseSeedersTest extends TestCase
             self::assertTrue(Hash::check('1234', $password));
         }
         $this->assertEqualsCanonicalizing([
-            'admin@misvales.local',
-            'cajera@misvales.local',
-            'coordinador@misvales.local',
-            'gerente.general@misvales.local',
-            'gerente.sucursal@misvales.local',
-            'verificador@misvales.local',
+            'administrador@gmail.com',
+            'cajera@gmail.com',
+            'coordinador@gmail.com',
+            'gerentegeneral@gmail.com',
+            'gerentesucursal@gmail.com',
+            'verificador@gmail.com',
         ], DB::table('users')->pluck('normalized_email')->all());
+
+        self::assertSame(5, DB::table('user_role_scopes as scope')
+            ->join('users as user', 'user.id', '=', 'scope.user_id')
+            ->join('branches as branch', 'branch.id', '=', 'scope.branch_id')
+            ->where('branch.name', 'Sucursal Matamoros')
+            ->where('scope.scope_type', 'BRANCH')
+            ->where('scope.status', 'ACTIVE')
+            ->whereNull('scope.revoked_at')
+            ->whereIn('user.normalized_email', [
+                'administrador@gmail.com',
+                'cajera@gmail.com',
+                'coordinador@gmail.com',
+                'gerentesucursal@gmail.com',
+                'verificador@gmail.com',
+            ])
+            ->count());
     }
 
     public function test_database_seeder_builds_the_foundation_and_is_idempotent(): void
@@ -42,7 +58,7 @@ final class DatabaseSeedersTest extends TestCase
         self::assertSame(2, $firstCounts['users']);
         self::assertSame(2, $firstCounts['user_role_scopes']);
         self::assertSame(0, $firstCounts['mfa_credentials']);
-        self::assertSame(1, $firstCounts['branches']);
+        self::assertSame(2, $firstCounts['branches']);
         self::assertSame(20, $firstCounts['configuration_definitions']);
         self::assertSame(19, $firstCounts['configuration_versions']);
         self::assertGreaterThan(0, $firstCounts['estados']);
@@ -57,9 +73,17 @@ final class DatabaseSeedersTest extends TestCase
         $this->assertDatabaseHas('branches', [
             'code' => 'MATRIZ',
             'name' => 'Sucursal Matriz',
-            'address' => 'Torreón, Coahuila',
+            'address' => 'C. Pabellón 28, Centro, 27440 Matamoros, Coah.',
+            'address_latitude' => 25.5280209,
+            'address_longitude' => -103.2300172,
             'status' => 'ACTIVE',
             'is_headquarters' => true,
+        ]);
+        $this->assertDatabaseHas('branches', [
+            'code' => 'MATAMOROS',
+            'name' => 'Sucursal Matamoros',
+            'status' => 'ACTIVE',
+            'is_headquarters' => false,
         ]);
         self::assertSame(1, DB::table('branches')->where('is_headquarters', true)->count());
 

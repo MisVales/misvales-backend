@@ -21,15 +21,19 @@ final class LocalDemoUsersSeeder extends Seeder
         }
 
         DB::transaction(function (): void {
-            $branch = BranchRecord::query()
-                ->where('name', 'Sucursal Matamoros')
+            $matrix = BranchRecord::query()
+                ->where('code', 'MATRIZ')
                 ->where('status', 'ACTIVE')
                 ->firstOrFail();
+            $branch = $this->matamorosBranch($matrix);
             $manager = $this->existingActor('general_manager');
             $administrator = $this->existingActor('admin');
 
             $this->activate($manager, 'Gerente General Demo', 'gerentegeneral@gmail.com');
             $this->activate($administrator, 'Administrador Demo', 'administrador@gmail.com');
+            $this->clearBranchAssignments($manager);
+            $this->clearBranchAssignments($administrator);
+            $this->assignToBranch($manager, 'general_manager', $matrix, $manager);
             $this->assignToBranch($administrator, 'admin', $branch, $manager);
 
             foreach ($this->branchActors() as $actor) {
@@ -45,9 +49,53 @@ final class LocalDemoUsersSeeder extends Seeder
                     ],
                 );
 
+                $this->clearBranchAssignments($user);
                 $this->assignToBranch($user, $actor['role'], $branch, $manager);
             }
         });
+    }
+
+    private function clearBranchAssignments(User $user): void
+    {
+        UserRoleScope::query()
+            ->where('user_id', $user->id)
+            ->where('scope_type', 'BRANCH')
+            ->where('status', 'ACTIVE')
+            ->update([
+                'status' => 'REVOKED',
+                'revoked_at' => now(),
+                'revoked_by_user_id' => $user->id,
+                'revocation_reason' => 'Reasignación de cuentas demo locales por sucursal.',
+            ]);
+    }
+
+    private function matamorosBranch(BranchRecord $matrix): BranchRecord
+    {
+        $branch = BranchRecord::query()
+            ->where('code', 'MATAMOROS')
+            ->orWhere(fn ($query) => $query
+                ->where('name', 'Sucursal Matamoros')
+                ->where('is_headquarters', false))
+            ->first() ?? new BranchRecord;
+
+        $branch->fill([
+            'code' => 'MATAMOROS',
+            'name' => 'Sucursal Matamoros',
+            'address' => 'C. PabellÃ³n 28, Centro, 27440 Matamoros, Coah.',
+            'address_validation_id' => null,
+            'address_place_id' => null,
+            'address_latitude' => 25.5280208,
+            'address_longitude' => -103.2300172,
+            'address_validated_at' => null,
+            'is_headquarters' => false,
+            'status' => 'ACTIVE',
+            'lock_version' => $branch->exists ? $branch->lock_version : 0,
+            'created_by' => $branch->exists ? $branch->created_by : $matrix->created_by,
+            'updated_by' => $matrix->created_by,
+        ]);
+        $branch->save();
+
+        return $branch;
     }
 
     private function assignToBranch(User $user, string $roleCode, BranchRecord $branch, User $manager): void
