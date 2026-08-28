@@ -62,9 +62,9 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('view', $application);
 
-        return new SolicitudDistribuidoraDetalleResource(
+        return (new SolicitudDistribuidoraDetalleResource(
             $servicio->consultarSolicitud($request->user(), $application),
-        )->additional([
+        ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -76,9 +76,9 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new SolicitudDistribuidoraResource(
+        return (new SolicitudDistribuidoraResource(
             $servicio->actualizarSolicitud($request->user(), $application, $request->validated()),
-        )->additional([
+        ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -127,9 +127,9 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new DomicilioSolicitudResource(
+        return (new DomicilioSolicitudResource(
             $servicio->guardarDomicilio($request->user(), $application, $request->validated(), $residence),
-        )->additional([
+        ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -149,9 +149,9 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('submit', $application);
 
-        return new SolicitudDistribuidoraResource(
+        return (new SolicitudDistribuidoraResource(
             $servicio->enviarARevision($request->user(), $application, $request->integer('lock_version')),
-        )->additional([
+        ))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -182,7 +182,7 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated(), $member))->additional([
+        return (new FamiliarSolicitudResource($servicio->guardarFamiliar($request->user(), $application, $request->validated(), $member)))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -221,7 +221,7 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated(), $vehicle))->additional([
+        return (new VehiculoSolicitudResource($servicio->guardarVehiculo($request->user(), $application, $request->validated(), $vehicle)))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -260,7 +260,7 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated(), $entry))->additional([
+        return (new PatrimonioSolicitudResource($servicio->guardarPatrimonio($request->user(), $application, $request->validated(), $entry)))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -299,7 +299,7 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated(), $employment))->additional([
+        return (new EmpleoSolicitudResource($servicio->guardarEmpleo($request->user(), $application, $request->validated(), $employment)))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
@@ -338,7 +338,7 @@ final class SolicitudDistribuidoraController extends Controller
     {
         Gate::authorize('update', $application);
 
-        return new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated(), $credit))->additional([
+        return (new CreditoComercialSolicitudResource($servicio->guardarCreditoComercial($request->user(), $application, $request->validated(), $credit)))->additional([
             'completion' => $servicio->calcularCompletitud($application->fresh()),
             'section_declarations' => $servicio->calcularDeclaraciones($application->fresh()),
             'lock_version' => $application->fresh()->lock_version,
