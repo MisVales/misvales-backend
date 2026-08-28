@@ -8,6 +8,7 @@ use App\Http\Controllers\Api\V1\Auth\AuthConfigurationController;
 use App\Http\Controllers\Api\V1\Auth\AuthController;
 use App\Http\Controllers\Api\V1\Auth\ForgotPasswordController;
 use App\Http\Controllers\Api\V1\Auth\InvitationController;
+use App\Http\Controllers\Api\V1\Auth\LocalAccountSwitchController;
 use App\Http\Controllers\Api\V1\Auth\ResetPasswordController;
 use App\Http\Controllers\Api\V1\CajaValeController;
 use App\Http\Controllers\Api\V1\CarteraInformativaClienteController;
@@ -90,6 +91,8 @@ Route::prefix('v1')->group(function () {
         // Rutas protegidas de la API (Zero Trust Layer)
         Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
             Route::post('logout', [AuthController::class, 'logout']);
+            Route::get('local/accounts', [LocalAccountSwitchController::class, 'index']);
+            Route::post('local/switch-account', [LocalAccountSwitchController::class, 'store']);
         });
     });
 
