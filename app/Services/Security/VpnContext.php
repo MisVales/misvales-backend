@@ -9,6 +9,11 @@ final class VpnContext
 {
     public function resolve(Request $request): bool
     {
+        if (app()->environment(['local', 'testing'])
+            && $request->header('X-MisVales-VPN-Simulated') === 'true') {
+            return true;
+        }
+
         $clientIp = $request->ip();
         $networks = config('vpn.networks', []);
 
