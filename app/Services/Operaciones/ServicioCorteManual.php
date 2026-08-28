@@ -27,11 +27,6 @@ final class ServicioCorteManual
             ->setTimeFromTimeString($config['payment_deadline_time']);
         $ultimoCierre = DB::table('relation_process_runs')
             ->where('status', 'COMPLETED')
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
-            })
             ->latest('cutoff_at')
             ->value('cutoff_at');
 
@@ -169,11 +164,6 @@ final class ServicioCorteManual
                     ->where('audit_logs.event_name', 'ForzarCorte')
                     ->where('audit_logs.result', 'SUCCESS');
             })
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
-            })
             ->latest('cutoff_at')
             ->value('id');
         $forcedCutoff = $runId === null ? null : AuditLog::query()
@@ -194,9 +184,6 @@ final class ServicioCorteManual
         }
 
         $relations = DB::table('distributor_relations')->where('process_run_id', $run->id);
-        if (! $relations->exists()) {
-            return null;
-        }
         $generatedStats = DB::table('distributor_relation_items')
             ->join('distributor_relations', 'distributor_relations.id', '=', 'distributor_relation_items.relation_id')
             ->where('distributor_relations.process_run_id', $run->id)
@@ -252,11 +239,6 @@ final class ServicioCorteManual
                     ->where('audit_logs.entity_type', 'operation_cutoff')
                     ->where('audit_logs.event_name', 'ForzarCorte')
                     ->where('audit_logs.result', 'SUCCESS');
-            })
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
             })
             ->whereNotExists(function ($query): void {
                 $query->selectRaw('1')

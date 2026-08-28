@@ -25,7 +25,13 @@ trait ValidatesConfigurationValues
             ConfigurationValueType::PERCENTAGE => ['required', 'numeric', 'min:0', 'max:1'],
             ConfigurationValueType::TIME => [
                 'required',
-                in_array($key, ['CUT_TIME', 'BANK_UPLOAD_DEADLINE_TIME', 'POST_DUE_EVALUATION_TIME'], true)
+                in_array($key, [
+                    'CUT_TIME',
+                    'BANK_UPLOAD_DEADLINE_TIME',
+                    'POST_DUE_EVALUATION_TIME',
+                    'VERIFICATION_START_TIME',
+                    'VERIFICATION_MAX_START_TIME',
+                ], true)
                     ? 'date_format:H:i'
                     : 'date_format:H:i:s',
             ],

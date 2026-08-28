@@ -28,10 +28,10 @@ class TraceRequestTest extends TestCase
         Queue::assertNothingPushed();
     }
 
-    public function test_it_defers_operational_persistence_when_enabled(): void
+    public function test_it_uses_immediate_operational_persistence_when_enabled(): void
     {
         config()->set('observability.operational_http_requests', true);
-        config()->set('observability.queue_connection', 'redis');
+        config()->set('observability.queue_connection', 'sync');
         config()->set('observability.expose_server_timing', true);
         Queue::fake();
 
@@ -48,7 +48,7 @@ class TraceRequestTest extends TestCase
         );
         $this->assertStringContainsString('db;dur=12.45', (string) $response->headers->get('Server-Timing'));
         Queue::assertPushed(PersistOperationalHttpRequest::class, function (PersistOperationalHttpRequest $job) use ($response): bool {
-            return $job->connection === 'redis'
+            return $job->connection === 'sync'
                 && $job->record['event'] === 'HTTP_REQUEST_COMPLETED'
                 && $job->record['request_id'] === $response->headers->get('X-Request-Id')
                 && $job->record['status_code'] === 204

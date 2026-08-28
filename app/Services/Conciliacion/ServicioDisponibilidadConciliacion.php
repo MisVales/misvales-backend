@@ -10,7 +10,7 @@ final class ServicioDisponibilidadConciliacion
 {
     public function asegurarCorteVencido(?string $processRunId = null, ?string $branchId = null): string
     {
-        $expiredAudit = AuditLog::query()
+        $expiredAudits = AuditLog::query()
             ->where('entity_type', 'relation_process_run')
             ->where('event_name', 'PaymentDeadlineExpired')
             ->where('result', 'SUCCESS')
@@ -23,16 +23,11 @@ final class ServicioDisponibilidadConciliacion
                     ->where('completed.result', 'SUCCESS');
             })
             ->when($processRunId, fn ($query, string $id) => $query->where('entity_id', $id))
-            ->when($branchId, function ($query, string $id): void {
-                $query->whereExists(function ($relations) use ($id): void {
-                    $relations->selectRaw('1')
-                        ->from('distributor_relations')
-                        ->whereColumn('distributor_relations.process_run_id', 'audit_logs.entity_id')
-                        ->where('distributor_relations.branch_id', $id);
-                });
-            })
             ->oldest('created_at')
-            ->first();
+            ->get();
+        $expiredAudit = $expiredAudits->first(
+            fn (AuditLog $audit): bool => $branchId === null || $this->periodoPerteneceSucursal((string) $audit->entity_id, $branchId),
+        );
 
         if ($expiredAudit === null || $expiredAudit->entity_id === null) {
             throw new ExcepcionConciliacion(
@@ -67,7 +62,7 @@ final class ServicioDisponibilidadConciliacion
             if ($branchId !== null) {
                 $relations->where('branch_id', $branchId);
             }
-            if (! $relations->exists()) {
+            if ($branchId !== null && ! $this->periodoPerteneceSucursal((string) $audit->entity_id, $branchId)) {
                 return null;
             }
             $run = DB::table('relation_process_runs')->where('id', $audit->entity_id)->first();
@@ -83,5 +78,31 @@ final class ServicioDisponibilidadConciliacion
                 'status' => 'PENDING_RECONCILIATION',
             ];
         })->filter()->values()->all();
+    }
+
+    private function periodoPerteneceSucursal(string $processRunId, string $branchId): bool
+    {
+        if (DB::table('distributor_relations')
+            ->where('process_run_id', $processRunId)
+            ->where('branch_id', $branchId)
+            ->exists()) {
+            return true;
+        }
+
+        $run = DB::table('relation_process_runs')->where('id', $processRunId)->first();
+        if ($run === null) {
+            return false;
+        }
+        $previousCutoff = DB::table('relation_process_runs')
+            ->where('status', 'COMPLETED')
+            ->where('cutoff_at', '<', $run->cutoff_at)
+            ->latest('cutoff_at')
+            ->value('cutoff_at');
+
+        return DB::table('simulated_bank_transfers')
+            ->where('branch_id', $branchId)
+            ->where('paid_at', '<=', $run->cutoff_at)
+            ->when($previousCutoff !== null, fn ($query) => $query->where('paid_at', '>', $previousCutoff))
+            ->exists();
     }
 }

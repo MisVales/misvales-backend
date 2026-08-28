@@ -13,7 +13,9 @@ return [
     |
     */
 
-    'default' => env('QUEUE_CONNECTION', 'redis'),
+    // Las tareas del dominio se ejecutan en la misma petición. Así una falla
+    // no deja operaciones ni correos pendientes para ejecutarse posteriormente.
+    'default' => 'sync',
 
     /*
     |--------------------------------------------------------------------------
@@ -35,13 +37,10 @@ return [
             'driver' => 'sync',
         ],
 
+        // Compatibilidad con despliegues que todavía declaren "database":
+        // se ejecuta inmediatamente y nunca se inserta en la tabla jobs.
         'database' => [
-            'driver' => 'database',
-            'connection' => env('DB_QUEUE_CONNECTION'),
-            'table' => env('DB_QUEUE_TABLE', 'jobs'),
-            'queue' => env('DB_QUEUE', 'default'),
-            'retry_after' => (int) env('DB_QUEUE_RETRY_AFTER', 90),
-            'after_commit' => false,
+            'driver' => 'sync',
         ],
 
         'beanstalkd' => [
@@ -86,10 +85,7 @@ return [
 
         'failover' => [
             'driver' => 'failover',
-            'connections' => [
-                'database',
-                'deferred',
-            ],
+            'connections' => ['sync'],
         ],
 
     ],
@@ -124,7 +120,7 @@ return [
     */
 
     'failed' => [
-        'driver' => env('QUEUE_FAILED_DRIVER', 'database-uuids'),
+        'driver' => 'null',
         'database' => 'mysql',
         'table' => 'failed_jobs',
     ],

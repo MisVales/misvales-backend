@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
+use App\Jobs\PersistOperationalHttpRequest;
 use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\CoordinatorDistributorAssignment;
@@ -15,11 +16,14 @@ use App\Models\UserRoleScope;
 use App\Services\Notificaciones\ProyectorNotificaciones;
 use App\Services\Reportes\ServicioReportes;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Contracts\Debug\ExceptionHandler;
 use Illuminate\Database\QueryException;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
 use Laravel\Sanctum\Sanctum;
+use PDOException;
 use Tests\TestCase;
 
 final class CentroOperacionApiTest extends TestCase
@@ -150,6 +154,60 @@ final class CentroOperacionApiTest extends TestCase
         $this->getJson('/api/v1/audit-logs?branch_id='.$ajena->id)
             ->assertOk()
             ->assertJsonPath('data.total', 0);
+    }
+
+    public function test_falla_de_base_se_audita_para_gerencia_global_sin_dejar_colas_persistentes(): void
+    {
+        self::assertSame('sync', config('queue.default'));
+        self::assertSame('sync', config('observability.queue_connection'));
+        self::assertSame('sync', config('queue.connections.database.driver'));
+        self::assertSame(['sync'], config('queue.connections.failover.connections'));
+        self::assertSame('null', config('queue.failed.driver'));
+        PersistOperationalHttpRequest::dispatch([
+            'channel' => 'AUDIT',
+            'level' => 'INFO',
+            'event' => 'SYNC_QUEUE_PROBE',
+            'request_id' => 'req-sync-probe',
+            'method' => 'POST',
+            'path' => '/queue-probe',
+            'status_code' => 200,
+            'duration_ms' => 1,
+            'context' => [],
+            'occurred_at' => now(),
+        ])->onConnection('database');
+        self::assertDatabaseCount('jobs', 0);
+        self::assertDatabaseHas('operational_logs', ['event' => 'SYNC_QUEUE_PROBE']);
+
+        $path = storage_path('framework/testing/database-incidents-'.fake()->uuid().'.jsonl');
+        config()->set('observability.database_incident_path', $path);
+        $general = $this->user('general_manager');
+        $request = Request::create('/api/v1/users/invite', 'POST');
+        $request->setUserResolver(fn () => $general);
+        $request->attributes->set('request_id', 'req-database-down');
+        $request->attributes->set('correlation_id', 'corr-database-down');
+        $request->attributes->set('trace_id', 'trace-database-down');
+        $pdo = new PDOException('SQLSTATE[HY000] [2002] Connection refused');
+        $pdo->errorInfo = ['HY000', 2002, 'Connection refused'];
+        $exception = new QueryException('mysql', 'insert into users ...', [], $pdo);
+
+        $response = app(ExceptionHandler::class)->render($request, $exception);
+        self::assertSame(503, $response->getStatusCode());
+        self::assertSame('SERVICE_DEPENDENCY_UNAVAILABLE', json_decode($response->getContent(), true)['error']['code']);
+        self::assertSame('Algún servicio está fallando. Notifica al área administrativa.', json_decode($response->getContent(), true)['error']['message']);
+        self::assertFileExists($path);
+        self::assertDatabaseMissing('audit_logs', ['event_name' => 'DATABASE_SERVICE_UNAVAILABLE']);
+
+        Sanctum::actingAs($general);
+        $this->getJson('/api/v1/audit-logs?event_name=DATABASE_SERVICE_UNAVAILABLE')
+            ->assertOk()
+            ->assertJsonPath('data.total', 1)
+            ->assertJsonPath('data.data.0.result', 'FAILURE')
+            ->assertJsonPath('data.data.0.new_value.affected_service', 'DATABASE')
+            ->assertJsonPath('data.data.0.new_value.driver_code', 2002)
+            ->assertJsonPath('data.data.0.request_id', 'req-database-down');
+
+        self::assertSame('', (string) file_get_contents($path));
+        @unlink($path);
     }
 
     private function user(string $roleCode, ?string $branchId = null): User

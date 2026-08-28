@@ -130,6 +130,32 @@ class ConfiguracionFeatureTest extends TestCase
         ])->assertCreated();
     }
 
+    public function test_acepta_horas_de_verificacion_en_formato_de_input_time(): void
+    {
+        $user = User::factory()->create(['state' => 'ACTIVE']);
+        $this->assignGeneralManager($user);
+        $this->actingAs($user);
+
+        foreach ([
+            'VERIFICATION_START_TIME' => '03:00',
+            'VERIFICATION_MAX_START_TIME' => '23:00',
+        ] as $key => $value) {
+            ConfigurationDefinition::query()->create([
+                'key' => $key,
+                'name' => $key,
+                'value_type' => 'TIME',
+                'status' => 'ACTIVE',
+                'created_by' => $user->id,
+            ]);
+
+            $this->postJson("/api/v1/configurations/{$key}/versions", [
+                'value' => $value,
+                'reason' => 'Horario operativo para verificadores',
+                'effective_from' => now()->addDay()->format('Y-m-d H:i:s'),
+            ])->assertCreated();
+        }
+    }
+
     public function test_actualiza_directamente_y_conserva_el_historial_de_cambios(): void
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);

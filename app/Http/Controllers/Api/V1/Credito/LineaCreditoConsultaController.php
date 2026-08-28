@@ -18,6 +18,7 @@ class LineaCreditoConsultaController extends Controller
         $user = $request->user();
         $query = LineaCredito::query()->with([
             'distribuidora.usuario',
+            'distribuidora.relacionVigente',
             'restricciones' => fn ($query) => $query->whereIn('status', ['ACTIVE', 'RESERVED']),
             'movimientos' => fn ($query) => $query->orderByDesc('sequence')->limit(1),
         ]);
@@ -50,7 +51,8 @@ class LineaCreditoConsultaController extends Controller
         $user = $request->user();
 
         $query = LineaCredito::with([
-            'distribuidora',
+            'distribuidora.usuario',
+            'distribuidora.relacionVigente',
             'restricciones' => function ($q) {
                 $q->whereIn('status', ['ACTIVE', 'RESERVED']);
             },

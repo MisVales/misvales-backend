@@ -28,6 +28,12 @@ final class ServicioGeneracionRelacion
         $corte = $corte->setTimezone($config['timezone']);
         $cutoff = $corte->utc();
         $this->asegurarCorteAnteriorConciliado($cutoff);
+        if (DB::table('relation_process_runs')
+            ->where('status', 'COMPLETED')
+            ->where('cutoff_at', $cutoff)
+            ->exists()) {
+            return 0;
+        }
         $paymentDeadline = $corte
             ->addDays($config['payment_deadline_days'])
             ->setTimeFromTimeString($config['payment_deadline_time']);
@@ -77,7 +83,18 @@ final class ServicioGeneracionRelacion
 
     private function procesar(string $runId, CarbonImmutable $corte, CarbonImmutable $cutoff, CarbonImmutable $paymentDeadline, array $config): int
     {
-        $groups = ParcialidadVale::query()->with(['vale.distribuidora.usuario', 'vale.distribuidora.sucursal', 'vale.distribuidora.lineaCredito', 'vale.distribuidora.coordinadorVigente.coordinator', 'vale.distribuidora.solicitud.domicilioActual', 'vale.cliente', 'vale.versionProducto', 'vale.versionCategoria'])->whereNotNull('due_at')->where('due_at', '<=', $paymentDeadline)->whereHas('vale', fn ($q) => $q->where('status', 'CASHED')->whereNotNull('cashed_at')->where('cashed_at', '<=', $cutoff))->whereDoesntHave('relationItem')->orderBy('due_at')->orderBy('number')->lockForUpdate()->get()->groupBy(fn ($item) => $item->vale->distributor_id);
+        $installments = ParcialidadVale::query()
+            ->with(['vale.distribuidora.usuario', 'vale.distribuidora.sucursal', 'vale.distribuidora.lineaCredito', 'vale.distribuidora.coordinadorVigente.coordinator', 'vale.distribuidora.solicitud.domicilioActual', 'vale.cliente', 'vale.versionProducto', 'vale.versionCategoria'])
+            ->whereNotNull('due_at')
+            ->whereHas('vale', fn ($q) => $q->where('status', 'CASHED')->whereNotNull('cashed_at')->where('cashed_at', '<=', $cutoff))
+            ->whereDoesntHave('relationItem')
+            ->orderBy('voucher_id')
+            ->orderBy('number')
+            ->lockForUpdate()
+            ->get()
+            ->unique('voucher_id')
+            ->values();
+        $groups = $installments->groupBy(fn ($item) => $item->vale->distributor_id);
         foreach ($groups as $items) {
             $first = $items->first();
             $d = $first->vale->distribuidora;

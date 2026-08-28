@@ -36,7 +36,7 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
         $expected = [
             'database.default' => 'mysql',
             'cache.default' => 'redis',
-            'queue.default' => 'redis',
+            'queue.default' => 'sync',
             'database.redis.client' => 'phpredis',
             'session.driver' => 'redis',
             'filesystems.default' => 's3',
@@ -56,7 +56,7 @@ final class ProductionConfigurationServiceProvider extends ServiceProvider
         }
 
         foreach (config('database.connections.mysql.read.options', []) + config('database.connections.mysql.write.options', []) as $path) {
-            if (is_bool($path)) {
+            if (! is_string($path) || $path === '') {
                 continue;
             }
 

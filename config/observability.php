@@ -13,7 +13,9 @@ return [
     */
     'operational_http_requests' => (bool) env('OBSERVABILITY_ENABLED', false),
 
-    'queue_connection' => env('OBSERVABILITY_QUEUE_CONNECTION', 'redis'),
+    'queue_connection' => 'sync',
+
+    'database_incident_path' => env('DATABASE_INCIDENT_PATH', storage_path('logs/database-incidents.jsonl')),
 
     /*
     |--------------------------------------------------------------------------

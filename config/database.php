@@ -52,6 +52,7 @@ return [
                 'username' => env('DB_REPLICA_USERNAME') ?: env('DB_PRIMARY_USERNAME') ?: env('DB_USERNAME'),
                 'password' => env('DB_REPLICA_PASSWORD') ?: env('DB_PRIMARY_PASSWORD') ?: env('DB_PASSWORD', ''),
                 'options' => extension_loaded('pdo_mysql') ? array_filter([
+                    PDO::ATTR_TIMEOUT => 3,
                     Mysql::ATTR_SSL_CA => env('DB_REPLICA_SSL_CA'),
                     Mysql::ATTR_SSL_CERT => env('DB_REPLICA_SSL_CERT'),
                     Mysql::ATTR_SSL_KEY => env('DB_REPLICA_SSL_KEY'),
@@ -64,6 +65,7 @@ return [
                 'username' => env('DB_PRIMARY_USERNAME') ?: env('DB_USERNAME'),
                 'password' => env('DB_PRIMARY_PASSWORD') ?: env('DB_PASSWORD', ''),
                 'options' => extension_loaded('pdo_mysql') ? array_filter([
+                    PDO::ATTR_TIMEOUT => 3,
                     Mysql::ATTR_SSL_CA => env('DB_PRIMARY_SSL_CA'),
                     Mysql::ATTR_SSL_CERT => env('DB_PRIMARY_SSL_CERT'),
                     Mysql::ATTR_SSL_KEY => env('DB_PRIMARY_SSL_KEY'),

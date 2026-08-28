@@ -2,13 +2,24 @@
 
 $configuredOrigins = array_values(array_filter(array_map(
     static fn (string $origin): string => rtrim(trim($origin), '/'),
-    explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:4200'))
+    explode(',', (string) env('CORS_ALLOWED_ORIGINS', 'http://localhost:4200,https://safeacces.lat,https://vpn.safeacces.lat'))
 )));
 
 $frontendOrigin = rtrim(trim((string) env('FRONTEND_URL', 'http://localhost:4200')), '/');
-
 if ($frontendOrigin !== '') {
     $configuredOrigins[] = $frontendOrigin;
+}
+
+$vpnOrigin = rtrim(trim((string) env('VPN_FRONTEND_URL', env('VPN_URL', 'https://vpn.safeacces.lat'))), '/');
+if ($vpnOrigin !== '') {
+    $configuredOrigins[] = $vpnOrigin;
+}
+
+$vpnHosts = array_filter(array_map('trim', explode(',', (string) env('VPN_HOSTS', 'vpn.safeacces.lat'))));
+foreach ($vpnHosts as $host) {
+    if ($host !== '') {
+        $configuredOrigins[] = str_starts_with($host, 'http') ? rtrim($host, '/') : "https://{$host}";
+    }
 }
 
 $configuredOrigins = array_values(array_unique($configuredOrigins));

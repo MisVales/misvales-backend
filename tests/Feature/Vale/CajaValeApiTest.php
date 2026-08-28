@@ -41,6 +41,7 @@ use App\Models\UserRoleScope;
 use App\Models\Vale;
 use App\Notifications\NotificacionEventoDominio;
 use App\Services\Cliente\ProtectorDatosCliente;
+use App\Services\Conciliacion\LectorXlsxBancario;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
 use App\Services\Excedente\ServicioExcedente;
@@ -61,6 +62,8 @@ use Illuminate\Support\Facades\Notification;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
+use OpenSpout\Common\Entity\Row;
+use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
 use ZipArchive;
 
@@ -342,7 +345,7 @@ final class CajaValeApiTest extends TestCase
         $relation = RelacionDistribuidora::query()->firstOrFail();
         self::assertSame('7300.0000', $relation->balance);
 
-        $file = $this->xlsx([[
+        $file = $this->xlsxValido([[
             $relation->payment_reference,
             '7300.00',
             $cutoff->addDay()->format('Y-m-d H:i:s'),
@@ -760,27 +763,95 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame(0, $service->generar($this->corteSeptiembre()));
 
         $this->assertDatabaseCount('distributor_relations', 1);
-        $this->assertDatabaseCount('distributor_relation_items', 3);
+        $this->assertDatabaseCount('distributor_relation_items', 1);
         $this->assertSame(8, $this->voucher->parcialidades()->count());
     }
 
-    public function test_forzar_corte_usa_la_misma_seleccion_que_el_corte_normal(): void
+    public function test_seis_cortes_forzados_reales_llegan_a_maria_seis_elena_cuatro_y_jose_uno_sin_duplicar(): void
+    {
+        Storage::fake('local');
+        Notification::fake();
+        $this->travelTo(CarbonImmutable::parse('2026-08-27 12:00:00', 'America/Monterrey'));
+        $manager = $this->user('general_manager');
+
+        $maria = $this->voucher;
+        $maria->cliente->forceFill(['first_name' => 'María', 'first_last_name' => 'Prueba'])->save();
+        $this->materializarCalendario($maria, '2026-08-31 00:05:00', 8);
+
+        $elena = null;
+        $jose = null;
+        $expected = [
+            [[1], [], []],
+            [[2], [], []],
+            [[3], [1], []],
+            [[4], [2], []],
+            [[5], [3], []],
+            [[6], [4], [1]],
+        ];
+
+        foreach (range(1, 6) as $cycle) {
+            $index = $cycle - 1;
+            if ($index === 2) {
+                $elena = $this->clonarValeParaCliente('VAL-ELENA-8', 'Elena');
+                $this->materializarCalendario($elena, '2026-11-24 00:05:00', 8);
+            }
+            if ($index === 5) {
+                $jose = $this->clonarValeParaCliente('VAL-JOSE-8', 'José');
+                $this->materializarCalendario($jose, '2027-02-24 00:05:00', 8);
+            }
+
+            Sanctum::actingAs($manager);
+            $idempotencyKey = (string) Str::uuid();
+            $response = $this->withHeader('Idempotency-Key', $idempotencyKey)
+                ->postJson('/api/v1/operations/force-cutoff', [
+                    'motivo' => 'Escenario controlado corte '.($index + 1),
+                ])
+                ->assertSuccessful()
+                ->assertJsonPath('data.relations_generated', 1);
+
+            $relation = RelacionDistribuidora::query()
+                ->where('process_run_id', $response->json('data.process_run_id'))
+                ->firstOrFail();
+            $this->assertSame($expected[$index][0], $this->numerosRelacionados($maria, $relation));
+            $this->assertSame($expected[$index][1], $elena === null ? [] : $this->numerosRelacionados($elena, $relation));
+            $this->assertSame($expected[$index][2], $jose === null ? [] : $this->numerosRelacionados($jose, $relation));
+
+            if ($index === 5) {
+                $relationsBeforeReplay = RelacionDistribuidora::query()->count();
+                $itemsBeforeReplay = RelacionPartidaDistribuidora::query()->count();
+                $this->withHeader('Idempotency-Key', $idempotencyKey)
+                    ->postJson('/api/v1/operations/force-cutoff', [
+                        'motivo' => 'Escenario controlado corte 6',
+                    ])
+                    ->assertSuccessful()
+                    ->assertJsonPath('data.process_run_id', $relation->process_run_id);
+                $this->assertSame($relationsBeforeReplay, RelacionDistribuidora::query()->count());
+                $this->assertSame($itemsBeforeReplay, RelacionPartidaDistribuidora::query()->count());
+                break;
+            }
+
+            $this->pagarConciliarYCerrarCiclo($relation, $index + 1, $manager);
+        }
+
+        $this->assertSame(8, $maria->parcialidades()->count());
+        $this->assertSame(8, $elena?->parcialidades()->count());
+        $this->assertSame(8, $jose?->parcialidades()->count());
+        $this->assertSame(
+            RelacionPartidaDistribuidora::query()->count(),
+            RelacionPartidaDistribuidora::query()->distinct()->count('voucher_installment_id'),
+        );
+    }
+
+    public function test_corte_forzado_toma_solo_la_siguiente_parcialidad_de_cada_vale(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-29 10:00:00', 'America/Monterrey'));
-        $normal = $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
-        app(ServicioGeneracionRelacion::class)->generar($this->corteSeptiembre());
-
-        $forzado = $this->materializarCalendario($this->valeDeOtraDistribuidora('VAL-FORCED-CUTOFF'), '2026-08-29 10:00:00', 8);
+        $vale = $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
         Sanctum::actingAs($this->user('general_manager'));
-        $this->getJson('/api/v1/operations/current-cutoff')
-            ->assertSuccessful()
-            ->assertJsonPath('data.summary.operations', 3);
         $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Comparar con corte normal'])
             ->assertSuccessful()
             ->assertJsonPath('data.simulated_cutoff_at', '2026-09-25T06:05:00+00:00');
 
-        $this->assertSame($this->numerosRelacionados($normal), $this->numerosRelacionados($forzado));
-        $this->assertSame([1, 2, 3], $this->numerosRelacionados($forzado));
+        $this->assertSame([1], $this->numerosRelacionados($vale));
     }
 
     public function test_resumen_de_corte_no_exige_banco_pero_forzar_corte_si_lo_exige(): void
@@ -864,6 +935,28 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('580.0000', $third->carried_balance);
         $this->assertSame('812.0000', $third->balance);
         $this->assertSame(7, RelacionPartidaDistribuidora::query()->count());
+    }
+
+    public function test_genera_nueva_relacion_con_adeudo_aunque_ya_no_haya_parcialidades_nuevas(): void
+    {
+        $this->materializarCalendario($this->voucher, '2026-04-01 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+
+        $service->generar($this->corteSeptiembre());
+        $first = RelacionDistribuidora::query()->firstOrFail();
+        $originalItems = $first->partidas()->count();
+        $this->assertSame(8, $originalItems);
+
+        $this->marcarCorteComoConciliado($first);
+        $generated = $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
+        $second = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+
+        $this->assertSame(1, $generated);
+        $this->assertNotSame($first->id, $second->id);
+        $this->assertSame(0, $second->partidas()->count());
+        $this->assertSame($first->rolled_forward_amount, $second->carried_balance);
+        $this->assertSame($second->carried_balance, $second->balance);
+        $this->assertSame($originalItems, RelacionPartidaDistribuidora::query()->count());
     }
 
     public function test_pago_con_referencia_historica_se_aplica_a_relacion_vigente_y_primero_al_saldo_trasladado(): void
@@ -1203,6 +1296,92 @@ final class CajaValeApiTest extends TestCase
             ->assertJsonPath('error.code', 'RECONCILIATION_PERIOD_NOT_AVAILABLE');
         $this->get('/api/v1/bank-simulations/'.$created->json('data.id').'/ticket')
             ->assertUnprocessable();
+    }
+
+    public function test_pago_simulado_del_corte_vigente_aparece_en_el_excel_del_mismo_proceso(): void
+    {
+        $relation = $this->createPaymentRelation();
+        Sanctum::actingAs($this->distributorUser);
+        $this->postJson('/api/v1/bank-simulations', [
+            'relation_id' => $relation->id,
+            'amount' => '116.00',
+            'payment_type' => 'TRANSFER',
+            'concept' => 'Pago de la parcialidad vigente',
+        ])->assertCreated();
+
+        $service = app(ServicioTransferenciasBancariasSimuladas::class);
+        $this->assertCount(1, $service->listar($this->branch->id, $relation->process_run_id));
+        $path = $service->exportar($this->branch->id, $relation->process_run_id);
+        $rows = app(LectorXlsxBancario::class)->leer($path);
+
+        $this->assertCount(2, $rows);
+        $this->assertSame($relation->payment_reference, $rows[1][2]);
+        $this->assertSame('116', (string) $rows[1][3]);
+    }
+
+    public function test_estado_actual_de_credito_expone_linea_y_adeudo_sin_confundirlos(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $line = $this->distributorUser->distribuidora->lineaCredito()->firstOrFail();
+        Sanctum::actingAs($this->user('branch_manager', $this->branch->id));
+
+        $this->getJson("/api/v1/distributors/{$relation->distributor_id}/credit-line")
+            ->assertSuccessful()
+            ->assertJsonPath('data.total_authorized', $line->total_authorized)
+            ->assertJsonPath('data.used_balance', $line->used_balance)
+            ->assertJsonPath('data.available_balance', $line->saldoDisponible())
+            ->assertJsonPath('data.current_debt', $relation->balance);
+    }
+
+    public function test_corte_sin_relaciones_nuevas_incluye_en_excel_pago_de_relacion_anterior(): void
+    {
+        $this->travelTo(CarbonImmutable::parse('2026-08-27 10:00:00', 'America/Monterrey'));
+        $relation = $this->createPaymentRelation();
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+        $this->marcarCorteComoConciliado($relation);
+
+        Sanctum::actingAs($this->distributorUser);
+        $this->postJson('/api/v1/bank-simulations', [
+            'relation_id' => $relation->id,
+            'amount' => '116.00',
+            'payment_type' => 'TRANSFER',
+            'concept' => 'Pago pendiente de la relación anterior',
+            'paid_at' => '2026-08-28 10:00:00',
+        ])->assertCreated();
+
+        Sanctum::actingAs($this->user('general_manager'));
+        $newRunId = $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Reflejar pagos pendientes'])
+            ->assertSuccessful()
+            ->assertJsonPath('data.relations_generated', 0)
+            ->json('data.process_run_id');
+
+        $this->assertNotNull($newRunId);
+        $this->assertDatabaseMissing('distributor_relations', ['process_run_id' => $newRunId]);
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $newRunId,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+
+        Sanctum::actingAs($this->cashier);
+        $this->getJson('/api/v1/bank-reconciliation-periods')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.process_run_id', $newRunId)
+            ->assertJsonPath('data.0.relations', 0);
+        $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $newRunId);
+        $rows = app(LectorXlsxBancario::class)->leer($path);
+
+        $this->assertCount(2, $rows);
+        $this->assertSame($relation->payment_reference, $rows[1][2]);
+        $this->assertSame('116', (string) $rows[1][3]);
     }
 
     public function test_xlsx_del_cliente_concilia_referencia_pago_fecha_y_hora(): void
@@ -2048,6 +2227,59 @@ final class CajaValeApiTest extends TestCase
         return $vale;
     }
 
+    private function clonarValeParaCliente(string $folio, string $firstName): Vale
+    {
+        $client = Cliente::factory()->create([
+            'created_by' => $this->distributorUser->id,
+            'first_name' => $firstName,
+            'first_last_name' => 'Prueba',
+        ]);
+        AsignacionClienteDistribuidora::factory()->create([
+            'client_id' => $client->id,
+            'distributor_id' => $this->voucher->distributor_id,
+            'branch_id' => $this->branch->id,
+            'starts_at' => now()->subDay(),
+            'ends_at' => null,
+            'assigned_by' => $this->distributorUser->id,
+        ]);
+        $vale = $this->clonarVale($folio);
+        $vale->forceFill(['client_id' => $client->id])->save();
+
+        return $vale;
+    }
+
+    private function pagarConciliarYCerrarCiclo(RelacionDistribuidora $relation, int $cycle, User $manager): void
+    {
+        Sanctum::actingAs($manager);
+        $this->postIdempotent('/api/v1/operations/force-payment-deadline', ['motivo' => "Preparar conciliación ciclo {$cycle}"])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'DEADLINE_REACHED');
+        $this->postIdempotent('/api/v1/operations/force-payment-deadline', ['motivo' => "Habilitar archivo ciclo {$cycle}"])
+            ->assertSuccessful()
+            ->assertJsonPath('data.status', 'DEFERRED');
+
+        Sanctum::actingAs($this->cashier);
+        $file = $this->xlsx([[
+            $relation->payment_reference,
+            $relation->balance,
+            $relation->payment_deadline_at->format('Y-m-d H:i:s'),
+            "SCENARIO-CYCLE-{$cycle}",
+            "Liquidación completa ciclo {$cycle}",
+        ]]);
+        $this->post('/api/v1/bank-imports', [
+            'file' => $file,
+            'process_run_id' => $relation->process_run_id,
+        ], ['Accept' => 'application/json'])
+            ->assertCreated();
+
+        $this->assertSame('0.0000', $relation->fresh()->balance);
+        $this->assertDatabaseHas('audit_logs', [
+            'entity_id' => $relation->process_run_id,
+            'event_name' => 'ForcePaymentDeadlineCompleted',
+            'result' => 'SUCCESS',
+        ]);
+    }
+
     private function valeDeOtraDistribuidora(string $folio): Vale
     {
         $user = User::factory()->create(['state' => 'ACTIVE']);
@@ -2185,6 +2417,20 @@ final class CajaValeApiTest extends TestCase
         }$xml .= '</sheetData></worksheet>';
         $zip->addFromString('xl/worksheets/sheet1.xml', $xml);
         $zip->close();
+
+        return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
+    }
+
+    private function xlsxValido(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
+    {
+        $path = tempnam(sys_get_temp_dir(), 'bank-valid').'.xlsx';
+        $writer = new Writer;
+        $writer->openToFile($path);
+        $writer->addRow(Row::fromValues($headers));
+        foreach ($rows as $row) {
+            $writer->addRow(Row::fromValues($row));
+        }
+        $writer->close();
 
         return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
     }
