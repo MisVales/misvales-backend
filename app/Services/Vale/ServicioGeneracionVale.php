@@ -77,6 +77,50 @@ final class ServicioGeneracionVale
         ];
     }
 
+    /** @return Collection<int, ProductVersion> */
+    public function productosElegibles(User $actor): Collection
+    {
+        $distribuidora = $this->resolverDistribuidoraActiva($actor);
+
+        $operacionBloqueada = BloqueoOperativoDistribuidora::query()
+            ->where('distributor_id', $distribuidora->id)
+            ->where('type', 'DELINQUENCY')
+            ->where('status', 'ACTIVE')
+            ->exists()
+            || Vale::query()
+                ->where('distributor_id', $distribuidora->id)
+                ->where('type', TipoVale::PREVALE)
+                ->whereIn('status', [EstadoVale::GENERADO, EstadoVale::VALIDACION_CAJA, EstadoVale::CORRECCION_PENDIENTE, EstadoVale::LIBERADO])
+                ->exists()
+            || RestriccionUsoCredito::query()
+                ->where('distributor_id', $distribuidora->id)
+                ->where('status', EstadoRestriccionUsoCredito::RESERVADA)
+                ->exists();
+
+        if ($operacionBloqueada) {
+            return collect();
+        }
+
+        $disponibilidad = $this->credito->evaluar($distribuidora->id, '0.0000');
+
+        return ProductVersion::query()
+            ->with('product')
+            ->where('status', 'PUBLISHED')
+            ->where('effective_from', '<=', now())
+            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
+            ->whereHas('product', fn ($query) => $query->where('status', 'ACTIVE'))
+            ->where('nominal_amount', '<=', $disponibilidad->available_balance)
+            ->when(
+                $disponibilidad->has_active_restriction,
+                fn ($query) => $query
+                    ->where('nominal_amount', '>=', $disponibilidad->lower_limit)
+                    ->where('nominal_amount', '<=', $disponibilidad->upper_limit),
+            )
+            ->orderBy('nominal_amount')
+            ->get()
+            ->values();
+    }
+
     public function previsualizar(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): array
     {
         $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);

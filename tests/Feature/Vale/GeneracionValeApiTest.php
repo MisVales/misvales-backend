@@ -54,7 +54,7 @@ final class GeneracionValeApiTest extends TestCase
         $categoryVersion = CategoryVersion::query()->create(['category_id' => $category->id, 'version' => 1, 'name' => 'Base', 'profit_percentage' => '0.050000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $this->distribuidora->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $this->actor->id, 'reason' => 'Prueba']);
         $product = Product::query()->create(['code' => 'VAL-10000', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
-        $this->producto = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale 10000', 'nominal_amount' => '10000.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
+        $this->producto = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale 10000', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
         $this->publicarConfiguracionFinanciera();
         Sanctum::actingAs($this->actor);
     }
@@ -105,6 +105,10 @@ final class GeneracionValeApiTest extends TestCase
     public function test_no_permite_otro_vale_hasta_feriar_el_prevale_y_solo_puede_cancelarse_antes_de_feriar(): void
     {
         $primero = $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
+
+        $this->getJson('/api/v1/voucher-products')
+            ->assertSuccessful()
+            ->assertJsonCount(0, 'data');
 
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'PENDING_PREVOUCHER_MUST_BE_CASHED');
         $this->postJson('/api/v1/vouchers/preview', [
@@ -221,6 +225,56 @@ final class GeneracionValeApiTest extends TestCase
         $this->crear()->assertSuccessful()->assertJsonPath('data.type', 'PREVALE');
     }
 
+    public function test_inicio_distribuidora_resume_solo_su_cartera_informativa(): void
+    {
+        MovimientoCarteraCliente::factory()->create([
+            'client_id' => $this->cliente->id,
+            'distributor_id' => $this->distribuidora->id,
+            'entry_type' => 'DEBT',
+            'amount' => '3000.0000',
+            'informational_status' => 'PENDING',
+            'due_date' => now()->subDay(),
+            'recorded_by' => $this->actor->id,
+        ]);
+        MovimientoCarteraCliente::factory()->create([
+            'client_id' => $this->cliente->id,
+            'distributor_id' => $this->distribuidora->id,
+            'entry_type' => 'PARTIAL_PAYMENT',
+            'amount' => '500.0000',
+            'informational_status' => 'PARTIALLY_PAID',
+            'recorded_by' => $this->actor->id,
+        ]);
+
+        $this->getJson('/api/v1/dashboard/distributor-summary')
+            ->assertSuccessful()
+            ->assertJsonPath('data.portfolio.total_to_collect', '2500.0000')
+            ->assertJsonPath('data.portfolio.clients_with_balance', 1)
+            ->assertJsonPath('data.portfolio.overdue_entries', 1)
+            ->assertJsonStructure(['data' => ['period' => [
+                'distributor_profit', 'paid_to_misvales', 'capital_recovered',
+            ]]]);
+    }
+
+    public function test_resumen_movil_de_distribuidora_no_es_consultable_por_otro_rol(): void
+    {
+        Sanctum::actingAs($this->usuarioConRol('general_manager', $this->distribuidora->branch_id));
+
+        $this->getJson('/api/v1/dashboard/distributor-summary')->assertForbidden();
+    }
+
+    public function test_producto_que_deja_de_ser_elegible_permanece_en_historial_del_vale(): void
+    {
+        $response = $this->crear()->assertSuccessful();
+        $this->producto->product()->update(['status' => 'INACTIVE']);
+
+        $this->getJson('/api/v1/voucher-products')
+            ->assertSuccessful()
+            ->assertJsonCount(0, 'data');
+        $this->getJson('/api/v1/vouchers/'.$response->json('data.id'))
+            ->assertSuccessful()
+            ->assertJsonPath('data.product.name', 'Vale 10000');
+    }
+
     public function test_restriccion_del_cincuenta_rechaza_producto_fuera_del_rango(): void
     {
         $definition = ConfigurationDefinition::query()->firstOrCreate(
@@ -232,6 +286,64 @@ final class GeneracionValeApiTest extends TestCase
         $line = LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->firstOrFail();
         RestriccionUsoCredito::factory()->create(['credit_line_id' => $line->id, 'distributor_id' => $this->distribuidora->id, 'status' => 'ACTIVE', 'base_total' => '10000.0000', 'tolerance_amount' => '500.0000', 'configuration_version_id' => $version->id, 'source_id' => (string) Str::uuid()]);
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'CREDIT_50_PERCENT_RULE_NOT_SATISFIED');
+    }
+
+    public function test_selector_devuelve_solo_productos_elegibles_por_linea_y_restriccion(): void
+    {
+        $product = Product::query()->create(['code' => 'VAL-30000', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
+        $fueraDeLinea = ProductVersion::query()->create([
+            'product_id' => $product->id,
+            'version' => 1,
+            'name' => 'Vale 30000',
+            'nominal_amount' => '30000.0000',
+            'loan_commission_percentage' => '0.100000',
+            'simple_interest_percentage' => '0.020000',
+            'insurance_amount' => '100.0000',
+            'fortnights_count' => 4,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subDay(),
+            'reason' => 'Prueba',
+            'created_by' => $this->actor->id,
+            'published_by' => $this->actor->id,
+            'published_at' => now(),
+        ]);
+
+        $this->getJson('/api/v1/voucher-products')
+            ->assertSuccessful()
+            ->assertJsonCount(1, 'data')
+            ->assertJsonPath('data.0.id', $this->producto->id)
+            ->assertJsonMissing(['id' => $fueraDeLinea->id]);
+
+        $definition = ConfigurationDefinition::query()->firstOrCreate(
+            ['key' => 'CREDIT_TOLERANCE_AMOUNT'],
+            ['name' => 'Tolerancia', 'value_type' => 'DECIMAL', 'status' => 'ACTIVE', 'created_by' => $this->actor->id],
+        );
+        $version = $definition->versions()->latest('version')->first()
+            ?? ConfigurationVersion::query()->create([
+                'configuration_definition_id' => $definition->id,
+                'version' => 1,
+                'value' => '500.0000',
+                'status' => 'PUBLISHED',
+                'effective_from' => now()->subDay(),
+                'reason' => 'Prueba',
+                'created_by' => $this->actor->id,
+                'published_by' => $this->actor->id,
+                'published_at' => now(),
+            ]);
+        $line = LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->firstOrFail();
+        RestriccionUsoCredito::factory()->create([
+            'credit_line_id' => $line->id,
+            'distributor_id' => $this->distribuidora->id,
+            'status' => 'ACTIVE',
+            'base_total' => '10000.0000',
+            'tolerance_amount' => '500.0000',
+            'configuration_version_id' => $version->id,
+            'source_id' => (string) Str::uuid(),
+        ]);
+
+        $this->getJson('/api/v1/voucher-products')
+            ->assertSuccessful()
+            ->assertJsonCount(0, 'data');
     }
 
     public function test_vale_del_cincuenta_reserva_la_restriccion_hasta_feriarse_o_cancelarse(): void

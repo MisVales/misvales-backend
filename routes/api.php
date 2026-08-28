@@ -38,6 +38,7 @@ use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\ReportesExportController;
 use App\Http\Controllers\Api\V1\ResumenOperacionController;
+use App\Http\Controllers\Api\V1\ResumenInicioDistribuidoraController;
 use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
@@ -323,6 +324,7 @@ Route::prefix('v1')->group(function () {
 
         // Módulo 10 - Caja, modificaciones autorizadas y feriado
         Route::get('dashboard/operations', ResumenOperacionController::class);
+        Route::get('dashboard/distributor-summary', ResumenInicioDistribuidoraController::class);
         Route::get('cashier/vouchers', [CajaValeController::class, 'index']);
         Route::get('cashier/vouchers/search', [CajaValeController::class, 'search']);
         Route::get('cashier/vouchers/{vale}', [CajaValeController::class, 'show']);

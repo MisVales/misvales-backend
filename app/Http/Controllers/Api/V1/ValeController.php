@@ -16,12 +16,10 @@ use Illuminate\Support\Facades\Gate;
 
 final class ValeController extends Controller
 {
-    public function products(Request $request)
+    public function products(Request $request, ServicioGeneracionVale $servicio)
     {
         Gate::authorize('create', Vale::class);
-        $productos = ProductVersion::query()->with('product')->where('status', 'PUBLISHED')->where('effective_from', '<=', now())
-            ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
-            ->whereHas('product', fn ($query) => $query->where('status', 'ACTIVE'))->orderBy('nominal_amount')->get();
+        $productos = $servicio->productosElegibles($request->user());
 
         return response()->json(['data' => $productos->map(fn (ProductVersion $version): array => [
             'id' => $version->id, 'product_id' => $version->product_id, 'code' => $version->product->code,

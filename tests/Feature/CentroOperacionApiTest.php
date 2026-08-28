@@ -96,6 +96,30 @@ final class CentroOperacionApiTest extends TestCase
         }
     }
 
+    public function test_inicio_gerencial_entrega_resumen_financiero_canonico_del_periodo(): void
+    {
+        Sanctum::actingAs($this->user('general_manager'));
+
+        $this->getJson('/api/v1/reports/home')
+            ->assertOk()
+            ->assertJsonStructure(['data' => [
+                'generated_at',
+                'financial' => [
+                    'period_start',
+                    'period_end',
+                    'portfolio_total',
+                    'misvales_total',
+                    'received_total',
+                    'pending_total',
+                    'overdue_total',
+                    'relations',
+                ],
+            ]])
+            ->assertJsonPath('data.financial.portfolio_total', '0.0000')
+            ->assertJsonPath('data.financial.misvales_total', '0.0000')
+            ->assertJsonPath('data.financial.received_total', '0.0000');
+    }
+
     public function test_auditoria_es_inmutable_y_logs_tienen_correlacion_sin_payload(): void
     {
         $this->withoutExceptionHandling();

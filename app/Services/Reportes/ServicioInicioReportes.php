@@ -32,10 +32,44 @@ final class ServicioInicioReportes
 
         return [
             'generated_at' => now()->toIso8601String(),
+            'financial' => $this->financial($branchIds),
             'delinquency' => $this->delinquency($branchIds),
             'cutoffs' => $this->cutoffs($branchIds),
             'points' => $this->points($branchIds),
             'applications' => $this->applications($branchIds),
+        ];
+    }
+
+    private function financial(?iterable $branchIds): array
+    {
+        $periodStart = CarbonImmutable::now()->startOfMonth();
+        $periodEnd = $periodStart->endOfMonth();
+        $relations = DB::table('distributor_relations as r')
+            ->whereBetween('r.cutoff_at', [$periodStart, $periodEnd]);
+        $this->scopeToBranches($relations, 'r.branch_id', $branchIds);
+
+        $summary = (clone $relations)
+            ->selectRaw('COALESCE(SUM(r.portfolio_total), 0) as portfolio_total')
+            ->selectRaw('COALESCE(SUM(r.misvales_total), 0) as misvales_total')
+            ->selectRaw('COALESCE(SUM(r.balance), 0) as pending_total')
+            ->selectRaw('COALESCE(SUM(CASE WHEN r.balance > 0 AND r.payment_deadline_at < ? THEN r.balance ELSE 0 END), 0) as overdue_total', [now()])
+            ->selectRaw('COUNT(*) as relations')
+            ->first();
+
+        $received = DB::table('relation_payments as p')
+            ->join('distributor_relations as r', 'r.id', '=', 'p.relation_id')
+            ->whereBetween('p.applied_at', [$periodStart, $periodEnd]);
+        $this->scopeToBranches($received, 'r.branch_id', $branchIds);
+
+        return [
+            'period_start' => $periodStart->toDateString(),
+            'period_end' => $periodEnd->toDateString(),
+            'portfolio_total' => bcadd('0', (string) ($summary->portfolio_total ?? '0'), 4),
+            'misvales_total' => bcadd('0', (string) ($summary->misvales_total ?? '0'), 4),
+            'received_total' => bcadd('0', (string) ($received->sum('p.amount') ?? '0'), 4),
+            'pending_total' => bcadd('0', (string) ($summary->pending_total ?? '0'), 4),
+            'overdue_total' => bcadd('0', (string) ($summary->overdue_total ?? '0'), 4),
+            'relations' => (int) ($summary->relations ?? 0),
         ];
     }
 
