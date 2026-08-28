@@ -74,7 +74,7 @@ final class CalculadorFinancieroValeTest extends TestCase
     {
         $resultado = (new CalculadorFinancieroVale)->calcular('5003.0000', '0.100000', '0.017000', 7, '103.0000', '0.060000');
 
-        foreach (['capital' => '5003.0000', 'loan_commission' => '500.0000', 'interest' => '595.0000', 'insurance' => '103.0000', 'distributor_profit' => '300.0000', 'client_payment' => '6201.0000', 'misvales_payment' => '5901.0000'] as $component => $total) {
+        foreach (['capital' => '5003.0000', 'loan_commission' => '500.3000', 'interest' => '595.3500', 'insurance' => '103.0000', 'distributor_profit' => '300.1800', 'client_payment' => '6201.6500', 'misvales_payment' => '5901.4700'] as $component => $total) {
             self::assertSame($total, array_reduce(
                 $resultado['installments'],
                 fn (string $sum, array $installment): string => bcadd($sum, $installment[$component], 4),

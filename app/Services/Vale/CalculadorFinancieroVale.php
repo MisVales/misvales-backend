@@ -12,13 +12,20 @@ final class CalculadorFinancieroVale
             throw new InvalidArgumentException('Capital y quincenas deben ser positivos.');
         }
 
+        // Entradas: piso solo a capital y seguro (normalización de moneda)
         $capital = $this->piso($capital);
         $seguro = $this->piso($seguro);
+
+        // Cálculos intermedios: round al centavo (2 decimales)
         $comisionMonto = $this->redondear(bcmul($capital, $comision, 10));
         $interesQuincena = $this->redondear(bcmul($capital, $interes, 10));
-        $interesTotal = $this->redondear(bcmul(bcmul($capital, $interes, 10), (string) $quincenas, 10));
-        $totalBase = $this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]);
+        $interesTotal = $this->redondear(bcmul($interesQuincena, (string) $quincenas, 10));
         $gananciaTotal = $this->redondear(bcmul($capital, $ganancia, 10));
+
+        // Deuda total = round(P + CE + S + IT, 2)
+        $totalBase = $this->redondear($this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]));
+
+        // MisVales = total del cliente − ganancia distribuidora
         $totalMisVales = bcsub($totalBase, $gananciaTotal, 4);
         if (bccomp($totalMisVales, '0.0000', 4) < 0) {
             throw new InvalidArgumentException('La ganancia de categoría no puede exceder el pago base.');
@@ -80,11 +87,17 @@ final class CalculadorFinancieroVale
         return bcadd($valor, '0.000000', 6);
     }
 
+    /** Redondeo matemático al centavo (2 decimales), formateado a 4. */
     private function redondear(string $valor): string
     {
-        return $this->piso($valor);
+        if (bccomp($valor, '0', 10) >= 0) {
+            return bcadd(bcadd($valor, '0.005', 2), '0.0000', 4);
+        }
+
+        return bcadd(bcsub($valor, '0.005', 2), '0.0000', 4);
     }
 
+    /** Truncamiento al peso entero, formateado a 4 decimales. */
     private function piso(string $valor): string
     {
         return bcadd(bcdiv($valor, '1', 0), '0.0000', 4);
