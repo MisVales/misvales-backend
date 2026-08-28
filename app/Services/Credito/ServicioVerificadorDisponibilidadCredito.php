@@ -6,6 +6,7 @@ use App\Contracts\Credito\ResultadoDisponibilidadCredito;
 use App\Contracts\Credito\VerificadorDisponibilidadCredito;
 use App\Models\LineaCredito;
 use App\Models\RestriccionUsoCredito;
+use App\Services\ConfiguracionServicio;
 
 class ServicioVerificadorDisponibilidadCredito implements VerificadorDisponibilidadCredito
 {
@@ -15,7 +16,8 @@ class ServicioVerificadorDisponibilidadCredito implements VerificadorDisponibili
 
     public function __construct(
         CalculadorSaldoCredito $calculadorSaldo,
-        EvaluadorReglaCincuenta $evaluadorRegla
+        EvaluadorReglaCincuenta $evaluadorRegla,
+        private readonly ConfiguracionServicio $configuracion,
     ) {
         $this->calculadorSaldo = $calculadorSaldo;
         $this->evaluadorRegla = $evaluadorRegla;
@@ -72,7 +74,8 @@ class ServicioVerificadorDisponibilidadCredito implements VerificadorDisponibili
             // Evaluamos el rango matemático de esta restricción
             $evaluacion = $this->evaluadorRegla->evaluar(
                 $restriccion,
-                $availableBalance
+                $availableBalance,
+                (string) $this->configuracion->resolver('CREDIT_TOLERANCE_AMOUNT')['value'],
             );
 
             $lowerLimit = $evaluacion['lower_limit'];

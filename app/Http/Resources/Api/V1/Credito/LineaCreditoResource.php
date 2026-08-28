@@ -3,6 +3,7 @@
 namespace App\Http\Resources\Api\V1\Credito;
 
 use App\Models\SolicitudIncrementoLinea;
+use App\Services\ConfiguracionServicio;
 use App\Services\Credito\CalculadorSaldoCredito;
 use App\Services\Credito\EvaluadorReglaCincuenta;
 use Illuminate\Http\Request;
@@ -21,7 +22,10 @@ class LineaCreditoResource extends JsonResource
             ->whereIn('status', ['ACTIVE', 'RESERVED'])
             ->first();
 
-        $reglaCincuenta = $evaluador->evaluar($restriccionVigente, $saldos['available_balance']);
+        $toleranciaVigente = $restriccionVigente
+            ? (string) app(ConfiguracionServicio::class)->resolver('CREDIT_TOLERANCE_AMOUNT')['value']
+            : null;
+        $reglaCincuenta = $evaluador->evaluar($restriccionVigente, $saldos['available_balance'], $toleranciaVigente);
 
         $ultimoMovimiento = $this->movimientos()
             ->orderBy('sequence', 'desc')

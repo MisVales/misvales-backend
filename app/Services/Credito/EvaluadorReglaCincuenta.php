@@ -10,8 +10,11 @@ class EvaluadorReglaCincuenta
      * Evalúa la regla del 50% basándose en una restricción vigente y el saldo disponible actual.
      * Retorna los importes en string exacto a 4 decimales.
      */
-    public function evaluar(?RestriccionUsoCredito $restriccion, string $availableBalance): array
-    {
+    public function evaluar(
+        ?RestriccionUsoCredito $restriccion,
+        string $availableBalance,
+        ?string $toleranciaVigente = null,
+    ): array {
         $availableBalance = bcadd($availableBalance, '0.0000', 4);
 
         // Cuando no exista restricción vigente, devolver nulls y no inventar un rango.
@@ -30,9 +33,11 @@ class EvaluadorReglaCincuenta
             ];
         }
 
-        // Utilizar la base total y tolerancia congeladas en la restricción
+        // La base pertenece al incremento que originó la restricción. La tolerancia,
+        // en cambio, es una regla operativa global y debe evaluarse con su valor
+        // vigente; el valor congelado se conserva únicamente como evidencia histórica.
         $baseTotal = bcadd($restriccion->base_total, '0.0000', 4);
-        $toleranceAmount = bcadd($restriccion->tolerance_amount, '0.0000', 4);
+        $toleranceAmount = bcadd($toleranciaVigente ?? $restriccion->tolerance_amount, '0.0000', 4);
 
         // reference_amount = base_total * 0.50
         $referenceAmount = bcmul($baseTotal, '0.5000', 4);

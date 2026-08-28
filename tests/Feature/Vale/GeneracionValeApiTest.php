@@ -24,6 +24,7 @@ use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
 use Database\Seeders\RolesAndPermissionsSeeder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Str;
 use Laravel\Sanctum\Sanctum;
 use Tests\TestCase;
@@ -288,6 +289,23 @@ final class GeneracionValeApiTest extends TestCase
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'CREDIT_50_PERCENT_RULE_NOT_SATISFIED');
     }
 
+    public function test_restriccion_usa_tolerancia_vigente_de_500_aunque_fue_creada_con_400(): void
+    {
+        $this->prepararReglaDinamica('400.0000', '500.0000');
+
+        $this->crear()->assertSuccessful();
+    }
+
+    public function test_restriccion_usa_tolerancia_vigente_de_400_aunque_fue_creada_con_500(): void
+    {
+        $this->prepararReglaDinamica('500.0000', '400.0000');
+
+        $this->crear()
+            ->assertStatus(409)
+            ->assertJsonPath('error.code', 'CREDIT_50_PERCENT_RULE_NOT_SATISFIED')
+            ->assertJsonPath('error.details.upper_limit', '12900.0000');
+    }
+
     public function test_selector_devuelve_solo_productos_elegibles_por_linea_y_restriccion(): void
     {
         $product = Product::query()->create(['code' => 'VAL-30000', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
@@ -475,6 +493,43 @@ final class GeneracionValeApiTest extends TestCase
     private function feriar(string $voucherId): void
     {
         Vale::query()->whereKey($voucherId)->update(['status' => 'CASHED', 'cashed_at' => now()]);
+    }
+
+    private function prepararReglaDinamica(string $toleranciaCongelada, string $toleranciaVigente): void
+    {
+        $definition = ConfigurationDefinition::query()->create([
+            'key' => 'CREDIT_TOLERANCE_AMOUNT',
+            'name' => 'Tolerancia',
+            'value_type' => 'DECIMAL',
+            'status' => 'ACTIVE',
+            'created_by' => $this->actor->id,
+        ]);
+        $version = ConfigurationVersion::query()->create([
+            'configuration_definition_id' => $definition->id,
+            'version' => 2,
+            'value' => $toleranciaVigente,
+            'status' => 'PUBLISHED',
+            'effective_from' => now()->subMinute(),
+            'reason' => 'Cambio de tolerancia',
+            'created_by' => $this->actor->id,
+            'published_by' => $this->actor->id,
+            'published_at' => now(),
+        ]);
+        Cache::forget('configuracion:CREDIT_TOLERANCE_AMOUNT');
+
+        $line = LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->firstOrFail();
+        $line->update(['total_authorized' => '25000.0000', 'used_balance' => '0.0000']);
+        RestriccionUsoCredito::factory()->create([
+            'credit_line_id' => $line->id,
+            'distributor_id' => $this->distribuidora->id,
+            'status' => 'ACTIVE',
+            'base_total' => '25000.0000',
+            'tolerance_amount' => $toleranciaCongelada,
+            'configuration_version_id' => $version->id,
+            'source_id' => (string) Str::uuid(),
+        ]);
+
+        $this->producto->update(['nominal_amount' => '13000.0000']);
     }
 
     private function publicarConfiguracionFinanciera(): void
