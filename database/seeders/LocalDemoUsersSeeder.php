@@ -21,12 +21,16 @@ final class LocalDemoUsersSeeder extends Seeder
         }
 
         DB::transaction(function (): void {
-            $branch = BranchRecord::query()->where('is_headquarters', true)->firstOrFail();
+            $branch = BranchRecord::query()
+                ->where('name', 'Sucursal Matamoros')
+                ->where('status', 'ACTIVE')
+                ->firstOrFail();
             $manager = $this->existingActor('general_manager');
             $administrator = $this->existingActor('admin');
 
-            $this->activate($manager, 'Gerente General Demo', 'gerente.general@misvales.local');
-            $this->activate($administrator, 'Administrador Demo', 'admin@misvales.local');
+            $this->activate($manager, 'Gerente General Demo', 'gerentegeneral@gmail.com');
+            $this->activate($administrator, 'Administrador Demo', 'administrador@gmail.com');
+            $this->assignToBranch($administrator, 'admin', $branch, $manager);
 
             foreach ($this->branchActors() as $actor) {
                 $user = User::query()->updateOrCreate(
@@ -41,21 +45,28 @@ final class LocalDemoUsersSeeder extends Seeder
                     ],
                 );
 
-                $role = Role::query()->where('code', $actor['role'])->firstOrFail();
-                UserRoleScope::query()->firstOrCreate([
-                    'user_id' => $user->id,
-                    'role_id' => $role->id,
-                    'branch_id' => $branch->id,
-                    'scope_type' => 'BRANCH',
-                    'status' => 'ACTIVE',
-                    'revoked_at' => null,
-                ], [
-                    'assigned_by_user_id' => $manager->id,
-                    'assigned_at' => now(),
-                    'assignment_reason' => 'Cuenta para demo local',
-                ]);
+                $this->assignToBranch($user, $actor['role'], $branch, $manager);
             }
         });
+    }
+
+    private function assignToBranch(User $user, string $roleCode, BranchRecord $branch, User $manager): void
+    {
+        $role = Role::query()->where('code', $roleCode)->firstOrFail();
+
+        UserRoleScope::query()->firstOrCreate([
+            'user_id' => $user->id,
+            'role_id' => $role->id,
+            'branch_id' => $branch->id,
+            'scope_type' => 'BRANCH',
+            'status' => 'ACTIVE',
+            'revoked_at' => null,
+        ], [
+            'scope_id' => null,
+            'assigned_by_user_id' => $manager->id,
+            'assigned_at' => now(),
+            'assignment_reason' => 'Cuenta para demo local en Sucursal Matamoros',
+        ]);
     }
 
     private function existingActor(string $role): User
@@ -85,10 +96,10 @@ final class LocalDemoUsersSeeder extends Seeder
     private function branchActors(): array
     {
         return [
-            ['name' => 'Gerente de Sucursal Demo', 'email' => 'gerente.sucursal@misvales.local', 'role' => 'branch_manager'],
-            ['name' => 'Coordinador Demo', 'email' => 'coordinador@misvales.local', 'role' => 'coordinator'],
-            ['name' => 'Verificador Demo', 'email' => 'verificador@misvales.local', 'role' => 'verifier'],
-            ['name' => 'Cajera Demo', 'email' => 'cajera@misvales.local', 'role' => 'cashier'],
+            ['name' => 'Gerente de Sucursal Demo', 'email' => 'gerentesucursal@gmail.com', 'role' => 'branch_manager'],
+            ['name' => 'Coordinador Demo', 'email' => 'coordinador@gmail.com', 'role' => 'coordinator'],
+            ['name' => 'Verificador Demo', 'email' => 'verificador@gmail.com', 'role' => 'verifier'],
+            ['name' => 'Cajera Demo', 'email' => 'cajera@gmail.com', 'role' => 'cashier'],
         ];
     }
 }

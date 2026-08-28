@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\AuthSession;
 use App\Models\Distribuidora;
 use App\Models\User;
+use App\Services\Auth\SessionPolicyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -75,7 +76,7 @@ final class LocalAccountSwitchController extends Controller
         return response()->json(['data' => compact('accounts', 'distributors')]);
     }
 
-    public function store(Request $request): JsonResponse
+    public function store(Request $request, SessionPolicyService $policyService): JsonResponse
     {
         $this->assertEnabled();
         $validated = $request->validate(['user_id' => ['required', 'uuid']]);
@@ -85,7 +86,7 @@ final class LocalAccountSwitchController extends Controller
             throw new ApiException('LOCAL_ACCOUNT_NOT_AVAILABLE', 'La cuenta local seleccionada no está disponible.', 404);
         }
 
-        return DB::transaction(function () use ($request, $target): JsonResponse {
+        return DB::transaction(function () use ($request, $target, $policyService): JsonResponse {
             $currentUser = $request->user();
             $currentToken = $currentUser?->currentAccessToken();
 
@@ -101,8 +102,9 @@ final class LocalAccountSwitchController extends Controller
                 $currentToken->delete();
             }
 
+            $policy = $policyService->getPolicyForUser($target);
             $token = $target->createToken('local_account_switch_'.Str::random(10));
-            $token->accessToken->expires_at = now()->addYears(100);
+            $token->accessToken->expires_at = now()->addMinutes($policy['access_token']);
             $token->accessToken->save();
 
             AuthSession::query()->create([
@@ -114,13 +116,14 @@ final class LocalAccountSwitchController extends Controller
                 'ip_address' => $request->ip(),
                 'user_agent' => $request->userAgent(),
                 'device_name' => 'Selector de cuenta local',
-                'expires_at' => now()->addYears(100),
+                'last_activity_at' => now(),
+                'expires_at' => now()->addMinutes($policy['absolute']),
             ]);
 
             return response()->json([
                 'message' => 'Cuenta local cambiada.',
                 'access_token' => $token->plainTextToken,
-                'expires_in' => 3155760000,
+                'expires_in' => $policy['access_token'] * 60,
                 'user' => [
                     'id' => $target->id,
                     'name' => $target->name,
