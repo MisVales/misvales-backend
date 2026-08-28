@@ -37,6 +37,7 @@ class LineaCreditoResource extends JsonResource
             'total_authorized' => $saldos['total_authorized'],
             'used_balance' => $saldos['used_balance'],
             'available_balance' => $saldos['available_balance'],
+            'current_debt' => (string) ($this->distribuidora->relacionVigente?->balance ?? '0.0000'),
             'restriction' => $restriccionVigente ? $reglaCincuenta : null,
             'last_movement' => $ultimoMovimiento ? [
                 'type' => $ultimoMovimiento->type,

@@ -89,6 +89,13 @@ class Distribuidora extends Model
         return $this->hasMany(RelacionDistribuidora::class, 'distributor_id');
     }
 
+    public function relacionVigente(): HasOne
+    {
+        return $this->hasOne(RelacionDistribuidora::class, 'distributor_id')
+            ->where('financial_status', '<>', 'ROLLED_FORWARD')
+            ->latestOfMany('cutoff_at');
+    }
+
     public function cuentaBancariaVigente(): HasOne
     {
         return $this->hasOne(CuentaBancariaDistribuidora::class, 'distributor_id')

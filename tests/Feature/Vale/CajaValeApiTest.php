@@ -1319,6 +1319,20 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('116', (string) $rows[1][3]);
     }
 
+    public function test_estado_actual_de_credito_expone_linea_y_adeudo_sin_confundirlos(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $line = $this->distributorUser->distribuidora->lineaCredito()->firstOrFail();
+        Sanctum::actingAs($this->user('branch_manager', $this->branch->id));
+
+        $this->getJson("/api/v1/distributors/{$relation->distributor_id}/credit-line")
+            ->assertSuccessful()
+            ->assertJsonPath('data.total_authorized', $line->total_authorized)
+            ->assertJsonPath('data.used_balance', $line->used_balance)
+            ->assertJsonPath('data.available_balance', $line->saldoDisponible())
+            ->assertJsonPath('data.current_debt', $relation->balance);
+    }
+
     public function test_corte_sin_relaciones_nuevas_incluye_en_excel_pago_de_relacion_anterior(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-27 10:00:00', 'America/Monterrey'));
