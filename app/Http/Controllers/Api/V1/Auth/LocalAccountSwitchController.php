@@ -90,7 +90,7 @@ final class LocalAccountSwitchController extends Controller
             $currentUser = $request->user();
             $currentToken = $currentUser?->currentAccessToken();
 
-            if ($currentToken) {
+            if ($currentToken && $currentUser) {
                 AuthSession::query()
                     ->where('session_identifier_hash', (string) $currentToken->getRawOriginal('token'))
                     ->whereNull('revoked_at')

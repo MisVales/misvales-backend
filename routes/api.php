@@ -87,12 +87,13 @@ Route::prefix('v1')->group(function () {
         Route::post('refresh', [AuthController::class, 'refresh']);
         Route::post('password/forgot', [ForgotPasswordController::class, 'forgotPassword'])->middleware('throttle:forgot_password');
         Route::post('password/reset', [ResetPasswordController::class, 'resetPassword'])->middleware('throttle:reset_password');
+        // Selector exclusivo de desarrollo local: permite entrar a una cuenta demo sin credenciales.
+        Route::get('local/accounts', [LocalAccountSwitchController::class, 'index']);
+        Route::post('local/switch-account', [LocalAccountSwitchController::class, 'store']);
 
         // Rutas protegidas de la API (Zero Trust Layer)
         Route::middleware(['auth:sanctum', 'track.activity', 'active.user', 'mfa.completed'])->group(function () {
             Route::post('logout', [AuthController::class, 'logout']);
-            Route::get('local/accounts', [LocalAccountSwitchController::class, 'index']);
-            Route::post('local/switch-account', [LocalAccountSwitchController::class, 'store']);
         });
     });
 
