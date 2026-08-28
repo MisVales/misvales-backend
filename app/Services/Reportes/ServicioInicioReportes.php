@@ -5,6 +5,7 @@ namespace App\Services\Reportes;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 final class ServicioInicioReportes
@@ -30,14 +31,22 @@ final class ServicioInicioReportes
                 ->whereNotNull('branch_id')
                 ->pluck('branch_id');
 
-        return [
-            'generated_at' => now()->toIso8601String(),
-            'financial' => $this->financial($branchIds),
-            'delinquency' => $this->delinquency($branchIds),
-            'cutoffs' => $this->cutoffs($branchIds),
-            'points' => $this->points($branchIds),
-            'applications' => $this->applications($branchIds),
-        ];
+        $scopeKey = $branchIds === null
+            ? 'global'
+            : collect($branchIds)->sort()->values()->implode(',');
+
+        return Cache::remember(
+            "reports:home:v2:{$scopeKey}",
+            now()->addSeconds(15),
+            fn (): array => [
+                'generated_at' => now()->toIso8601String(),
+                'financial' => $this->financial($branchIds),
+                'delinquency' => $this->delinquency($branchIds),
+                'cutoffs' => $this->cutoffs($branchIds),
+                'points' => $this->points($branchIds),
+                'applications' => $this->applications($branchIds),
+            ],
+        );
     }
 
     private function financial(?iterable $branchIds): array

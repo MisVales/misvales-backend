@@ -7,6 +7,7 @@ use App\Services\Alcance\AlcanceOperativo;
 use App\Services\Alcance\ResolverAlcanceOperativo;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Query\Builder;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 
 final class ServicioResumenOperacion
@@ -16,6 +17,19 @@ final class ServicioResumenOperacion
     public function obtener(User $actor): array
     {
         $alcance = $this->alcances->resolver($actor);
+        $scopeKey = $alcance->esGlobal()
+            ? 'global'
+            : ($alcance->esSucursal() ? implode(',', $alcance->branchIds) : 'user-'.$actor->id);
+
+        return Cache::remember(
+            "operations:summary:v2:{$scopeKey}",
+            now()->addSeconds(10),
+            fn (): array => $this->construir($actor, $alcance),
+        );
+    }
+
+    private function construir(User $actor, AlcanceOperativo $alcance): array
+    {
         $hoyLocal = CarbonImmutable::now(config('relations.timezone'));
         $inicio = $hoyLocal->startOfDay()->utc();
         $fin = $hoyLocal->endOfDay()->utc();
