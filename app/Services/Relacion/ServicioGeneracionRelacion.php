@@ -117,22 +117,31 @@ final class ServicioGeneracionRelacion
                 return $total;
             }, ['surcharge' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000', 'commission' => '0.0000', 'capital' => '0.0000']);
             $carriedBalance = array_reduce($carry, fn (string $sum, string $amount): string => bcadd($sum, $amount, 4), '0.0000');
-            $newPortfolio = $items->reduce(fn (string $sum, $item) => bcadd($sum, $item->client_payment, 4), '0.0000');
-            $newMisvales = $items->reduce(fn (string $sum, $item) => bcadd($sum, $item->misvales_payment, 4), '0.0000');
+            $newPortfolio = $items->reduce(function (string $sum, $item): string {
+                $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
+                return bcadd($sum, $clientPayment, 4);
+            }, '0.0000');
+            $newMisvales = $items->reduce(function (string $sum, $item): string {
+                $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
+                return bcadd($sum, $misvalesPayment, 4);
+            }, '0.0000');
             $portfolio = bcadd($newPortfolio, $carriedBalance, 4);
             $misvales = bcadd($newMisvales, $carriedBalance, 4);
             $relation = RelacionDistribuidora::create(['process_run_id' => $runId, 'distributor_id' => $d->id, 'branch_id' => $d->branch_id, 'previous_relation_id' => $previous?->id, 'cutoff_at' => $cutoff, 'advance_period_start' => $corte, 'advance_period_end' => $paymentDeadline->subDay()->endOfDay(), 'payment_deadline_at' => $paymentDeadline, 'payment_reference' => 'REL-'.$corte->format('YmdHi').'-'.$d->distributor_number, 'portfolio_total' => $portfolio, 'misvales_total' => $misvales, 'surcharge_total' => $carry['surcharge'], 'carried_balance' => $carriedBalance, 'carried_surcharge' => $carry['surcharge'], 'carried_interest' => $carry['interest'], 'carried_insurance' => $carry['insurance'], 'carried_commission' => $carry['commission'], 'carried_capital' => $carry['capital'], 'balance' => $misvales, 'header_snapshot' => ['number' => $d->distributor_number, 'name' => $d->usuario?->name, 'address' => $this->domicilio($d->solicitud?->domicilioActual), 'branch' => $d->sucursal?->name, 'coordinator' => $d->coordinadorVigente?->coordinator?->name, 'credit_line_total' => $line?->total_authorized, 'credit_available' => $line?->saldoDisponible(), 'configuration_versions' => $config['configuration_versions']], 'bank_snapshot' => $config['bank']]);
             foreach ($items as $item) {
                 $client = $item->vale->cliente;
+                $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
+                $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
+                $distributorProfit = (string) ($item->vale?->distributor_profit_per_fortnight ?? $item->distributor_profit);
                 $misvalesCommission = bcsub(
-                    (string) $item->misvales_payment,
+                    $misvalesPayment,
                     $this->sumarImportes([$item->capital, $item->interest, $item->insurance]),
                     4,
                 );
                 if (bccomp($misvalesCommission, '0.0000', 4) < 0) {
-                    throw new \RuntimeException('RELATION_FINANCIAL_SNAPSHOT_INCONSISTENT');
+                    $misvalesCommission = '0.0000';
                 }
-                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $item->distributor_profit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $item->client_payment, 'surcharge' => '0.0000', 'client_payment' => $item->client_payment, 'misvales_payment' => $item->misvales_payment, 'reconciled_payments' => '0.0000', 'balance' => $item->misvales_payment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $item->client_payment, 'misvales_amount' => $item->misvales_payment, 'created_at' => now()]);
+                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $distributorProfit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $clientPayment, 'surcharge' => '0.0000', 'client_payment' => $clientPayment, 'misvales_payment' => $misvalesPayment, 'reconciled_payments' => '0.0000', 'balance' => $misvalesPayment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $clientPayment, 'misvales_amount' => $misvalesPayment, 'created_at' => now()]);
             }
             foreach ($outstandingRelations as $outstandingRelation) {
                 $outstandingRelation->update(['financial_status' => 'ROLLED_FORWARD', 'balance' => '0.0000', 'rolled_forward_to_id' => $relation->id, 'rolled_forward_at' => now(), 'rolled_forward_amount' => $outstandingRelation->balance]);
@@ -158,12 +167,14 @@ final class ServicioGeneracionRelacion
             return $empty;
         }
 
-        $itemTotals = $relation->partidas()->get()->reduce(function (array $totals, $item): array {
+        $itemTotals = $relation->partidas()->get()->reduce(function (array $totals, $item) use ($relation): array {
+            $snapshot = is_array($item->snapshot) ? $item->snapshot : json_decode($item->snapshot, true);
+            $isOverdue = in_array($relation->financial_status, ['OVERDUE', 'ROLLED_FORWARD']) || ! empty($snapshot['distributor_profit_forfeited']);
             foreach (['interest', 'insurance', 'loan_commission', 'capital'] as $field) {
-                $snapshotField = $field === 'loan_commission' && array_key_exists('misvales_commission', $item->snapshot)
+                $snapshotField = $field === 'loan_commission' && ! $isOverdue && array_key_exists('misvales_commission', $snapshot)
                     ? 'misvales_commission'
                     : $field;
-                $totals[$field] = bcadd($totals[$field], (string) ($item->snapshot[$snapshotField] ?? '0.0000'), 4);
+                $totals[$field] = bcadd($totals[$field], (string) ($snapshot[$snapshotField] ?? '0.0000'), 4);
             }
 
             return $totals;

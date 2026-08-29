@@ -83,8 +83,27 @@ final class ServicioEvaluacionRecargo
                 $created = DB::table('relation_late_fees')->insertOrIgnore(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'type' => 'LATE_FEE', 'amount' => $lateFeeTotal, 'applied_at' => $now, 'configuration_snapshot' => json_encode($snapshot), 'created_at' => now(), 'updated_at' => now()]);
                 if ($created) {
                     $locked = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
+                    $profitForfeited = '0.0000';
+                    foreach ($locked->partidas()->get() as $partida) {
+                        $snapshot = is_array($partida->snapshot) ? $partida->snapshot : json_decode($partida->snapshot, true);
+                        $profit = (string) ($snapshot['distributor_profit'] ?? '0.0000');
+                        if (bccomp($profit, '0.0000', 4) > 0 && empty($snapshot['distributor_profit_forfeited'])) {
+                            $snapshot['distributor_profit_forfeited'] = true;
+                            $snapshot['original_misvales_payment'] = (string) $partida->misvales_amount;
+                            $profitForfeited = bcadd($profitForfeited, $profit, 4);
+                            $newBalance = bcadd((string) $partida->balance, $profit, 4);
+                            $newMisvales = bcadd((string) $partida->misvales_amount, $profit, 4);
+                            DB::table('distributor_relation_items')->where('id', $partida->id)->update([
+                                'balance' => $newBalance,
+                                'misvales_amount' => $newMisvales,
+                                'snapshot' => json_encode($snapshot),
+                            ]);
+                        }
+                    }
                     $locked->surcharge_total = bcadd($locked->surcharge_total, $lateFeeTotal, 4);
-                    $locked->balance = bcadd($locked->balance, $lateFeeTotal, 4);
+                    $locked->misvales_total = bcadd($locked->misvales_total, $profitForfeited, 4);
+                    $totalAddition = bcadd($lateFeeTotal, $profitForfeited, 4);
+                    $locked->balance = bcadd($locked->balance, $totalAddition, 4);
                     $locked->financial_status = 'OVERDUE';
                     $locked->save();
                     $result['applied']++;
