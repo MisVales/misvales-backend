@@ -42,6 +42,7 @@ final class ServicioFinPeriodoPagoManual
                 ->where('entity_id', $run->id)
                 ->where('event_name', 'PaymentDeadlineReached')
                 ->where('result', 'SUCCESS')
+                ->when($this->latestResetAt($run->id), fn ($query, $resetAt) => $query->where('created_at', '>', $resetAt))
                 ->exists();
 
             if (! $deadlineReached) {
@@ -69,21 +70,26 @@ final class ServicioFinPeriodoPagoManual
                 ];
             }
 
-            AuditLog::firstOrCreate(
-                [
+            $deadlineExpired = AuditLog::query()
+                ->where('entity_type', 'relation_process_run')
+                ->where('entity_id', $run->id)
+                ->where('event_name', 'PaymentDeadlineExpired')
+                ->where('result', 'SUCCESS')
+                ->when($this->latestResetAt($run->id), fn ($query, $resetAt) => $query->where('created_at', '>', $resetAt))
+                ->exists();
+            if (! $deadlineExpired) {
+                AuditLog::create([
                     'entity_type' => 'relation_process_run',
                     'entity_id' => $run->id,
                     'event_name' => 'PaymentDeadlineExpired',
-                ],
-                [
                     'actor_id' => $actor->id,
                     'new_value' => [
                         'expired_at' => $overdueEvaluationAt->toIso8601String(),
                         'motivo' => $motivo,
                     ],
                     'result' => 'SUCCESS',
-                ],
-            );
+                ]);
+            }
 
             $missingBranches = $this->sucursalesSinArchivoFinal($relations, $run->id, CarbonImmutable::parse($run->created_at, config('app.timezone')));
 
@@ -150,7 +156,7 @@ final class ServicioFinPeriodoPagoManual
                             'reconciled_total' => $relation->reconciled_total,
                             'balance' => $relation->balance,
                             'payments' => $relation->pagos()->count(),
-                            'late_fee_applied' => DB::table('relation_late_fees')->where('relation_id', $relation->id)->exists(),
+                            'late_fee_applied' => DB::table('relation_late_fees')->where('relation_id', $relation->id)->whereNull('voided_at')->exists(),
                         ],
                         'result' => 'SUCCESS',
                     ],
@@ -219,7 +225,15 @@ final class ServicioFinPeriodoPagoManual
                 ->whereColumn('expired.entity_id', 'audit_logs.entity_id')
                 ->where('expired.entity_type', 'relation_process_run')
                 ->where('expired.event_name', 'PaymentDeadlineExpired')
-                ->where('expired.result', 'SUCCESS');
+                ->where('expired.result', 'SUCCESS')
+                ->whereNotExists(function ($reset): void {
+                    $reset->selectRaw('1')->from('audit_logs as reset_log')
+                        ->whereColumn('reset_log.entity_id', 'expired.entity_id')
+                        ->where('reset_log.entity_type', 'relation_process_run')
+                        ->where('reset_log.event_name', 'PaymentDeadlineEvaluationReset')
+                        ->where('reset_log.result', 'SUCCESS')
+                        ->whereColumn('reset_log.created_at', '>', 'expired.created_at');
+                });
         })
             ->latest()
             ->value('entity_id');
@@ -239,13 +253,26 @@ final class ServicioFinPeriodoPagoManual
 
     private function evaluacionCompletada(string $runId): ?AuditLog
     {
+        $resetAt = $this->latestResetAt($runId);
+
         return AuditLog::query()
             ->where('entity_type', 'relation_process_run')
             ->where('entity_id', $runId)
             ->where('event_name', 'ForcePaymentDeadlineCompleted')
             ->where('result', 'SUCCESS')
+            ->when($resetAt, fn ($query) => $query->where('created_at', '>', $resetAt))
             ->latest()
             ->first();
+    }
+
+    private function latestResetAt(string $runId): mixed
+    {
+        return AuditLog::query()
+            ->where('entity_type', 'relation_process_run')
+            ->where('entity_id', $runId)
+            ->where('event_name', 'PaymentDeadlineEvaluationReset')
+            ->where('result', 'SUCCESS')
+            ->max('created_at');
     }
 
     private function fechaLimite(string $runId, $relations, string $cutoffAt): CarbonImmutable

@@ -73,6 +73,7 @@ final class InitialConfigurationVersionsSeeder extends Seeder
             'VERIFICATION_START_TIME' => '08:00',
             'VERIFICATION_MAX_START_TIME' => '23:45',
             'CREDIT_TOLERANCE_AMOUNT' => '500.0000',
+            'LATE_FEE_AMOUNT' => '300.0000',
             'POINTS_DIVISOR_AMOUNT' => '1200.0000',
             'POINTS_MULTIPLIER' => 3,
             'POINT_VALUE_AMOUNT' => '2.0000',

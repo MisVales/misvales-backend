@@ -246,7 +246,15 @@ final class ServicioCorteManual
                     ->whereColumn('deadline_expired.entity_id', 'relation_process_runs.id')
                     ->where('deadline_expired.entity_type', 'relation_process_run')
                     ->where('deadline_expired.event_name', 'PaymentDeadlineExpired')
-                    ->where('deadline_expired.result', 'SUCCESS');
+                    ->where('deadline_expired.result', 'SUCCESS')
+                    ->whereNotExists(function ($reset): void {
+                        $reset->selectRaw('1')->from('audit_logs as reset_log')
+                            ->whereColumn('reset_log.entity_id', 'deadline_expired.entity_id')
+                            ->where('reset_log.entity_type', 'relation_process_run')
+                            ->where('reset_log.event_name', 'PaymentDeadlineEvaluationReset')
+                            ->where('reset_log.result', 'SUCCESS')
+                            ->whereColumn('reset_log.created_at', '>', 'deadline_expired.created_at');
+                    });
             })
             ->latest('cutoff_at')
             ->value('id');

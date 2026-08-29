@@ -8,6 +8,7 @@ use App\Models\Distribuidora;
 use App\Models\RelacionDistribuidora;
 use App\Services\Relacion\ServicioPdfEstadoCuenta;
 use App\Services\Relacion\ServicioPdfRelacion;
+use App\Services\Relacion\ServicioSaldoValeRelacion;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
@@ -58,11 +59,19 @@ final class RelacionDistribuidoraController extends Controller
         return response()->json(['data' => $query->paginate($request->integer('per_page', 25))]);
     }
 
-    public function show(RelacionDistribuidora $relacion, Request $request)
+    public function show(RelacionDistribuidora $relacion, Request $request, ServicioSaldoValeRelacion $saldos)
     {
         $this->authorizeView($relacion, $request);
+        $relacion->load(self::DETAIL_RELATIONS);
+        $summaries = $saldos->resumenes($relacion);
+        $relacion->setAttribute('voucher_summaries', $summaries);
+        $relacion->setAttribute('voucher_balance_total', array_reduce(
+            $summaries,
+            static fn (string $total, array $summary): string => bcadd($total, $summary['cumulative_misvales_due'], 4),
+            '0.0000',
+        ));
 
-        return response()->json(['data' => $relacion->load(self::DETAIL_RELATIONS)]);
+        return response()->json(['data' => $relacion]);
     }
 
     public function download(RelacionDistribuidora $relacion, Request $request, ServicioPdfRelacion $pdf): Response

@@ -6,12 +6,16 @@ use App\Models\AuditLog;
 use App\Models\Distribuidora;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
+use App\Models\RelacionPartidaDistribuidora;
 use App\Notifications\NotificacionEventoDominio;
 use App\Services\Excedente\ServicioExcedente;
+use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Vale\ServicioCalendarioParcialidadesVale;
 use Carbon\CarbonImmutable;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Throwable;
 
 final class ServicioGeneracionRelacion
@@ -20,6 +24,8 @@ final class ServicioGeneracionRelacion
         private readonly ServicioExcedente $surpluses,
         private readonly ServicioConfiguracionRelacion $configuracion,
         private readonly ServicioCalendarioParcialidadesVale $calendarioParcialidades,
+        private readonly ServicioSaldoValeRelacion $saldoVale,
+        private readonly ServicioEvaluacionRecargo $recargos,
     ) {}
 
     public function generar(CarbonImmutable $corte): int
@@ -28,7 +34,6 @@ final class ServicioGeneracionRelacion
         $config = $this->configuracion->resolver(CarbonImmutable::now('UTC'));
         $corte = $corte->setTimezone($config['timezone']);
         $cutoff = $corte->utc();
-        $this->asegurarCorteAnteriorConciliado($cutoff);
         if (DB::table('relation_process_runs')
             ->where('status', 'COMPLETED')
             ->where('cutoff_at', $cutoff)
@@ -53,33 +58,41 @@ final class ServicioGeneracionRelacion
         }
     }
 
-    private function asegurarCorteAnteriorConciliado(CarbonImmutable $cutoff): void
+    public function repararOcurrenciasTerminales(RelacionDistribuidora $relation): int
     {
-        $previousRunId = DB::table('relation_process_runs')
-            ->where('status', 'COMPLETED')
-            ->where('cutoff_at', '<', $cutoff)
-            ->whereExists(function ($query): void {
-                $query->selectRaw('1')
-                    ->from('distributor_relations')
-                    ->whereColumn('distributor_relations.process_run_id', 'relation_process_runs.id');
-            })
-            ->latest('cutoff_at')
-            ->value('id');
+        return DB::transaction(function () use ($relation): int {
+            $relation = RelacionDistribuidora::query()->lockForUpdate()->findOrFail($relation->id);
+            if (in_array($relation->financial_status, ['SETTLED', 'ROLLED_FORWARD'], true) || $relation->rolled_forward_to_id !== null) {
+                throw new RuntimeException('La relación ya fue liquidada o trasladada; repare la relación vigente de la cadena.');
+            }
 
-        if ($previousRunId === null) {
-            return;
-        }
+            $previous = $relation->anterior()->lockForUpdate()->first();
+            $cutoff = CarbonImmutable::parse((string) $relation->getRawOriginal('cutoff_at'), 'UTC');
+            $positions = $this->posicionesTerminales($previous, $cutoff);
+            $result = $this->materializarOcurrenciasTerminales($relation, $positions, $cutoff);
+            if ($result['count'] === 0) {
+                return 0;
+            }
 
-        $reconciled = AuditLog::query()
-            ->where('entity_type', 'relation_process_run')
-            ->where('entity_id', $previousRunId)
-            ->where('event_name', 'ForcePaymentDeadlineCompleted')
-            ->where('result', 'SUCCESS')
-            ->exists();
+            $relation->forceFill([
+                'portfolio_total' => bcadd((string) $relation->portfolio_total, $result['charge'], 4),
+                'misvales_total' => bcadd((string) $relation->misvales_total, $result['charge'], 4),
+                'balance' => bcadd((string) $relation->balance, $result['charge'], 4),
+            ])->save();
+            AuditLog::create([
+                'entity_type' => 'distributor_relation',
+                'event_name' => 'TerminalOccurrencesRepaired',
+                'entity_id' => $relation->id,
+                'new_value' => [
+                    'terminal_occurrences' => $result['count'],
+                    'terminal_charge' => $result['charge'],
+                    'balance' => $relation->balance,
+                ],
+                'result' => 'SUCCESS',
+            ]);
 
-        if (! $reconciled) {
-            throw new \RuntimeException('PREVIOUS_CUTOFF_NOT_RECONCILED');
-        }
+            return $result['count'];
+        });
     }
 
     private function procesar(string $runId, CarbonImmutable $corte, CarbonImmutable $cutoff, CarbonImmutable $paymentDeadline, array $config): int
@@ -115,6 +128,10 @@ final class ServicioGeneracionRelacion
             $outstandingRelations = $previousRelations->filter(
                 fn (RelacionDistribuidora $candidate): bool => bccomp($candidate->balance, '0', 4) > 0,
             );
+            $outstandingRelations->each(fn (RelacionDistribuidora $candidate) => $this->recargos->aplicarAntesDeRollover($candidate, $cutoff));
+            $outstandingRelations = $outstandingRelations->map(fn (RelacionDistribuidora $candidate) => $candidate->fresh());
+            $previous = $previous?->fresh();
+            $terminalPositions = $this->posicionesTerminales($previous, $cutoff);
 
             if ($items->isEmpty() && $outstandingRelations->isEmpty()) {
                 continue;
@@ -136,15 +153,23 @@ final class ServicioGeneracionRelacion
             $carriedBalance = array_reduce($carry, fn (string $sum, string $amount): string => bcadd($sum, $amount, 4), '0.0000');
             $newPortfolio = $items->reduce(function (string $sum, $item): string {
                 $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
+
                 return bcadd($sum, $clientPayment, 4);
             }, '0.0000');
+            $terminalCharges = $terminalPositions->reduce(fn (string $sum, array $position): string => bcadd($sum, $this->terminalCharge($position['final_snapshot']), 4), '0.0000');
+            $newPortfolio = bcadd($newPortfolio, $terminalCharges, 4);
             $newMisvales = $items->reduce(function (string $sum, $item): string {
                 $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
+
                 return bcadd($sum, $misvalesPayment, 4);
             }, '0.0000');
+            $newMisvales = bcadd($newMisvales, $terminalCharges, 4);
             $portfolio = bcadd($newPortfolio, $carriedBalance, 4);
             $misvales = bcadd($newMisvales, $carriedBalance, 4);
             $relation = RelacionDistribuidora::create(['process_run_id' => $runId, 'distributor_id' => $d->id, 'branch_id' => $d->branch_id, 'previous_relation_id' => $previous?->id, 'cutoff_at' => $cutoff, 'advance_period_start' => $corte, 'advance_period_end' => $paymentDeadline->subDay()->endOfDay(), 'payment_deadline_at' => $paymentDeadline, 'payment_reference' => 'REL-'.$corte->format('YmdHi').'-'.$d->distributor_number, 'portfolio_total' => $portfolio, 'misvales_total' => $misvales, 'surcharge_total' => $carry['surcharge'], 'carried_balance' => $carriedBalance, 'carried_surcharge' => $carry['surcharge'], 'carried_interest' => $carry['interest'], 'carried_insurance' => $carry['insurance'], 'carried_commission' => $carry['commission'], 'carried_capital' => $carry['capital'], 'balance' => $misvales, 'header_snapshot' => ['number' => $d->distributor_number, 'name' => $d->usuario?->name, 'address' => $this->domicilio($d->solicitud?->domicilioActual), 'branch' => $d->sucursal?->name, 'coordinator' => $d->coordinadorVigente?->coordinator?->name, 'credit_line_total' => $line?->total_authorized, 'credit_available' => $line?->saldoDisponible(), 'configuration_versions' => $config['configuration_versions']], 'bank_snapshot' => $config['bank']]);
+            $relation->header_snapshot = array_merge($relation->header_snapshot, ['late_fee' => $config['late_fee']]);
+            $relation->save();
+            $processedCount++;
             foreach ($items as $item) {
                 $client = $item->vale->cliente;
                 $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
@@ -160,8 +185,13 @@ final class ServicioGeneracionRelacion
                 }
                 DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $distributorProfit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $clientPayment, 'surcharge' => '0.0000', 'client_payment' => $clientPayment, 'misvales_payment' => $misvalesPayment, 'reconciled_payments' => '0.0000', 'balance' => $misvalesPayment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $clientPayment, 'misvales_amount' => $misvalesPayment, 'created_at' => now()]);
             }
+            DB::table('distributor_relation_items')->where('relation_id', $relation->id)->where('occurrence_type', 'INSTALLMENT')->whereNull('source_voucher_installment_id')->update([
+                'source_voucher_installment_id' => DB::raw('voucher_installment_id'),
+            ]);
+            $this->materializarOcurrenciasTerminales($relation, $terminalPositions, $cutoff);
             foreach ($outstandingRelations as $outstandingRelation) {
-                $outstandingRelation->update(['financial_status' => 'ROLLED_FORWARD', 'balance' => '0.0000', 'rolled_forward_to_id' => $relation->id, 'rolled_forward_at' => now(), 'rolled_forward_amount' => $outstandingRelation->balance]);
+                $transferred = $this->sumarImportes(array_values($this->saldoPendientePorComponente($outstandingRelation)));
+                $outstandingRelation->update(['financial_status' => 'ROLLED_FORWARD', 'balance' => '0.0000', 'rolled_forward_to_id' => $relation->id, 'rolled_forward_at' => now(), 'rolled_forward_amount' => $transferred]);
             }
             AuditLog::create(['entity_type' => 'distributor_relation', 'event_name' => 'RelationGenerated', 'entity_id' => $relation->id, 'new_value' => ['cutoff_at' => $cutoff->toIso8601String(), 'items' => $items->count(), 'new_balance' => $newMisvales, 'carried_balance' => $carriedBalance, 'previous_relation_id' => $previous?->id, 'balance' => $misvales], 'result' => 'SUCCESS']);
             $this->surpluses->programarDisponibles($relation, $d->usuario);
@@ -177,7 +207,8 @@ final class ServicioGeneracionRelacion
         return $processedCount;
     }
 
-    private function saldoPendientePorComponente(?RelacionDistribuidora $relation): array
+    /** @return array{surcharge:string,interest:string,insurance:string,commission:string,capital:string} */
+    public function saldoPendientePorComponente(?RelacionDistribuidora $relation): array
     {
         $empty = ['surcharge' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000', 'commission' => '0.0000', 'capital' => '0.0000'];
         if ($relation === null || bccomp($relation->balance, '0', 4) <= 0) {
@@ -186,12 +217,22 @@ final class ServicioGeneracionRelacion
 
         $itemTotals = $relation->partidas()->get()->reduce(function (array $totals, $item) use ($relation): array {
             $snapshot = is_array($item->snapshot) ? $item->snapshot : json_decode($item->snapshot, true);
-            $isOverdue = in_array($relation->financial_status, ['OVERDUE', 'ROLLED_FORWARD']) || ! empty($snapshot['distributor_profit_forfeited']);
+            $isFinalInstallment = (int) ($snapshot['installment'] ?? 0) === (int) ($snapshot['total_installments'] ?? -1);
+            $isOverdue = (in_array($relation->financial_status, ['OVERDUE', 'ROLLED_FORWARD']) || ! empty($snapshot['distributor_profit_forfeited'])) && ! $isFinalInstallment;
+            $canonical = $isOverdue
+                ? (string) ($snapshot['base_payment'] ?? $item->portfolio_amount)
+                : (string) ($snapshot['misvales_payment'] ?? $item->misvales_amount);
+            $commission = bcsub($canonical, $this->sumarImportes([
+                (string) ($snapshot['capital'] ?? '0.0000'),
+                (string) ($snapshot['interest'] ?? '0.0000'),
+                (string) ($snapshot['insurance'] ?? '0.0000'),
+            ]), 4);
             foreach (['interest', 'insurance', 'loan_commission', 'capital'] as $field) {
                 $snapshotField = $field === 'loan_commission' && ! $isOverdue && array_key_exists('misvales_commission', $snapshot)
                     ? 'misvales_commission'
                     : $field;
-                $totals[$field] = bcadd($totals[$field], (string) ($snapshot[$snapshotField] ?? '0.0000'), 4);
+                $amount = $field === 'loan_commission' ? $commission : (string) ($snapshot[$snapshotField] ?? '0.0000');
+                $totals[$field] = bcadd($totals[$field], $amount, 4);
             }
 
             return $totals;
@@ -235,5 +276,76 @@ final class ServicioGeneracionRelacion
             static fn (string $total, string $amount): string => bcadd($total, $amount, 4),
             '0.0000',
         );
+    }
+
+    /** @return Collection<int, array<string, mixed>> */
+    private function posicionesTerminales(?RelacionDistribuidora $previous, CarbonImmutable $cutoff): Collection
+    {
+        if ($previous === null || $previous->payment_deadline_at === null || ! $previous->payment_deadline_at->lessThan($cutoff)) {
+            return collect();
+        }
+
+        return collect($this->saldoVale->posiciones($previous))
+            ->filter(fn (array $position): bool => $position['is_pending'] && is_array($position['final_snapshot']))
+            ->values();
+    }
+
+    /**
+     * @param  Collection<int, array<string, mixed>>  $positions
+     * @return array{count:int,charge:string}
+     */
+    private function materializarOcurrenciasTerminales(RelacionDistribuidora $relation, Collection $positions, CarbonImmutable $cutoff): array
+    {
+        $count = 0;
+        $totalCharge = '0.0000';
+
+        foreach ($positions as $position) {
+            $source = ParcialidadVale::query()->with(['vale.cliente', 'vale.versionProducto'])->findOrFail($position['source_voucher_installment_id']);
+            $previousTerminal = $position['last_terminal_occurrence'];
+            $charge = $this->terminalCharge($position['final_snapshot']);
+            $sequence = $position['next_terminal_sequence'];
+            $existing = RelacionPartidaDistribuidora::query()
+                ->where('source_voucher_installment_id', $source->id)
+                ->where('terminal_sequence', $sequence)
+                ->lockForUpdate()
+                ->first();
+            if ($existing !== null) {
+                if ($existing->relation_id !== $relation->id) {
+                    throw new RuntimeException("La ocurrencia terminal {$sequence} ya pertenece a otra relación.");
+                }
+
+                continue;
+            }
+
+            $opening = $position['balance'];
+            $snapshot = array_merge($position['final_snapshot'], [
+                'is_terminal_overdue_cycle' => true, 'terminal_sequence' => $sequence,
+                'terminal_opening_balance' => $opening, 'terminal_charge' => $charge,
+                'terminal_resulting_balance' => bcadd($opening, $charge, 4),
+                'terminal_source_relation_id' => $relation->previous_relation_id, 'terminal_cycle_at' => $cutoff->toIso8601String(),
+                'source_voucher_installment_id' => $source->id, 'surcharge' => '0.0000',
+                'capital' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000',
+                'loan_commission' => $charge, 'misvales_commission' => $charge,
+                'client_payment' => $charge, 'misvales_payment' => $charge,
+                'reconciled_payments' => '0.0000', 'balance' => $charge, 'financial_status' => 'PENDING',
+            ]);
+            RelacionPartidaDistribuidora::query()->create([
+                'id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => null,
+                'occurrence_type' => 'TERMINAL_OVERDUE', 'source_voucher_installment_id' => $source->id,
+                'previous_terminal_occurrence_id' => $previousTerminal?->id, 'terminal_sequence' => $sequence,
+                'snapshot' => $snapshot, 'portfolio_amount' => $charge, 'misvales_amount' => $charge, 'created_at' => now(),
+            ]);
+            $count++;
+            $totalCharge = bcadd($totalCharge, $charge, 4);
+        }
+
+        return ['count' => $count, 'charge' => $totalCharge];
+    }
+
+    private function terminalCharge(array $snapshot): string
+    {
+        $charge = bcsub((string) ($snapshot['base_payment'] ?? '0.0000'), (string) ($snapshot['misvales_payment'] ?? '0.0000'), 4);
+
+        return bccomp($charge, '0', 4) > 0 ? $charge : '0.0000';
     }
 }

@@ -27,7 +27,6 @@ class ConfiguracionController extends Controller
         'VOUCHER_INSURANCE_AMOUNT',
         'VOUCHER_MIN_FORTNIGHTS_COUNT',
         'VOUCHER_MAX_FORTNIGHTS_COUNT',
-        'LATE_FEE_AMOUNT',
     ];
 
     public function __construct(private ConfiguracionServicio $servicio) {}
@@ -200,5 +199,4 @@ class ConfiguracionController extends Controller
             'key' => 'Esta condición financiera se configura por producto y no puede crearse como configuración global.',
         ]);
     }
-
 }

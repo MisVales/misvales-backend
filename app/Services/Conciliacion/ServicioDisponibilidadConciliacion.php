@@ -54,7 +54,7 @@ final class ServicioDisponibilidadConciliacion
                     ->where('completed.event_name', 'ForcePaymentDeadlineCompleted')
                     ->where('completed.result', 'SUCCESS');
             })
-            ->oldest('created_at')
+            ->latest('created_at')
             ->get();
 
         return $audits->map(function (AuditLog $audit) use ($branchId): ?array {
@@ -67,9 +67,18 @@ final class ServicioDisponibilidadConciliacion
             }
             $run = DB::table('relation_process_runs')->where('id', $audit->entity_id)->first();
             $stats = (clone $relations)->selectRaw('COUNT(*) as relations, COUNT(DISTINCT distributor_id) as distributors, SUM(balance) as pending_total')->first();
+            $sequence = DB::table('relation_process_runs as runs')
+                ->where('runs.status', 'COMPLETED')
+                ->where('runs.cutoff_at', '<=', $run?->cutoff_at)
+                ->whereExists(function ($query) use ($branchId): void {
+                    $query->selectRaw('1')->from('distributor_relations as sequence_relations')
+                        ->whereColumn('sequence_relations.process_run_id', 'runs.id')
+                        ->when($branchId !== null, fn ($branchQuery) => $branchQuery->where('sequence_relations.branch_id', $branchId));
+                })->count();
 
             return [
                 'process_run_id' => $audit->entity_id,
+                'reconciliation_number' => $sequence,
                 'cutoff_at' => $run?->cutoff_at,
                 'payment_deadline_at' => $audit->new_value['expired_at'] ?? null,
                 'relations' => (int) $stats->relations,

@@ -27,7 +27,7 @@ final class ServicioPdfRelacion
             return [
                 'product' => (string) ($snapshot['product'] ?? '—'),
                 'client' => (string) ($snapshot['client'] ?? '—'),
-                'payments_made' => ($snapshot['installment'] ?? '—').'/'.($snapshot['total_installments'] ?? '—'),
+                'payments_made' => (($item->occurrence_type === 'TERMINAL_OVERDUE' || ($snapshot['is_terminal_overdue_cycle'] ?? false)) ? '*' : '').($snapshot['installment'] ?? '—').'/'.($snapshot['total_installments'] ?? '—'),
                 'distributor_profit' => $distributorProfit,
                 'client_payment' => $clientPayment,
                 'surcharge' => $surcharge,

@@ -17,6 +17,7 @@ final class ServicioConfiguracionRelacion
         'PAYMENT_DAYS_AFTER_CUT',
         'PAYMENT_DEADLINE_TIME',
         'RELATION_PAYMENT_BANK',
+        'LATE_FEE_AMOUNT',
     ];
 
     public function __construct(private readonly ConfiguracionServicio $configuraciones) {}
@@ -67,11 +68,13 @@ final class ServicioConfiguracionRelacion
         $deadlineDays = $resolved['PAYMENT_DAYS_AFTER_CUT']['value'];
         $deadlineTime = $resolved['PAYMENT_DEADLINE_TIME']['value'];
         $bank = $resolved['RELATION_PAYMENT_BANK']['value'];
+        $lateFee = $resolved['LATE_FEE_AMOUNT']['value'];
 
         if (! is_string($timezone) || ! in_array($timezone, timezone_identifiers_list(), true)
             || filter_var($deadlineDays, FILTER_VALIDATE_INT) === false || (int) $deadlineDays < 1
             || ! is_string($deadlineTime) || preg_match('/^(?:[01]\d|2[0-3]):[0-5]\d:[0-5]\d$/', $deadlineTime) !== 1
-            || ! $this->bancoValido($bank)) {
+            || ! $this->bancoValido($bank)
+            || ! is_numeric($lateFee) || bccomp((string) $lateFee, '0', 4) < 0) {
             throw new RuntimeException('RELATION_CONFIGURATION_INCOMPLETE');
         }
 
@@ -84,6 +87,12 @@ final class ServicioConfiguracionRelacion
                 'beneficiary' => trim($bank['beneficiary']),
                 'agreement' => trim($bank['agreement']),
                 'clabe' => $bank['clabe'],
+            ],
+            'late_fee' => [
+                'amount' => bcadd((string) $lateFee, '0', 4),
+                'configuration_version_id' => $resolved['LATE_FEE_AMOUNT']['version_id'],
+                'resolved_at' => $at->utc()->toIso8601String(),
+                'source' => 'global_relation_configuration',
             ],
             'configuration_versions' => $resolved
                 ->mapWithKeys(fn (array $configuration, string $key): array => [$key => $configuration['version_id']])

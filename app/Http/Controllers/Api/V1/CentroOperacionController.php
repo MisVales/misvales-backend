@@ -324,9 +324,6 @@ final class CentroOperacionController extends Controller
             if ($e->getMessage() === 'PREVIOUS_CUTOFF_NOT_EXPIRED') {
                 return response()->json(['message' => 'Antes de cerrar un nuevo corte, primero vence la fecha límite del periodo actual.'], 409);
             }
-            if ($e->getMessage() === 'PREVIOUS_CUTOFF_NOT_RECONCILED') {
-                return response()->json(['message' => 'Antes de cerrar un nuevo corte, Caja debe subir y procesar la conciliación bancaria del periodo anterior.'], 409);
-            }
             throw $e;
         }
     }

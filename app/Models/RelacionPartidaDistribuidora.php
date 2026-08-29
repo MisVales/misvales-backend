@@ -16,6 +16,16 @@ final class RelacionPartidaDistribuidora extends Model
 
     protected $guarded = [];
 
+    protected static function booted(): void
+    {
+        self::creating(function (self $item): void {
+            $item->occurrence_type ??= 'INSTALLMENT';
+            if ($item->occurrence_type === 'INSTALLMENT') {
+                $item->source_voucher_installment_id ??= $item->voucher_installment_id;
+            }
+        });
+    }
+
     protected function casts(): array
     {
         return ['snapshot' => 'array', 'portfolio_amount' => 'decimal:4', 'misvales_amount' => 'decimal:4'];
@@ -24,5 +34,15 @@ final class RelacionPartidaDistribuidora extends Model
     public function installment(): BelongsTo
     {
         return $this->belongsTo(ParcialidadVale::class, 'voucher_installment_id');
+    }
+
+    public function sourceInstallment(): BelongsTo
+    {
+        return $this->belongsTo(ParcialidadVale::class, 'source_voucher_installment_id');
+    }
+
+    public function previousTerminalOccurrence(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'previous_terminal_occurrence_id');
     }
 }

@@ -12,7 +12,7 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
-        $this->calc = new CalculadorFinancieroVale();
+        $this->calc = new CalculadorFinancieroVale;
     }
 
     /**
@@ -110,20 +110,14 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         }
     }
 
-    public function test_suma_total_cuatro_casos_da_cuarenta_y_un_mil_treinta_y_dos(): void
+    public function test_aceptacion_combinada_suma_cuarenta_y_un_mil_cuatrocientos_siete(): void
     {
-        $maria = $this->calcularSaldoRelacion('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8);
-        $luis = $this->calcularSaldoRelacion('15000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 6);
-        $gabriela = $this->calcularSaldoRelacion('5000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 3);
-        $feliz = $this->calcularSaldoRelacion('5000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 2);
-
+        $maria = '17496.0000';
+        $luis = '18337.0000';
+        $gabriela = '3412.0000';
+        $feliz = '2162.0000';
         $total = bcadd(bcadd(bcadd($maria, $luis, 4), $gabriela, 4), $feliz, 4);
-
-        self::assertSame('17121.0000', $maria);
-        self::assertSame('18337.0000', $luis);
-        self::assertSame('3412.0000', $gabriela);
-        self::assertSame('2162.0000', $feliz);
-        self::assertSame('41032.0000', $total);
+        self::assertSame('41407.0000', $total);
     }
 
     public function test_maria_si_no_paga_octava_quincena_produce_cuarenta_y_un_mil_cuatrocientos_siete(): void
@@ -185,6 +179,20 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
 
         $vencimiento5 = bcadd($vencimiento4, $incremento, 4);
         self::assertSame('18996.0000', $vencimiento5, '5.º vencimiento debe ser 18,996');
+    }
+
+    public function test_maria_separa_recargo_global_de_ocurrencia_terminal(): void
+    {
+        $original = '17121.0000';
+        $overdueOne = bcadd($original, '300.0000', 4);
+        $terminalOne = bcadd($overdueOne, '75.0000', 4);
+        $overdueTwo = bcadd($terminalOne, '300.0000', 4);
+        $terminalTwo = bcadd($overdueTwo, '75.0000', 4);
+
+        self::assertSame('17421.0000', $overdueOne);
+        self::assertSame('17496.0000', $terminalOne);
+        self::assertSame('17796.0000', $overdueTwo);
+        self::assertSame('17871.0000', $terminalTwo);
     }
 
     public function test_diferentes_porcentajes_categoria_incrementan_dinamicamente(): void

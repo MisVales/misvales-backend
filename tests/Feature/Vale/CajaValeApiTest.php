@@ -42,12 +42,15 @@ use App\Models\Vale;
 use App\Notifications\NotificacionEventoDominio;
 use App\Services\Cliente\ProtectorDatosCliente;
 use App\Services\Conciliacion\LectorXlsxBancario;
+use App\Services\Conciliacion\ServicioDisponibilidadConciliacion;
 use App\Services\Conciliacion\ServicioImportacionBancaria;
 use App\Services\Conciliacion\ServicioTransferenciasBancariasSimuladas;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Pago\ServicioAplicacionPago;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
 use App\Services\Relacion\ServicioGeneracionRelacion;
+use App\Services\Relacion\ServicioPdfEstadoCuenta;
+use App\Services\Relacion\ServicioSaldoValeRelacion;
 use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use App\Services\Vale\CalculadorFinancieroVale;
@@ -65,7 +68,6 @@ use Laravel\Sanctum\Sanctum;
 use OpenSpout\Common\Entity\Row;
 use OpenSpout\Writer\XLSX\Writer;
 use Tests\TestCase;
-use ZipArchive;
 
 final class CajaValeApiTest extends TestCase
 {
@@ -597,7 +599,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseCount('distributor_relation_items', 1);
     }
 
-    public function test_no_permite_nuevo_corte_hasta_procesar_conciliacion_anterior(): void
+    public function test_permite_nuevo_corte_y_acumula_conciliaciones_pendientes(): void
     {
         $this->travelTo(CarbonImmutable::parse('2026-08-29 12:00:00', 'America/Monterrey'));
         $this->voucher->update(['status' => 'CASHED', 'cashed_at' => now()]);
@@ -625,10 +627,20 @@ final class CajaValeApiTest extends TestCase
         ]);
 
         $runsBefore = DB::table('relation_process_runs')->count();
-        $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Debe bloquearse'])
-            ->assertStatus(409)
-            ->assertJsonPath('message', 'Antes de cerrar un nuevo corte, Caja debe subir y procesar la conciliación bancaria del periodo anterior.');
-        $this->assertSame($runsBefore, DB::table('relation_process_runs')->count());
+        $secondRunId = $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Continuar sin conciliación anterior'])
+            ->assertSuccessful()
+            ->json('data.process_run_id');
+        $this->assertSame($runsBefore + 1, DB::table('relation_process_runs')->count());
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'entity_id' => $secondRunId,
+            'event_name' => 'PaymentDeadlineExpired',
+            'new_value' => ['expired_at' => now()->addMonth()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+        $periods = app(ServicioDisponibilidadConciliacion::class)->periodosPendientes();
+        $this->assertSame([2, 1], array_column($periods, 'reconciliation_number'));
+        $this->assertSame([$secondRunId, $runId], array_column($periods, 'process_run_id'));
     }
 
     public function test_relacion_incluye_una_parcialidad_segun_fecha_limite(): void
@@ -968,6 +980,282 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame($originalItems, RelacionPartidaDistribuidora::query()->count());
     }
 
+    public function test_ocurrencia_terminal_maria_es_asterisco_ocho_de_ocho_e_idempotente(): void
+    {
+        $this->voucher->forceFill([
+            'fortnights_count' => 8,
+            'client_payment_per_fortnight' => '1887.0000',
+            'misvales_payment_per_fortnight' => '1812.0000',
+            'distributor_profit_per_fortnight' => '75.0000',
+        ])->save();
+        $this->materializarCalendario($this->voucher, '2026-04-01 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+        $service->generar($this->corteSeptiembre());
+        $original = RelacionDistribuidora::query()->firstOrFail();
+        $finalInstallment = $this->voucher->parcialidades()->where('number', 8)->firstOrFail();
+        $finalItem = $original->partidas()->firstOrFail();
+        $snapshot = $finalItem->snapshot;
+        $snapshot['installment'] = 8;
+        $snapshot['total_installments'] = 8;
+        $snapshot['base_payment'] = '1887.0000';
+        $snapshot['client_payment'] = '1887.0000';
+        $snapshot['misvales_payment'] = '1812.0000';
+        $snapshot['distributor_profit'] = '999.0000';
+        $finalItem->forceFill(['voucher_installment_id' => $finalInstallment->id, 'source_voucher_installment_id' => $finalInstallment->id, 'snapshot' => $snapshot, 'portfolio_amount' => '1887.0000', 'misvales_amount' => '1812.0000'])->save();
+        $this->voucher->parcialidades()->whereKeyNot($finalInstallment->id)->delete();
+        $original->forceFill([
+            'financial_status' => 'OVERDUE', 'carried_surcharge' => '2100.0000',
+            'carried_interest' => '8000.0000', 'carried_insurance' => '168.0000',
+            'carried_commission' => '1041.0000', 'carried_capital' => '4000.0000',
+            'carried_balance' => '15309.0000', 'surcharge_total' => '2400.0000',
+            'misvales_total' => '17121.0000', 'balance' => '17421.0000',
+        ])->save();
+        DB::table('relation_late_fees')->insert([
+            'id' => (string) Str::uuid(), 'relation_id' => $original->id, 'type' => 'LATE_FEE',
+            'amount' => '300.0000', 'applied_at' => now(), 'configuration_snapshot' => json_encode(['late_fee' => ['amount' => '300.0000']]),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->marcarCorteComoConciliado($original);
+
+        $nextCutoff = CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey');
+        self::assertSame(1, $service->generar($nextCutoff));
+        self::assertSame(0, $service->generar($nextCutoff));
+        $next = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        $terminal = $next->partidas()->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+
+        self::assertSame('17496.0000', $next->balance);
+        self::assertSame('TERMINAL_OVERDUE', $terminal->occurrence_type);
+        self::assertNull($terminal->voucher_installment_id);
+        self::assertSame($finalItem->voucher_installment_id, $terminal->source_voucher_installment_id);
+        self::assertSame(1, $terminal->terminal_sequence);
+        self::assertSame('75.0000', $terminal->snapshot['terminal_charge']);
+        self::assertSame('8', (string) $terminal->snapshot['installment']);
+        self::assertDatabaseCount('distributor_relation_items', 2);
+        self::assertDatabaseMissing('distributor_relation_items', ['snapshot->installment' => 9]);
+
+        $next->forceFill(['financial_status' => 'OVERDUE', 'surcharge_total' => '2700.0000', 'balance' => '17796.0000'])->save();
+        DB::table('relation_late_fees')->insert([
+            'id' => (string) Str::uuid(), 'relation_id' => $next->id, 'type' => 'LATE_FEE',
+            'amount' => '300.0000', 'applied_at' => now(), 'configuration_snapshot' => json_encode(['late_fee' => ['amount' => '300.0000']]),
+            'created_at' => now(), 'updated_at' => now(),
+        ]);
+        $this->marcarCorteComoConciliado($next);
+        $thirdCutoff = CarbonImmutable::parse('2026-11-25 00:05:00', 'America/Monterrey');
+        self::assertSame(1, $service->generar($thirdCutoff));
+        $third = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        $secondTerminal = $third->partidas()->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+        self::assertSame('17871.0000', $third->balance);
+        self::assertSame(2, $secondTerminal->terminal_sequence);
+        self::assertSame($terminal->id, $secondTerminal->previous_terminal_occurrence_id);
+        self::assertSame('75.0000', $secondTerminal->snapshot['terminal_charge']);
+        self::assertDatabaseCount('distributor_relation_items', 3);
+        self::assertDatabaseMissing('distributor_relation_items', ['snapshot->installment' => 9]);
+
+        Sanctum::actingAs($this->distributorUser);
+        $this->getJson('/api/v1/relations/'.$third->id)
+            ->assertSuccessful()
+            ->assertJsonPath('data.partidas.0.occurrence_type', 'TERMINAL_OVERDUE')
+            ->assertJsonPath('data.partidas.0.terminal_sequence', 2)
+            ->assertJsonPath('data.partidas.0.previous_terminal_occurrence_id', $terminal->id)
+            ->assertJsonPath('data.partidas.0.snapshot.installment', 8)
+            ->assertJsonPath('data.partidas.0.snapshot.total_installments', 8);
+    }
+
+    public function test_genera_y_repara_ocurrencia_terminal_aplicando_recargo_canonico_antes_del_rollover(): void
+    {
+        $this->voucher->forceFill([
+            'fortnights_count' => 8,
+            'client_payment_per_fortnight' => '1887.0000',
+            'misvales_payment_per_fortnight' => '1812.0000',
+            'distributor_profit_per_fortnight' => '75.0000',
+        ])->save();
+        $this->materializarCalendario($this->voucher, '2026-04-01 10:00:00', 8);
+        $service = app(ServicioGeneracionRelacion::class);
+        $service->generar($this->corteSeptiembre());
+        $original = RelacionDistribuidora::query()->firstOrFail();
+        $finalInstallment = $this->voucher->parcialidades()->where('number', 8)->firstOrFail();
+        $finalItem = $original->partidas()->firstOrFail();
+        $snapshot = array_merge($finalItem->snapshot, [
+            'installment' => 8,
+            'total_installments' => 8,
+            'base_payment' => '1887.0000',
+            'client_payment' => '1887.0000',
+            'misvales_payment' => '1812.0000',
+        ]);
+        $finalItem->forceFill([
+            'voucher_installment_id' => $finalInstallment->id,
+            'source_voucher_installment_id' => $finalInstallment->id,
+            'snapshot' => $snapshot,
+            'portfolio_amount' => '1887.0000',
+            'misvales_amount' => '1812.0000',
+        ])->save();
+        $this->voucher->parcialidades()->whereKeyNot($finalInstallment->id)->delete();
+        $original->forceFill([
+            'financial_status' => 'PENDING',
+            'carried_surcharge' => '2100.0000',
+            'carried_interest' => '8000.0000',
+            'carried_insurance' => '168.0000',
+            'carried_commission' => '1041.0000',
+            'carried_capital' => '4000.0000',
+            'carried_balance' => '15309.0000',
+            'surcharge_total' => '2100.0000',
+            'misvales_total' => '17121.0000',
+            'balance' => '17121.0000',
+        ])->save();
+        $this->assertDatabaseMissing('relation_late_fees', ['relation_id' => $original->id]);
+
+        $nextCutoff = CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey');
+        self::assertSame(1, $service->generar($nextCutoff));
+        $next = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        $terminal = $next->partidas()->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+        self::assertSame(1, $terminal->terminal_sequence);
+        self::assertSame('75.0000', $terminal->snapshot['terminal_charge']);
+        self::assertSame('17496.0000', $next->balance);
+
+        $terminal->delete();
+        $next->forceFill([
+            'portfolio_total' => bcsub((string) $next->portfolio_total, '75.0000', 4),
+            'misvales_total' => bcsub((string) $next->misvales_total, '75.0000', 4),
+            'balance' => bcsub((string) $next->balance, '75.0000', 4),
+        ])->save();
+
+        $this->artisan('relations:repair-terminal-occurrences', ['relation' => $next->id])
+            ->expectsOutputToContain('Reparación completada: 1 ocurrencia(s) terminal(es)')
+            ->assertSuccessful();
+        $this->artisan('relations:repair-terminal-occurrences', ['relation' => $next->id])
+            ->expectsOutput('La relación ya estaba reparada o no tiene ocurrencias terminales pendientes.')
+            ->assertSuccessful();
+
+        $next->refresh();
+        $terminal = $next->partidas()->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+        self::assertSame('17496.0000', $next->balance);
+        self::assertSame(1, $terminal->terminal_sequence);
+        self::assertNull($terminal->previous_terminal_occurrence_id);
+        self::assertDatabaseCount('distributor_relation_items', 2);
+
+        Sanctum::actingAs($this->distributorUser);
+        $this->getJson('/api/v1/relations/'.$next->id)
+            ->assertSuccessful()
+            ->assertJsonPath('data.partidas.0.occurrence_type', 'TERMINAL_OVERDUE')
+            ->assertJsonPath('data.partidas.0.terminal_sequence', 1)
+            ->assertJsonPath('data.partidas.0.previous_terminal_occurrence_id', null)
+            ->assertJsonPath('data.partidas.0.voucher_installment_id', null)
+            ->assertJsonPath('data.partidas.0.source_voucher_installment_id', $finalInstallment->id)
+            ->assertJsonPath('data.partidas.0.snapshot.is_terminal_overdue_cycle', true);
+    }
+
+    public function test_reproduce_toda_la_progresion_de_cuatro_vales_y_genera_segundo_terminal(): void
+    {
+        $maria = $this->valeEscenarioFinanciero('VAL-TABLA-MARIA', 'Maria', '2026-09-01 10:00:00', '1887.0000', '1812.0000', '75.0000', '1250.0000', '500.0000');
+        $luis = $this->valeEscenarioFinanciero('VAL-TABLA-LUIS', 'Luis', '2026-12-01 10:00:00', '2825.0000', '2712.0000', '113.0000', '1875.0000', '750.0000');
+        $gabriela = $this->valeEscenarioFinanciero('VAL-TABLA-GABRIELA', 'Gabriela', '2027-03-01 10:00:00', '950.0000', '912.0000', '38.0000', '625.0000', '250.0000');
+        $feliz = $this->valeEscenarioFinanciero('VAL-TABLA-FELIZ', 'Feliz', '2027-04-01 10:00:00', '950.0000', '912.0000', '38.0000', '625.0000', '250.0000');
+        $service = app(ServicioGeneracionRelacion::class);
+        $balances = app(ServicioSaldoValeRelacion::class);
+        $cutoffs = [
+            '2026-09-25 00:05:00', '2026-10-25 06:05:00', '2026-11-25 12:05:00',
+            '2026-12-25 18:05:00', '2027-01-26 00:05:00', '2027-02-26 06:05:00',
+            '2027-03-26 12:05:00', '2027-04-26 18:05:00', '2027-05-27 00:05:00',
+        ];
+        $expected = [
+            $maria->id => ['1812.0000', '3999.0000', '6186.0000', '8373.0000', '10560.0000', '12747.0000', '14934.0000', '17121.0000', '17496.0000'],
+            $luis->id => [3 => '2712.0000', 4 => '5837.0000', 5 => '8962.0000', 6 => '12087.0000', 7 => '15212.0000', 8 => '18337.0000'],
+            $gabriela->id => [6 => '912.0000', 7 => '2162.0000', 8 => '3412.0000'],
+            $feliz->id => [7 => '912.0000', 8 => '2162.0000'],
+        ];
+
+        foreach ($cutoffs as $index => $cutoff) {
+            self::assertSame(1, $service->generar(CarbonImmutable::parse($cutoff, 'America/Monterrey')));
+            $relation = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+            $positions = $balances->posiciones($relation);
+            foreach ($expected as $voucherId => $series) {
+                if (array_key_exists($index, $series)) {
+                    self::assertSame($series[$index], $positions[$voucherId]['balance'], "Saldo incorrecto para vale {$voucherId} en corte ".($index + 1));
+                }
+            }
+        }
+
+        $current = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        self::assertSame('PENDING', $current->financial_status);
+        self::assertSame('41407.0000', $current->misvales_total);
+        self::assertSame('41407.0000', $current->balance);
+        self::assertSame('4800.0000', $current->carried_surcharge);
+        self::assertSame('4800.0000', $current->surcharge_total);
+        $summaries = $balances->resumenes($current);
+        self::assertSame(
+            ['17496.0000', '18337.0000', '3412.0000', '2162.0000'],
+            collect($summaries)->pluck('cumulative_misvales_due')->all(),
+        );
+        self::assertSame('41407.0000', collect($summaries)->reduce(
+            fn (string $total, array $summary): string => bcadd($total, $summary['cumulative_misvales_due'], 4),
+            '0.0000',
+        ));
+        $mariaSummary = collect($summaries)->firstWhere('voucher_id', $maria->id);
+        self::assertSame('2400.0000', $mariaSummary['cumulative_surcharge']);
+        self::assertSame('525.0000', $mariaSummary['cumulative_forfeited_profit']);
+        self::assertSame(
+            ['1812.0000', '3999.0000', '6186.0000', '8373.0000', '10560.0000', '12747.0000', '14934.0000', '17121.0000', '17496.0000'],
+            collect($mariaSummary['occurrences'])->pluck('cumulative_misvales_due')->all(),
+        );
+        Sanctum::actingAs($this->distributorUser);
+        $this->getJson('/api/v1/relations/'.$current->id)
+            ->assertSuccessful()
+            ->assertJsonPath('data.voucher_balance_total', '41407.0000')
+            ->assertJsonPath('data.voucher_summaries.0.cumulative_misvales_due', '17496.0000')
+            ->assertJsonPath('data.voucher_summaries.1.cumulative_misvales_due', '18337.0000')
+            ->assertJsonPath('data.voucher_summaries.2.cumulative_misvales_due', '3412.0000')
+            ->assertJsonPath('data.voucher_summaries.3.cumulative_misvales_due', '2162.0000');
+        $firstTerminal = $current->partidas()->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+        self::assertSame(1, $firstTerminal->terminal_sequence);
+
+        $statementService = app(ServicioPdfEstadoCuenta::class);
+        $statement = $statementService->preparar($current->distribuidora);
+        self::assertCount(9, $statement['cuts']);
+        self::assertSame('43477.3500', $statement['general']['client_collection']);
+        self::assertSame('2070.3500', $statement['general']['commission']);
+        self::assertSame('41407.0000', $statement['general']['misvales_payment']);
+        self::assertSame('4800.0000', $statement['general']['surcharge']);
+        self::assertSame('41407.0000', $statement['general']['total']);
+        self::assertSame('41407.0000', $statement['general']['outstanding']);
+        self::assertSame('5000.0000', $statement['credit']['used']);
+        self::assertSame('41407.0000', collect($statement['cuts'])->last()['subtotal']['total']);
+        self::assertSame(range(1, 9), collect($statement['cuts'])->map(
+            fn (array $cut): int => collect($cut['clients'])->flatMap(fn (array $client) => $client['rows'])
+                ->where('folio', 'VAL-TABLA-MARIA')->count(),
+        )->all());
+        $mariaRows = collect($statement['cuts'])->last()['clients'];
+        $mariaRows = collect($mariaRows)->flatMap(fn (array $client) => $client['rows'])
+            ->where('folio', 'VAL-TABLA-MARIA')->values();
+        self::assertSame(['1/8', '2/8', '3/8', '4/8', '5/8', '6/8', '7/8', '8/8', '*8/8'], $mariaRows->pluck('installment')->all());
+        self::assertSame(
+            ['1812.0000', '3999.0000', '6186.0000', '8373.0000', '10560.0000', '12747.0000', '14934.0000', '17121.0000', '17496.0000'],
+            $mariaRows->pluck('cumulative_total')->all(),
+        );
+        self::assertSame(['90.6000', '199.9500', '309.3000', '418.6500', '528.0000', '637.3500', '746.7000', '856.0500', '874.8000'], $mariaRows->pluck('commission')->all());
+        self::assertSame('18370.8000', $mariaRows->last()['client_collection']);
+        self::assertSame(['Vencida', 'Vencida', 'Vencida', 'Vencida', 'Vencida', 'Vencida', 'Vencida', 'Vencida', 'Pendiente'], $mariaRows->pluck('status')->all());
+        $statementHtml = view('relations.account-statement', ['statement' => $statement, 'logo' => 'data:image/jpeg;base64,'])->render();
+        self::assertStringContainsString('CORTE 1', $statementHtml);
+        self::assertStringContainsString('Cliente: Maria', $statementHtml);
+        self::assertStringContainsString('*8/8', $statementHtml);
+        self::assertStringContainsString('Subtotal cliente Maria', $statementHtml);
+        self::assertStringContainsString('CORTE 9 · RESUMEN GENERAL', $statementHtml);
+        self::assertStringNotContainsString('<h2>TOTAL GENERAL</h2>', $statementHtml);
+        self::assertStringStartsWith('%PDF-', $statementService->generar($current->distribuidora));
+
+        self::assertSame(1, $service->generar(CarbonImmutable::parse('2027-06-27 06:05:00', 'America/Monterrey')));
+        $next = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        $secondTerminal = $next->partidas()->where('source_voucher_installment_id', $firstTerminal->source_voucher_installment_id)->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();
+        self::assertSame(2, $secondTerminal->terminal_sequence);
+        self::assertSame($firstTerminal->id, $secondTerminal->previous_terminal_occurrence_id);
+        self::assertSame('17871.0000', $balances->posiciones($next)[$maria->id]['balance']);
+        self::assertDatabaseMissing('distributor_relation_items', ['snapshot->installment' => 9]);
+        $nextStatement = $statementService->preparar($next->distribuidora);
+        $nextMariaRows = collect(collect($nextStatement['cuts'])->last()['clients'])
+            ->flatMap(fn (array $client) => $client['rows'])->where('folio', 'VAL-TABLA-MARIA');
+        self::assertSame('*8/8 sec. 2', $nextMariaRows->last()['installment']);
+    }
+
     public function test_pago_con_referencia_historica_se_aplica_a_relacion_vigente_y_primero_al_saldo_trasladado(): void
     {
         $this->materializarCalendario($this->voucher, '2026-08-29 10:00:00', 8);
@@ -992,6 +1280,24 @@ final class CajaValeApiTest extends TestCase
         $this->assertSame('50.0000', $payment->commission_applied);
         $this->assertSame('20.0000', $payment->capital_applied);
         $this->assertDatabaseCount('payment_allocations', 6);
+    }
+
+    public function test_estado_cuenta_marca_abono_y_separa_saldo_utilizado_de_deuda(): void
+    {
+        $relation = $this->createPaymentRelation();
+        app(ServicioAplicacionPago::class)->aplicarSaldoFavor(
+            '100.0000', now()->toImmutable(), $relation, (string) Str::uuid(),
+        );
+
+        $statement = app(ServicioPdfEstadoCuenta::class)->preparar($relation->distribuidora);
+        $lastCut = collect($statement['cuts'])->last();
+        $statuses = collect($lastCut['clients'])->flatMap(fn (array $client) => $client['rows'])->pluck('status');
+        $this->assertContains('Abono', $statuses);
+        $this->assertSame('100.0000', $lastCut['subtotal']['paid']);
+        $this->assertSame('2875.0000', $lastCut['subtotal']['total']);
+        $this->assertSame('143.7500', $lastCut['subtotal']['commission']);
+        $this->assertSame('5000.0000', $statement['credit']['used']);
+        $this->assertSame('2875.0000', $statement['general']['outstanding']);
     }
 
     public function test_vale_completamente_terminado_deja_de_aportar_parcialidades(): void
@@ -1047,6 +1353,11 @@ final class CajaValeApiTest extends TestCase
 
         $this->assertSame('SETTLED', $relation->fresh()->financial_status);
         $this->assertSame('ON_TIME', $relation->fresh()->temporal_classification);
+        $statement = app(ServicioPdfEstadoCuenta::class)->preparar($relation->distribuidora);
+        $lastCut = collect($statement['cuts'])->last();
+        $statuses = collect($lastCut['clients'])->flatMap(fn (array $client) => $client['rows'])->pluck('status')->unique()->values()->all();
+        $this->assertSame(['Liquidada'], $statuses);
+        $this->assertSame('0.0000', $lastCut['subtotal']['total']);
     }
 
     public function test_liquidacion_anticipada_acredita_puntos_por_capital_nuevo_y_trasladado(): void
@@ -1367,11 +1678,11 @@ final class CajaValeApiTest extends TestCase
         Sanctum::actingAs($this->user('general_manager'));
         $newRunId = $this->postIdempotent('/api/v1/operations/force-cutoff', ['motivo' => 'Reflejar pagos pendientes'])
             ->assertSuccessful()
-            ->assertJsonPath('data.relations_generated', 0)
+            ->assertJsonPath('data.relations_generated', 1)
             ->json('data.process_run_id');
 
         $this->assertNotNull($newRunId);
-        $this->assertDatabaseMissing('distributor_relations', ['process_run_id' => $newRunId]);
+        $this->assertDatabaseHas('distributor_relations', ['process_run_id' => $newRunId]);
         AuditLog::query()->create([
             'entity_type' => 'relation_process_run',
             'entity_id' => $newRunId,
@@ -1384,7 +1695,7 @@ final class CajaValeApiTest extends TestCase
         $this->getJson('/api/v1/bank-reconciliation-periods')
             ->assertSuccessful()
             ->assertJsonPath('data.0.process_run_id', $newRunId)
-            ->assertJsonPath('data.0.relations', 0);
+            ->assertJsonPath('data.0.relations', 1);
         $path = app(ServicioTransferenciasBancariasSimuladas::class)->exportar($this->branch->id, $newRunId);
         $rows = app(LectorXlsxBancario::class)->leer($path);
 
@@ -2257,6 +2568,35 @@ final class CajaValeApiTest extends TestCase
         return $vale;
     }
 
+    private function valeEscenarioFinanciero(string $folio, string $firstName, string $cashedAt, string $basePayment, string $misvalesPayment, string $profit, string $capital, string $interest): Vale
+    {
+        $vale = $this->clonarValeParaCliente($folio, $firstName);
+        $cashed = CarbonImmutable::parse($cashedAt, 'America/Monterrey');
+        $vale->forceFill([
+            'status' => EstadoVale::FERIADO,
+            'cashed_at' => $cashed,
+            'cashed_by' => $this->cashier->id,
+            'fortnights_count' => 8,
+            'client_payment_per_fortnight' => $basePayment,
+            'misvales_payment_per_fortnight' => $misvalesPayment,
+            'distributor_profit_per_fortnight' => $profit,
+        ])->save();
+        $vale->parcialidades()->createMany(collect(range(1, 8))->map(fn (int $number): array => [
+            'number' => $number,
+            'capital' => $capital,
+            'loan_commission' => bcsub($basePayment, bcadd(bcadd($capital, $interest, 4), $number === 8 && $firstName === 'Maria' ? '16.0000' : '12.0000', 4), 4),
+            'interest' => $interest,
+            'insurance' => $number === 8 && $firstName === 'Maria' ? '16.0000' : '12.0000',
+            'distributor_profit' => $profit,
+            'misvales_payment' => $misvalesPayment,
+            'client_payment' => $basePayment,
+            'due_at' => null,
+        ])->all());
+        app(ServicioCalendarioParcialidadesVale::class)->programar($vale, $cashed);
+
+        return $vale->refresh();
+    }
+
     private function pagarConciliarYCerrarCiclo(RelacionDistribuidora $relation, int $cycle, User $manager): void
     {
         Sanctum::actingAs($manager);
@@ -2412,27 +2752,6 @@ final class CajaValeApiTest extends TestCase
     private function xlsx(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
     {
         $path = tempnam(sys_get_temp_dir(), 'bank').'.xlsx';
-        $zip = new ZipArchive;
-        $zip->open($path, ZipArchive::CREATE);
-        $zip->addFromString('[Content_Types].xml', '<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/></Types>');
-        $all = array_merge([$headers], $rows);
-        $xml = '<?xml version="1.0"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData>';
-        foreach ($all as $ri => $row) {
-            $xml .= '<row r="'.($ri + 1).'">';
-            foreach (array_values($row) as $ci => $value) {
-                $col = chr(65 + $ci);
-                $xml .= '<c r="'.$col.($ri + 1).'" t="inlineStr"><is><t>'.htmlspecialchars((string) $value, ENT_XML1).'</t></is></c>';
-            }$xml .= '</row>';
-        }$xml .= '</sheetData></worksheet>';
-        $zip->addFromString('xl/worksheets/sheet1.xml', $xml);
-        $zip->close();
-
-        return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
-    }
-
-    private function xlsxValido(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
-    {
-        $path = tempnam(sys_get_temp_dir(), 'bank-valid').'.xlsx';
         $writer = new Writer;
         $writer->openToFile($path);
         $writer->addRow(Row::fromValues($headers));
@@ -2444,6 +2763,11 @@ final class CajaValeApiTest extends TestCase
         return new UploadedFile($path, 'banco.xlsx', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', null, true);
     }
 
+    private function xlsxValido(array $rows, array $headers = ['referencia de pago', 'monto', 'fecha', 'folio bancario', 'concepto']): UploadedFile
+    {
+        return $this->xlsx($rows, $headers);
+    }
+
     private function publishRelationConfiguration(): void
     {
         $values = [
@@ -2453,6 +2777,7 @@ final class CajaValeApiTest extends TestCase
             'PAYMENT_DAYS_AFTER_CUT' => ['INTEGER', 20],
             'PAYMENT_DEADLINE_TIME' => ['TIME', '23:59:59'],
             'RELATION_PAYMENT_BANK' => ['JSON', ['name' => 'Banco configurado', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-TEST', 'clabe' => '012345678901234567']],
+            'LATE_FEE_AMOUNT' => ['DECIMAL', '300.0000'],
             'BANK_UPLOAD_DEADLINE_TIME' => ['TIME', '08:00'],
             'POST_DUE_EVALUATION_TIME' => ['TIME', '08:30'],
         ];

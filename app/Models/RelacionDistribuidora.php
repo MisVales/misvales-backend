@@ -30,10 +30,10 @@ final class RelacionDistribuidora extends Model
         return $this->hasMany(RelacionPartidaDistribuidora::class, 'relation_id')
             ->orderBy(ParcialidadVale::query()
                 ->select('due_at')
-                ->whereColumn('voucher_installments.id', 'distributor_relation_items.voucher_installment_id'))
+                ->whereColumn('voucher_installments.id', 'distributor_relation_items.source_voucher_installment_id'))
             ->orderBy(ParcialidadVale::query()
                 ->select('number')
-                ->whereColumn('voucher_installments.id', 'distributor_relation_items.voucher_installment_id'));
+                ->whereColumn('voucher_installments.id', 'distributor_relation_items.source_voucher_installment_id'));
     }
 
     public function pagos(): HasMany
