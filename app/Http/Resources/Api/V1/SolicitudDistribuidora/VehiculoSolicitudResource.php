@@ -12,7 +12,7 @@ final class VehiculoSolicitudResource extends JsonResource
         return [
             'id' => $this->id, 'vehicle_type' => $this->vehicle_type, 'brand' => $this->brand,
             'model' => $this->model, 'model_year' => $this->model_year,
-            'ownership_status' => $this->ownership_status, 'details_payload' => $this->details_payload,
+            'ownership_status' => $this->ownership_status, 'details_payload' => $this->details_payload, 'has_evidence' => (bool) $this->has_evidence,
             'application_lock_version' => $this->when($this->application_lock_version !== null, $this->application_lock_version),
         ];
     }

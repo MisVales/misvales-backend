@@ -87,35 +87,71 @@ final class ServicioArchivosPrivados
 
     public function descargar(MediaFile $media, User $actor): StreamedResponse
     {
-        $binding = $media->bindings()->firstOrFail();
-        $authorized = $actor->hasPermissionTo('media.download_global') || $binding->created_by === $actor->id || $media->uploaded_by === $actor->id;
-        if (! $authorized && in_array($binding->purpose, ['IDENTIFICATION', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE'], true)) {
-            $applicationId = $this->applicationId($binding->owner_type, $binding->owner_id);
-            $authorized = $applicationId !== null && DB::table('verification_visits')
-                ->where('application_id', $applicationId)
-                ->where('verifier_id', $actor->id)
-                ->exists();
-            if (! $authorized && $applicationId !== null) {
-                $authorized = DB::table('distributor_applications')
-                    ->where('id', $applicationId)
-                    ->where('coordinator_id', $actor->id)
-                    ->exists();
+        $bindings = $media->bindings()->get();
+        abort_if($bindings->isEmpty(), 404);
+
+        $authorized = $actor->hasPermissionTo('media.download_global') || $media->uploaded_by === $actor->id || $bindings->contains('created_by', $actor->id);
+
+        if (! $authorized) {
+            foreach ($bindings as $binding) {
+                if (in_array($binding->purpose, ['IDENTIFICATION', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE', 'PHOTO', 'DOCUMENT'], true)) {
+                    $applicationId = $this->applicationId($binding->owner_type, $binding->owner_id)
+                        ?? ($binding->owner_type === 'distributor_application' ? $binding->owner_id : null);
+
+                    if ($applicationId !== null) {
+                        $isVerifier = DB::table('verification_visits')
+                            ->where('application_id', $applicationId)
+                            ->where('verifier_id', $actor->id)
+                            ->exists();
+                        $isCoordinator = DB::table('distributor_applications')
+                            ->where('id', $applicationId)
+                            ->where('coordinator_id', $actor->id)
+                            ->exists();
+
+                        if ($isVerifier || $isCoordinator) {
+                            $authorized = true;
+                            break;
+                        }
+                    }
+                }
+
+                if ($binding->owner_type === 'verification_visit') {
+                    $isVerifierOfVisit = DB::table('verification_visits')
+                        ->where('id', $binding->owner_id)
+                        ->where('verifier_id', $actor->id)
+                        ->exists();
+                    if ($isVerifierOfVisit) {
+                        $authorized = true;
+                        break;
+                    }
+                }
+
+                if ($binding->owner_type === 'surplus_refund_request' && $binding->purpose === 'REFUND_EVIDENCE') {
+                    $isDistributor = DB::table('surplus_refund_requests as refund')
+                        ->join('distributor_surpluses as surplus', 'surplus.id', '=', 'refund.surplus_id')
+                        ->join('distributors as distributor', 'distributor.id', '=', 'surplus.distributor_id')
+                        ->where('refund.id', $binding->owner_id)
+                        ->where('distributor.user_id', $actor->id)
+                        ->exists();
+                    if ($isDistributor) {
+                        $authorized = true;
+                        break;
+                    }
+                }
+
+                if ($actor->hasPermissionTo('media.download_branch')) {
+                    $branchId = $this->branchId($binding->owner_type, $binding->owner_id);
+                    if ($branchId !== null && $actor->hasScopeForBranch($branchId)) {
+                        $authorized = true;
+                        break;
+                    }
+                }
             }
         }
-        if (! $authorized && $binding->owner_type === 'surplus_refund_request' && $binding->purpose === 'REFUND_EVIDENCE') {
-            $authorized = DB::table('surplus_refund_requests as refund')
-                ->join('distributor_surpluses as surplus', 'surplus.id', '=', 'refund.surplus_id')
-                ->join('distributors as distributor', 'distributor.id', '=', 'surplus.distributor_id')
-                ->where('refund.id', $binding->owner_id)
-                ->where('distributor.user_id', $actor->id)
-                ->exists();
-        }
-        if (! $authorized && $actor->hasPermissionTo('media.download_branch')) {
-            $authorized = $this->branchId($binding->owner_type, $binding->owner_id) !== null && $actor->hasScopeForBranch($this->branchId($binding->owner_type, $binding->owner_id));
-        }
+
         abort_unless($authorized && $media->validation_status === 'VALIDATED', 403);
         abort_unless(Storage::disk($media->disk)->exists($media->path), 404);
-        AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, ['purpose' => $binding->purpose]);
+        AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, ['purposes' => $bindings->pluck('purpose')->all()]);
 
         return Storage::disk($media->disk)->download($media->path, $media->original_name, ['Content-Type' => $media->mime_type, 'Cache-Control' => 'private, no-store']);
     }

@@ -15,6 +15,7 @@ class FinalizarCorreccionesRequest extends FormRequest
     {
         return [
             'lock_version' => 'required|integer|min:1',
+            'force' => 'nullable|boolean',
         ];
     }
 }

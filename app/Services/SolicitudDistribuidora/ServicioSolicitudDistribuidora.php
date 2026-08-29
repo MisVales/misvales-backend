@@ -136,6 +136,14 @@ final class ServicioSolicitudDistribuidora
             ->get();
         $permitida->setRelation('declaredMediaFiles', $bindings->pluck('mediaFile')->filter()->unique('id')->values());
 
+        $evidenciaVehiculos = $bindings->where('owner_type', 'application_vehicle')->pluck('owner_id')->all();
+        $evidenciaPatrimonio = $bindings->where('owner_type', 'application_asset_liability')->pluck('owner_id')->all();
+        $evidenciaCreditos = $bindings->where('owner_type', 'application_commercial_credit')->pluck('owner_id')->all();
+
+        $permitida->vehiculos->each(fn (\Illuminate\Database\Eloquent\Model $r) => $r->setAttribute('has_evidence', in_array($r->getKey(), $evidenciaVehiculos, true)));
+        $permitida->patrimonio->each(fn (\Illuminate\Database\Eloquent\Model $r) => $r->setAttribute('has_evidence', in_array($r->getKey(), $evidenciaPatrimonio, true)));
+        $permitida->creditosComerciales->each(fn (\Illuminate\Database\Eloquent\Model $r) => $r->setAttribute('has_evidence', in_array($r->getKey(), $evidenciaCreditos, true)));
+
         return $permitida;
     }
 
@@ -436,6 +444,46 @@ final class ServicioSolicitudDistribuidora
 
             if ($registro->getAttribute('application_id') !== $bloqueada->id) {
                 throw new AuthorizationException('El registro no pertenece a la solicitud.');
+            }
+
+            $ownerType = match ($registro::class) {
+                VehiculoSolicitud::class => 'application_vehicle',
+                PatrimonioSolicitud::class => 'application_asset_liability',
+                CreditoComercialSolicitud::class => 'application_commercial_credit',
+                default => null,
+            };
+
+            if ($ownerType !== null) {
+                $bindingMediaIds = MediaFileBinding::query()
+                    ->where('owner_type', $ownerType)
+                    ->where('owner_id', $registro->getKey())
+                    ->pluck('media_file_id');
+
+                MediaFileBinding::query()
+                    ->where('owner_type', $ownerType)
+                    ->where('owner_id', $registro->getKey())
+                    ->delete();
+
+                foreach ($bindingMediaIds as $mediaId) {
+                    $hasOther = MediaFileBinding::query()
+                        ->where('media_file_id', $mediaId)
+                        ->where('owner_type', '<>', 'distributor_application')
+                        ->exists();
+
+                    if (! $hasOther) {
+                        MediaFileBinding::query()
+                            ->where('media_file_id', $mediaId)
+                            ->where('owner_type', 'distributor_application')
+                            ->where('owner_id', $bloqueada->id)
+                            ->delete();
+
+                        $media = MediaFile::find($mediaId);
+                        if ($media) {
+                            Storage::disk($media->disk)->delete($media->path);
+                            $media->delete();
+                        }
+                    }
+                }
             }
 
             $registro->delete();

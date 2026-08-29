@@ -35,6 +35,8 @@ class CorreccionSolicitudController extends Controller
             (int) $data['lock_version'],
             $data['record_id'] ?? null,
             (int) ($data['difference_index'] ?? 0),
+            $data['new_value'] ?? null,
+            $data['reason'] ?? null,
         );
 
         return (new ApplicationCorrectionResource($correction))->additional(['message' => 'Corrección aplicada.']);
@@ -43,7 +45,8 @@ class CorreccionSolicitudController extends Controller
     public function finalizarCorrecciones(FinalizarCorreccionesRequest $request, string $applicationId)
     {
         $data = $request->validated();
-        $this->correccionService->finalizarCorrecciones($applicationId, auth()->id(), (int) $data['lock_version']);
+        $force = (bool) ($data['force'] ?? false);
+        $this->correccionService->finalizarCorrecciones($applicationId, auth()->id(), (int) $data['lock_version'], $force);
 
         return response()->json(['message' => 'Etapa de correcciones finalizada.'], 200);
     }

@@ -12,7 +12,7 @@ final class CreditoComercialSolicitudResource extends JsonResource
         return [
             'id' => $this->id, 'company_name' => $this->company_name,
             'credit_limit' => $this->credit_limit, 'is_current' => $this->is_current,
-            'proof_reference' => $this->proof_reference, 'details_payload' => $this->details_payload,
+            'proof_reference' => $this->proof_reference, 'details_payload' => $this->details_payload, 'has_evidence' => (bool) $this->has_evidence,
             'application_lock_version' => $this->when($this->application_lock_version !== null, $this->application_lock_version),
         ];
     }
