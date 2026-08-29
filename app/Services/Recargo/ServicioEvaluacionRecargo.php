@@ -54,11 +54,37 @@ final class ServicioEvaluacionRecargo
             }
 
             DB::transaction(function () use ($relation, $now, $config, &$result) {
-                $created = DB::table('relation_late_fees')->insertOrIgnore(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'type' => 'LATE_FEE', 'amount' => $config['amount'], 'applied_at' => $now, 'configuration_snapshot' => json_encode($config), 'created_at' => now(), 'updated_at' => now()]);
+                // Calcular el recargo sumando late_fee_amount de cada parcialidad ligada a su producto
+                $lateFeeTotal = '0.0000';
+                $lateFeeDetail = [];
+
+                $partidas = $relation->partidas()->with('installment.vale.product')->get();
+                foreach ($partidas as $partida) {
+                    $producto = $partida->installment?->vale?->product;
+                    if ($producto && ! is_null($producto->late_fee_amount)) {
+                        $lateFeeTotal = bcadd($lateFeeTotal, (string) $producto->late_fee_amount, 4);
+                        $lateFeeDetail[] = [
+                            'relation_item_id' => $partida->id,
+                            'product_id' => $producto->id,
+                            'late_fee_amount' => (string) $producto->late_fee_amount,
+                        ];
+                    }
+                }
+
+                if (bccomp($lateFeeTotal, '0', 4) <= 0) {
+                    return;
+                }
+
+                $snapshot = array_merge(
+                    $config,
+                    ['late_fee_detail' => $lateFeeDetail, 'total_late_fee' => $lateFeeTotal],
+                );
+
+                $created = DB::table('relation_late_fees')->insertOrIgnore(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'type' => 'LATE_FEE', 'amount' => $lateFeeTotal, 'applied_at' => $now, 'configuration_snapshot' => json_encode($snapshot), 'created_at' => now(), 'updated_at' => now()]);
                 if ($created) {
                     $locked = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
-                    $locked->surcharge_total = bcadd($locked->surcharge_total, $config['amount'], 4);
-                    $locked->balance = bcadd($locked->balance, $config['amount'], 4);
+                    $locked->surcharge_total = bcadd($locked->surcharge_total, $lateFeeTotal, 4);
+                    $locked->balance = bcadd($locked->balance, $lateFeeTotal, 4);
                     $locked->financial_status = 'OVERDUE';
                     $locked->save();
                     $result['applied']++;
