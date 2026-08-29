@@ -15,6 +15,11 @@ class Product extends Model
     protected $fillable = [
         'code',
         'status',
+        'loan_commission_percentage',
+        'simple_interest_percentage',
+        'insurance_amount',
+        'fortnights_count',
+        'late_fee_amount',
         'lock_version',
         'created_by',
         'updated_by',
@@ -22,6 +27,11 @@ class Product extends Model
 
     protected $casts = [
         'status' => BaseStatus::class,
+        'loan_commission_percentage' => 'decimal:6',
+        'simple_interest_percentage' => 'decimal:6',
+        'insurance_amount' => 'decimal:4',
+        'fortnights_count' => 'integer',
+        'late_fee_amount' => 'decimal:4',
     ];
 
     public function versions()
