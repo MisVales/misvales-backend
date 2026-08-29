@@ -15,10 +15,21 @@ use App\Http\Resources\Configuracion\ConfiguracionVersionResource;
 use App\Models\ConfigurationDefinition;
 use App\Models\ConfigurationVersion;
 use App\Services\ConfiguracionServicio;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\ValidationException;
 
 class ConfiguracionController extends Controller
 {
+    private const FINANCIAL_PRODUCT_KEYS = [
+        'LOAN_COMMISSION_PERCENTAGE',
+        'INTEREST_RATE_PER_FORTNIGHT',
+        'VOUCHER_INSURANCE_AMOUNT',
+        'VOUCHER_MIN_FORTNIGHTS_COUNT',
+        'VOUCHER_MAX_FORTNIGHTS_COUNT',
+        'LATE_FEE_AMOUNT',
+    ];
+
     public function __construct(private ConfiguracionServicio $servicio) {}
 
     public function index()
@@ -34,6 +45,7 @@ class ConfiguracionController extends Controller
                 ->latest('effective_from');
         }])
             ->where('status', BaseStatus::ACTIVE)
+            ->whereNotIn('key', self::FINANCIAL_PRODUCT_KEYS)
             ->get();
 
         return ConfiguracionResource::collection($configuraciones);
@@ -42,8 +54,10 @@ class ConfiguracionController extends Controller
     public function store(CrearConfiguracionRequest $request)
     {
         Gate::authorize('create', ConfigurationDefinition::class);
+        $datos = $request->validated();
+        $this->rechazarConfiguracionFinancieraRetirada($datos['key']);
         $configuracion = $this->servicio->crearConfiguracion(
-            $request->validated(),
+            $datos,
             $request->user()->id
         );
 
@@ -60,32 +74,36 @@ class ConfiguracionController extends Controller
                         ->orWhere('effective_to', '>', now());
                 })
                 ->latest('effective_from');
-        }])
-            ->where('key', $key)
+        }])->where('key', $key)
             ->where('status', BaseStatus::ACTIVE)
+            ->whereNotIn('key', self::FINANCIAL_PRODUCT_KEYS)
             ->firstOrFail();
         Gate::authorize('view', $configuracion);
 
         return new ConfiguracionResource($configuracion);
     }
 
-    public function getVersionsByKey(string $key)
+    public function getVersionsByKey(Request $request, string $key)
     {
-        $configuracion = ConfigurationDefinition::query()
-            ->where('key', $key)
-            ->where('status', BaseStatus::ACTIVE)
-            ->firstOrFail();
+        $configuracion = $this->buscarConfiguracionActiva($key);
         Gate::authorize('view', $configuracion);
 
-        return ConfiguracionVersionResource::collection($configuracion->versions()->orderByDesc('version')->get());
+        $versions = $configuracion->versions()->orderByDesc('version');
+        if (! $request->user()->hasPermissionTo('catalogs.view_history')) {
+            $versions
+                ->where('status', VersionStatus::PUBLISHED)
+                ->where('effective_from', '<=', now())
+                ->where(function ($query): void {
+                    $query->whereNull('effective_to')->orWhere('effective_to', '>', now());
+                });
+        }
+
+        return ConfiguracionVersionResource::collection($versions->get());
     }
 
     public function storeVersionByKey(CrearVersionRequest $request, string $key)
     {
-        $configuracion = ConfigurationDefinition::query()
-            ->where('key', $key)
-            ->where('status', BaseStatus::ACTIVE)
-            ->firstOrFail();
+        $configuracion = $this->buscarConfiguracionActiva($key);
         Gate::authorize('update', $configuracion);
         $version = $this->servicio->crearVersion(
             $configuracion,
@@ -98,10 +116,7 @@ class ConfiguracionController extends Controller
 
     public function updateCurrent(ActualizarConfiguracionActualRequest $request, string $key)
     {
-        $configuracion = ConfigurationDefinition::query()
-            ->where('key', $key)
-            ->where('status', BaseStatus::ACTIVE)
-            ->firstOrFail();
+        $configuracion = $this->buscarConfiguracionActiva($key);
         Gate::authorize('update', $configuracion);
 
         $actualizada = $this->servicio->actualizarValorActual(
@@ -160,8 +175,30 @@ class ConfiguracionController extends Controller
     {
         return ConfigurationVersion::query()
             ->with('definition')
-            ->whereHas('definition', fn ($query) => $query->where('status', BaseStatus::ACTIVE))
+            ->whereHas('definition', fn ($query) => $query
+                ->where('status', BaseStatus::ACTIVE)
+                ->whereNotIn('key', self::FINANCIAL_PRODUCT_KEYS))
             ->findOrFail($id);
+    }
+
+    private function buscarConfiguracionActiva(string $key): ConfigurationDefinition
+    {
+        return ConfigurationDefinition::query()
+            ->where('key', $key)
+            ->where('status', BaseStatus::ACTIVE)
+            ->whereNotIn('key', self::FINANCIAL_PRODUCT_KEYS)
+            ->firstOrFail();
+    }
+
+    private function rechazarConfiguracionFinancieraRetirada(string $key): void
+    {
+        if (! in_array($key, self::FINANCIAL_PRODUCT_KEYS, true)) {
+            return;
+        }
+
+        throw ValidationException::withMessages([
+            'key' => 'Esta condición financiera se configura por producto y no puede crearse como configuración global.',
+        ]);
     }
 
 }

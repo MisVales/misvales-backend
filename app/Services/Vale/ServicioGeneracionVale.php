@@ -3,11 +3,13 @@
 namespace App\Services\Vale;
 
 use App\Contracts\Credito\VerificadorDisponibilidadCredito;
+use App\Enums\BaseStatus;
 use App\Enums\EstadoDistribuidora;
 use App\Enums\EstadoRestriccionUsoCredito;
 use App\Enums\EstadoVale;
 use App\Enums\TipoMovimientoLineaCredito;
 use App\Enums\TipoVale;
+use App\Enums\VersionStatus;
 use App\Exceptions\ExcepcionVale;
 use App\Helpers\AuditHelper;
 use App\Models\AsignacionCategoriaDistribuidora;
@@ -23,6 +25,7 @@ use App\Models\ProductVersion;
 use App\Models\RestriccionUsoCredito;
 use App\Models\User;
 use App\Models\Vale;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 
@@ -92,14 +95,26 @@ final class ServicioGeneracionVale
             return collect();
         }
 
-        $disponibilidad = $this->credito->evaluar($distribuidora->id, '0.0000');
+        try {
+            // No se muestra un producto si la distribuidora no puede emitirlo.
+            $categoria = $this->resolverCategoriaVigente($distribuidora);
+            $disponibilidad = $this->credito->evaluar($distribuidora->id, '0.0000');
+        } catch (ExcepcionVale|ModelNotFoundException) {
+            return collect();
+        }
 
         return ProductVersion::query()
             ->with('product')
             ->where('status', 'PUBLISHED')
             ->where('effective_from', '<=', now())
             ->where(fn ($query) => $query->whereNull('effective_to')->orWhere('effective_to', '>', now()))
-            ->whereHas('product', fn ($query) => $query->where('status', 'ACTIVE'))
+            ->whereNotNull('loan_commission_percentage')
+            ->whereNotNull('simple_interest_percentage')
+            ->whereNotNull('insurance_amount')
+            ->whereNotNull('fortnights_count')
+            ->whereNotNull('late_fee_amount')
+            ->whereHas('product', fn ($query) => $query
+                ->where('status', 'ACTIVE'))
             ->where('nominal_amount', '<=', $disponibilidad->available_balance)
             ->when(
                 $disponibilidad->has_active_restriction,
@@ -109,6 +124,7 @@ final class ServicioGeneracionVale
             )
             ->orderBy('nominal_amount')
             ->get()
+            ->filter(fn (ProductVersion $version): bool => $this->productoEsSolicitable($version, $distribuidora->id, (string) $categoria->profit_percentage))
             ->values();
     }
 
@@ -242,13 +258,13 @@ final class ServicioGeneracionVale
         $versionProducto = ProductVersion::query()->with('product')->whereKey($versionProductoId)
             ->where('status', 'PUBLISHED')->where('effective_from', '<=', now())
             ->where(fn ($consulta) => $consulta->whereNull('effective_to')->orWhere('effective_to', '>', now()))->first();
-        if (! $versionProducto || $versionProducto->product->status->value !== 'ACTIVE') {
+        if (! $versionProducto || $versionProducto->product?->status !== BaseStatus::ACTIVE) {
             throw new ExcepcionVale('PRODUCT_NOT_AVAILABLE', 'El producto no está activo y publicado.', 409);
         }
 
         $categoria = $this->resolverCategoriaVigente($distribuidora);
 
-        $valoresProducto = $this->configuracionFinanciera->resolver($versionProducto->product)['values'];
+        $valoresProducto = $this->configuracionFinanciera->resolver($versionProducto)['values'];
         $condiciones = [
             'commission_rate' => $valoresProducto['loan_commission_percentage'],
             'interest_rate' => $valoresProducto['simple_interest_percentage'],
@@ -278,14 +294,41 @@ final class ServicioGeneracionVale
 
     private function resolverCategoriaVigente(Distribuidora $distribuidora): CategoryVersion
     {
-        $asignacionCategoria = AsignacionCategoriaDistribuidora::query()->with('versionCategoria')
+        $asignacionCategoria = AsignacionCategoriaDistribuidora::query()->with('versionCategoria.category')
             ->where('distributor_id', $distribuidora->id)->where('starts_at', '<=', now())
             ->where(fn ($consulta) => $consulta->whereNull('ends_at')->orWhere('ends_at', '>', now()))->latest('starts_at')->first();
-        if (! $asignacionCategoria || $asignacionCategoria->versionCategoria->status->value !== 'PUBLISHED') {
+        $version = $asignacionCategoria?->versionCategoria;
+        if (! $version
+            || $version->status !== VersionStatus::PUBLISHED
+            || $version->category?->status !== BaseStatus::ACTIVE
+            || $version->effective_from === null
+            || $version->effective_from->isFuture()
+            || ($version->effective_to !== null && ! $version->effective_to->isFuture())) {
             throw new ExcepcionVale('DISTRIBUTOR_CATEGORY_NOT_AVAILABLE', 'La distribuidora no tiene una categoría publicada vigente.', 409);
         }
 
-        return $asignacionCategoria->versionCategoria;
+        return $version;
+    }
+
+    private function productoEsSolicitable(ProductVersion $version, string $distribuidoraId, string $categoryRate): bool
+    {
+        try {
+            $valores = $this->configuracionFinanciera->resolver($version)['values'];
+            $calculo = $this->calculador->calcular(
+                (string) $version->nominal_amount,
+                $valores['loan_commission_percentage'],
+                $valores['simple_interest_percentage'],
+                $valores['fortnights_count'],
+                $valores['insurance_amount'],
+                $categoryRate,
+            );
+            $disponibilidad = $this->credito->evaluar($distribuidoraId, $calculo['capital']);
+
+            return $disponibilidad->capital_is_available
+                && $disponibilidad->capital_satisfies_restriction;
+        } catch (ExcepcionVale|ModelNotFoundException|\InvalidArgumentException) {
+            return false;
+        }
     }
 
     private function resolverDistribuidoraActiva(User $actor): Distribuidora
@@ -317,8 +360,6 @@ final class ServicioGeneracionVale
                 'interest_rate' => $condiciones['interest_rate'],
                 'insurance_amount' => $condiciones['insurance_amount'],
                 'installment_count' => $condiciones['installment_count'],
-                'minimum_installment_count' => $condiciones['minimum_installment_count'],
-                'maximum_installment_count' => $condiciones['maximum_installment_count'],
                 'category_rate' => $condiciones['category_rate'],
                 'late_fee_amount' => $condiciones['late_fee_amount'],
             ],

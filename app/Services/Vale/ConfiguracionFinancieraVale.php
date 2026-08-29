@@ -4,6 +4,7 @@ namespace App\Services\Vale;
 
 use App\Exceptions\ExcepcionVale;
 use App\Models\Product;
+use App\Models\ProductVersion;
 
 final class ConfiguracionFinancieraVale
 {
@@ -14,7 +15,7 @@ final class ConfiguracionFinancieraVale
      *     values: array{loan_commission_percentage: string, simple_interest_percentage: string, insurance_amount: string, fortnights_count: int, late_fee_amount: string},
      * }
      */
-    public function resolver(Product $product): array
+    public function resolver(Product|ProductVersion $product): array
     {
         $faltantes = [];
 
@@ -89,4 +90,3 @@ final class ConfiguracionFinancieraVale
         return (int) $valor;
     }
 }
-

@@ -2,58 +2,45 @@
 
 namespace Tests\Unit\Vale;
 
-use App\Exceptions\BusinessException;
 use App\Exceptions\ExcepcionVale;
-use App\Services\ConfiguracionServicio;
+use App\Models\Product;
 use App\Services\Vale\ConfiguracionFinancieraVale;
 use PHPUnit\Framework\TestCase;
 
 final class ConfiguracionFinancieraValeTest extends TestCase
 {
-    public function test_resuelve_y_normaliza_las_condiciones_financieras_publicadas(): void
+    public function test_resuelve_y_normaliza_las_condiciones_del_producto(): void
     {
-        $servicio = $this->createMock(ConfiguracionServicio::class);
-        $servicio->method('resolver')->willReturnCallback(fn (string $key): array => match ($key) {
-            'LOAN_COMMISSION_PERCENTAGE' => $this->configuracion($key, 'PERCENTAGE', '0.1'),
-            'INTEREST_RATE_PER_FORTNIGHT' => $this->configuracion($key, 'PERCENTAGE', '0.05'),
-            'VOUCHER_INSURANCE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '100'),
-            'VOUCHER_MIN_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 2),
-            'VOUCHER_MAX_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 16),
-            'LATE_FEE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '200'),
-        });
+        $producto = new Product([
+            'loan_commission_percentage' => '0.1',
+            'simple_interest_percentage' => '0.05',
+            'insurance_amount' => '100',
+            'fortnights_count' => 8,
+            'late_fee_amount' => '200',
+        ]);
 
-        $resultado = (new ConfiguracionFinancieraVale($servicio))->resolver();
+        $resultado = (new ConfiguracionFinancieraVale)->resolver($producto);
 
         self::assertSame([
             'loan_commission_percentage' => '0.100000',
             'simple_interest_percentage' => '0.050000',
             'insurance_amount' => '100.0000',
-            'minimum_installment_count' => 2,
-            'maximum_installment_count' => 16,
+            'fortnights_count' => 8,
             'late_fee_amount' => '200.0000',
         ], $resultado['values']);
-        self::assertSame(1, $resultado['versions']['LOAN_COMMISSION_PERCENTAGE']['version']);
     }
 
-    public function test_rechaza_la_emision_cuando_falta_publicar_una_condicion(): void
+    public function test_rechaza_la_emision_cuando_al_producto_le_falta_una_condicion(): void
     {
-        $servicio = $this->createMock(ConfiguracionServicio::class);
-        $servicio->method('resolver')->willReturnCallback(function (string $key): array {
-            if ($key === 'VOUCHER_INSURANCE_AMOUNT') {
-                throw new BusinessException('CONFIGURATION_NOT_FOUND', 'No existe configuración.', 404);
-            }
-
-            return match ($key) {
-                'LOAN_COMMISSION_PERCENTAGE' => $this->configuracion($key, 'PERCENTAGE', '0.1'),
-                'INTEREST_RATE_PER_FORTNIGHT' => $this->configuracion($key, 'PERCENTAGE', '0.05'),
-                'VOUCHER_MIN_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 2),
-                'VOUCHER_MAX_FORTNIGHTS_COUNT' => $this->configuracion($key, 'INTEGER', 16),
-                'LATE_FEE_AMOUNT' => $this->configuracion($key, 'DECIMAL', '200'),
-            };
-        });
+        $producto = new Product([
+            'loan_commission_percentage' => '0.1',
+            'simple_interest_percentage' => '0.05',
+            'fortnights_count' => 8,
+            'late_fee_amount' => '200',
+        ]);
 
         try {
-            (new ConfiguracionFinancieraVale($servicio))->resolver();
+            (new ConfiguracionFinancieraVale)->resolver($producto);
             self::fail('Se esperaba una excepción de configuración faltante.');
         } catch (ExcepcionVale $exception) {
             self::assertSame('VOUCHER_FINANCIAL_CONFIGURATION_MISSING', $exception->errorCode);
@@ -61,14 +48,21 @@ final class ConfiguracionFinancieraValeTest extends TestCase
         }
     }
 
-    /** @return array{version_id: string, version: int, type: string, value: string|int} */
-    private function configuracion(string $key, string $type, string|int $value): array
+    public function test_rechaza_un_valor_financiero_invalido_del_producto(): void
     {
-        return [
-            'version_id' => $key.'-version',
-            'version' => 1,
-            'type' => $type,
-            'value' => $value,
-        ];
+        $producto = new Product([
+            'loan_commission_percentage' => '1.1',
+            'simple_interest_percentage' => '0.05',
+            'insurance_amount' => '100',
+            'fortnights_count' => 8,
+            'late_fee_amount' => '200',
+        ]);
+
+        try {
+            (new ConfiguracionFinancieraVale)->resolver($producto);
+            self::fail('Se esperaba una excepción por valor financiero inválido.');
+        } catch (ExcepcionVale $exception) {
+            self::assertSame('VOUCHER_FINANCIAL_CONFIGURATION_INVALID', $exception->errorCode);
+        }
     }
 }

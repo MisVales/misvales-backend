@@ -16,15 +16,15 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 final class ServicioArchivosPrivados
 {
     private const PURPOSES = [
-        'PHOTO' => ['jpg', 'jpeg', 'png', 'webp'],
-        'IDENTIFICATION' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
-        'ADDRESS_PROOF' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
-        'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'pdf'],
-        'ASSET_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'pdf'],
-        'COMMERCIAL_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'pdf'],
-        'RECEIPT' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
-        'CLARIFICATION' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
-        'REFUND_EVIDENCE' => ['jpg', 'jpeg', 'png', 'webp', 'pdf'],
+        'PHOTO' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif'],
+        'IDENTIFICATION' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'ADDRESS_PROOF' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'ASSET_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'COMMERCIAL_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'RECEIPT' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'CLARIFICATION' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
+        'REFUND_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
         'BANK_XLSX' => ['xlsx'],
         'GENERATED_DOCUMENT' => ['pdf'],
     ];
@@ -56,9 +56,25 @@ final class ServicioArchivosPrivados
         $clientExtension = strtolower($file->getClientOriginalExtension());
         $mime = $file->getMimeType() ?: 'application/octet-stream';
         $extension = $this->canonicalExtension($mime);
-        $requiresMatchingClientExtension = $extension === 'xlsx';
-        if ($extension === null || ! in_array($extension, self::PURPOSES[$purpose], true) || ($requiresMatchingClientExtension && $clientExtension !== 'xlsx') || $file->getSize() <= 0 || $file->getSize() > 15 * 1024 * 1024) {
-            throw ValidationException::withMessages(['file' => ['Extensión, MIME real o tamaño inválido.']]);
+        $extensionAliases = ['jpeg' => 'jpg', 'jfif' => 'jpg', 'tif' => 'tiff'];
+        $normalizedClientExtension = $extensionAliases[$clientExtension] ?? $clientExtension;
+        $allowedExtensions = implode(', ', array_map(static fn (string $value): string => '.'.$value, self::PURPOSES[$purpose]));
+        $maxBytes = $purpose === 'BANK_XLSX' ? 10 * 1024 * 1024 : 15 * 1024 * 1024;
+
+        if (! $file->getSize() || $file->getSize() <= 0) {
+            throw ValidationException::withMessages(['file' => ['El archivo está vacío.']]);
+        }
+        if ($file->getSize() > $maxBytes) {
+            throw ValidationException::withMessages(['file' => ['Archivo demasiado grande. El tamaño máximo es '.($maxBytes / 1024 / 1024).' MB.']]);
+        }
+        if ($extension === null || ! in_array($extension, self::PURPOSES[$purpose], true)) {
+            throw ValidationException::withMessages(['file' => ['Archivo inválido. Solo se aceptan: '.$allowedExtensions.'.']]);
+        }
+        if ($normalizedClientExtension !== $extension) {
+            throw ValidationException::withMessages(['file' => ['La extensión del archivo no coincide con su tipo real. Solo se aceptan: '.$allowedExtensions.'.']]);
+        }
+        if ($extension === 'xlsx') {
+            $this->validarLibroXlsx($file);
         }
         $hash = hash_file('sha256', $file->getRealPath());
 
@@ -159,7 +175,7 @@ final class ServicioArchivosPrivados
     private function branchId(string $ownerType, string $ownerId): ?string
     {
         [$table, $column] = match ($ownerType) {
-            'verification_visit' => ['verification_visits', 'branch_id'],
+            'verification_visit' => ['verification_visits', 'application_id'],
             'client' => ['client_distributor_assignments', 'branch_id'],
             'payment_clarification' => ['payment_clarifications', 'relation_id'],
             'surplus_refund_request' => ['surplus_refund_requests', 'branch_id'],
@@ -184,7 +200,7 @@ final class ServicioArchivosPrivados
         if ($ownerType === 'payment_clarification' && $value) {
             return DB::table('distributor_relations')->where('id', $value)->value('branch_id');
         }
-        if (in_array($ownerType, ['application_vehicle', 'application_asset_liability', 'application_commercial_credit'], true) && $value) {
+        if (in_array($ownerType, ['verification_visit', 'application_vehicle', 'application_asset_liability', 'application_commercial_credit'], true) && $value) {
             return DB::table('distributor_applications')->where('id', $value)->value('branch_id');
         }
 
@@ -194,18 +210,40 @@ final class ServicioArchivosPrivados
     private function canonicalExtension(string $mime): ?string
     {
         return match ($mime) {
-            'image/jpeg', 'image/jpg', 'image/pjpeg' => 'jpg',
+            'image/jpeg', 'image/jpg', 'image/pjpeg', 'image/jfif' => 'jpg',
             'image/png', 'image/x-png' => 'png',
             'image/webp' => 'webp',
             'image/gif' => 'gif',
             'image/bmp', 'image/x-bmp', 'image/x-ms-bmp' => 'bmp',
-            'image/tiff' => 'tiff',
+            'image/tiff', 'image/tif', 'image/x-tiff' => 'tiff',
             'image/heic' => 'heic',
             'image/heif' => 'heif',
+            'image/avif' => 'avif',
             'application/pdf' => 'pdf',
             'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', 'application/zip' => 'xlsx',
             default => null,
         };
+    }
+
+    private function validarLibroXlsx(UploadedFile $file): void
+    {
+        $zip = new \ZipArchive;
+        $resultado = $zip->open($file->getRealPath());
+        $contentTypes = $resultado === true ? $zip->getFromName('[Content_Types].xml') : false;
+        $esLibro = $resultado === true
+            && is_string($contentTypes)
+            && str_contains($contentTypes, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml')
+            && $zip->locateName('xl/workbook.xml') !== false
+            && $zip->locateName('xl/worksheets/sheet1.xml') !== false;
+        if ($resultado === true) {
+            $zip->close();
+        }
+
+        if (! $esLibro) {
+            throw ValidationException::withMessages([
+                'file' => ['Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.'],
+            ]);
+        }
     }
 
     private function applicationId(string $ownerType, string $ownerId): ?string

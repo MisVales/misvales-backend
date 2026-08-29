@@ -10,11 +10,15 @@ use App\Models\User;
 use App\Services\Auth\SessionPolicyService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 final class LocalAccountSwitchController extends Controller
 {
+    private const REFRESH_COOKIE = 'misvales_refresh';
+
     private const DEMO_ROLES = [
         'admin',
         'general_manager',
@@ -107,7 +111,7 @@ final class LocalAccountSwitchController extends Controller
             $token->accessToken->expires_at = now()->addMinutes($policy['access_token']);
             $token->accessToken->save();
 
-            AuthSession::query()->create([
+            $session = AuthSession::query()->create([
                 'user_id' => $target->id,
                 'session_identifier_hash' => (string) $token->accessToken->getRawOriginal('token'),
                 'authentication_method' => 'LOCAL_ACCOUNT_SWITCH',
@@ -120,6 +124,13 @@ final class LocalAccountSwitchController extends Controller
                 'expires_at' => now()->addMinutes($policy['absolute']),
             ]);
 
+            $refreshToken = Str::random(80);
+            Cache::put('auth_refresh_'.hash('sha256', $refreshToken), [
+                'user_id' => $target->id,
+                'session_id' => $session->id,
+                'access_token_id' => $token->accessToken->id,
+            ], now()->addMinutes($policy['refresh_token']));
+
             return response()->json([
                 'message' => 'Cuenta local cambiada.',
                 'access_token' => $token->plainTextToken,
@@ -129,8 +140,23 @@ final class LocalAccountSwitchController extends Controller
                     'name' => $target->name,
                     'email' => $target->email,
                 ],
-            ]);
+            ])->withCookie($this->makeRefreshCookie($refreshToken, $policy['refresh_token']));
         });
+    }
+
+    private function makeRefreshCookie(string $token, int $minutes): \Symfony\Component\HttpFoundation\Cookie
+    {
+        return Cookie::make(
+            self::REFRESH_COOKIE,
+            $token,
+            $minutes,
+            '/api/v1/auth',
+            config('session.domain'),
+            (bool) config('session.secure'),
+            true,
+            false,
+            (string) config('session.same_site', 'lax'),
+        );
     }
 
     private function isSelectable(User $user): bool

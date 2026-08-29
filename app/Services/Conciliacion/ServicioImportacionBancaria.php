@@ -39,6 +39,7 @@ final class ServicioImportacionBancaria
 
     public function importar(UploadedFile $file, User $actor, string $branchId, ?string $processRunId = null): ImportacionArchivoBancario
     {
+        $this->validarArchivoXlsx($file);
         $hash = hash_file('sha256', $file->getRealPath());
         $existingImport = ImportacionArchivoBancario::query()->where('file_hash', $hash)->first();
 
@@ -421,6 +422,46 @@ final class ServicioImportacionBancaria
         };
     }
 
+    private function validarArchivoXlsx(UploadedFile $file): void
+    {
+        $extension = strtolower($file->getClientOriginalExtension());
+        $mime = strtolower((string) $file->getMimeType());
+        $mimesPermitidos = [
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'application/zip',
+            'application/x-zip-compressed',
+        ];
+
+        if (! $file->isValid() || ! $file->getSize() || $file->getSize() > 10 * 1024 * 1024) {
+            throw new ExcepcionConciliacion(
+                'BANK_FILE_INVALID_SIZE',
+                'El archivo bancario debe ser válido y no exceder 10 MB.',
+                422,
+                ['file' => ['El archivo bancario debe ser válido y no exceder 10 MB.']],
+            );
+        }
+
+        if ($extension !== 'xlsx' || ! in_array($mime, $mimesPermitidos, true)) {
+            throw new ExcepcionConciliacion(
+                'BANK_FILE_INVALID_FORMAT',
+                'Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.',
+                422,
+                ['file' => ['Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.']],
+            );
+        }
+
+        try {
+            $this->reader->validar($file->getRealPath());
+        } catch (Throwable) {
+            throw new ExcepcionConciliacion(
+                'BANK_FILE_INVALID_FORMAT',
+                'Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.',
+                422,
+                ['file' => ['Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.']],
+            );
+        }
+    }
+
     private function normalizarError(Throwable $exception): ExcepcionConciliacion
     {
         if ($exception instanceof ExcepcionConciliacion) {
@@ -428,7 +469,18 @@ final class ServicioImportacionBancaria
         }
 
         return match ($exception->getMessage()) {
-            'BANK_FILE_CORRUPT' => new ExcepcionConciliacion('BANK_FILE_CORRUPT', 'El archivo XLSX está dañado o no puede leerse.', 422),
+            'BANK_FILE_INVALID_FORMAT' => new ExcepcionConciliacion(
+                'BANK_FILE_INVALID_FORMAT',
+                'Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.',
+                422,
+                ['file' => ['Archivo inválido. Solo se aceptan archivos Excel XLSX válidos.']],
+            ),
+            'BANK_FILE_CORRUPT' => new ExcepcionConciliacion(
+                'BANK_FILE_CORRUPT',
+                'El archivo XLSX está dañado o no puede leerse.',
+                422,
+                ['file' => ['El archivo XLSX está dañado o no puede leerse. Verifica que sea un libro Excel válido.']],
+            ),
             default => new ExcepcionConciliacion('BANK_FILE_PROCESSING_FAILED', 'No fue posible procesar el archivo bancario.', 500),
         };
     }

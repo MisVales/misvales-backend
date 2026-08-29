@@ -54,20 +54,28 @@ final class GeneracionValeApiTest extends TestCase
         $category = Category::query()->create(['code' => 'CAT-TEST', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
         $categoryVersion = CategoryVersion::query()->create(['category_id' => $category->id, 'version' => 1, 'name' => 'Base', 'profit_percentage' => '0.050000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $this->distribuidora->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $this->actor->id, 'reason' => 'Prueba']);
-        $product = Product::query()->create(['code' => 'VAL-10000', 'status' => 'ACTIVE', 'created_by' => $this->actor->id]);
-        $this->producto = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale 10000', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
-        $this->publicarConfiguracionFinanciera();
+        $product = Product::query()->create([
+            'code' => 'VAL-10000',
+            'status' => 'ACTIVE',
+            'loan_commission_percentage' => '0.100000',
+            'simple_interest_percentage' => '0.020000',
+            'insurance_amount' => '100.0000',
+            'fortnights_count' => 4,
+            'late_fee_amount' => '200.0000',
+            'created_by' => $this->actor->id,
+        ]);
+        $this->producto = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale 10000', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'late_fee_amount' => '200.0000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Prueba', 'created_by' => $this->actor->id, 'published_by' => $this->actor->id, 'published_at' => now()]);
         Sanctum::actingAs($this->actor);
     }
 
     public function test_primer_vale_es_prevale_y_materializa_snapshot_y_parcialidades(): void
     {
-        $response = $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200]);
+        $response = $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id]);
         $response->assertSuccessful()->assertJsonPath('data.type', 'PREVALE')->assertJsonPath('data.status', 'GENERATED')
-            ->assertJsonPath('data.capital', '10000.0000')->assertJsonPath('data.misvales_total', '11800.0000')
+            ->assertJsonPath('data.capital', '10000.0000')->assertJsonPath('data.misvales_total', '11400.0000')
             ->assertJsonPath('data.distributor_profit_total', '500.0000')
-            ->assertJsonPath('data.client_total', '12300.0000')
-            ->assertJsonPath('data.client_payment_per_fortnight', '3075.0000')
+            ->assertJsonPath('data.client_total', '11900.0000')
+            ->assertJsonPath('data.client_payment_per_fortnight', '2975.0000')
             ->assertJsonCount(4, 'data.installments');
         $this->assertMatchesRegularExpression('/^VAL-\d{4}-\d{8}$/', $response->json('data.folio'));
         $this->assertDatabaseCount('vouchers', 1);
@@ -84,6 +92,7 @@ final class GeneracionValeApiTest extends TestCase
         ]);
         $this->assertDatabaseHas('outbox_events', ['event_type' => 'VoucherGenerated']);
         $this->assertSame('0.100000', $response->json('data.financial_snapshot.calculation.loan_commission_percentage'));
+        $this->assertSame('200.0000', $response->json('data.financial_snapshot.financial_conditions.late_fee_amount'));
     }
 
     public function test_segundo_vale_de_la_distribuidora_es_digital_y_folios_no_se_reutilizan(): void
@@ -115,7 +124,6 @@ final class GeneracionValeApiTest extends TestCase
         $this->postJson('/api/v1/vouchers/preview', [
             'client_id' => $this->cliente->id,
             'product_version_id' => $this->producto->id,
-            'installment_count' => 4,
         ])->assertStatus(409)->assertJsonPath('error.code', 'PENDING_PREVOUCHER_MUST_BE_CASHED');
 
         $this->withHeader('Idempotency-Key', (string) Str::uuid())
@@ -142,25 +150,22 @@ final class GeneracionValeApiTest extends TestCase
             ->assertJsonPath('error.code', 'VOUCHER_CANCELLATION_NOT_ALLOWED');
     }
 
-    public function test_rechaza_quincenas_fuera_del_rango_global_en_previsualizacion_y_generacion(): void
+    public function test_usa_las_quincenas_del_producto_y_rechaza_condiciones_enviadas_por_el_cliente(): void
     {
         $payload = ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id];
 
+        $this->postJson('/api/v1/vouchers/preview', $payload)
+            ->assertSuccessful()
+            ->assertJsonPath('data.calculation.fortnights_count', 4)
+            ->assertJsonPath('data.financial_conditions.installment_count', 4);
+
         $this->postJson('/api/v1/vouchers/preview', $payload + ['installment_count' => 1])
             ->assertStatus(422)
-            ->assertJsonPath('error.code', 'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE')
-            ->assertJsonPath('error.details.minimum_installment_count', 2)
-            ->assertJsonPath('error.details.maximum_installment_count', 16);
+            ->assertJsonPath('error.fields.installment_count.0', 'Las quincenas se definen en el producto seleccionado.');
 
-        $this->withHeader('Idempotency-Key', (string) Str::uuid())
-            ->postJson('/api/v1/vouchers', $payload + ['installment_count' => 17])
+        $this->postJson('/api/v1/vouchers/preview', $payload + ['commission_rate' => 0.99])
             ->assertStatus(422)
-            ->assertJsonPath('error.code', 'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE');
-
-        $this->withHeader('Idempotency-Key', (string) Str::uuid())
-            ->postJson('/api/v1/vouchers', $payload + ['installment_count' => 16])
-            ->assertSuccessful()
-            ->assertJsonCount(16, 'data.installments');
+            ->assertJsonPath('error.fields.commission_rate.0', 'La comisión se define en el producto seleccionado.');
     }
 
     public function test_primer_vale_de_otro_cliente_de_la_distribuidora_es_digital(): void
@@ -180,7 +185,6 @@ final class GeneracionValeApiTest extends TestCase
         $this->postJson('/api/v1/vouchers/preview', [
             'client_id' => $otroCliente->id,
             'product_version_id' => $this->producto->id,
-            'installment_count' => 4,
         ])->assertSuccessful()->assertJsonPath('data.voucher_type', 'VALE_DIGITAL');
 
         $this->crear($otroCliente)->assertSuccessful()->assertJsonPath('data.type', 'VALE_DIGITAL');
@@ -204,6 +208,10 @@ final class GeneracionValeApiTest extends TestCase
 
     public function test_secuencia_mariadb_reserva_folios_no_reutilizables(): void
     {
+        LineaCredito::query()
+            ->where('distributor_id', $this->distribuidora->id)
+            ->update(['total_authorized' => '250000.0000']);
+
         $valores = collect(range(1, 20))->map(function (): string {
             $response = $this->crear()->assertSuccessful();
             $this->feriar($response->json('data.id'));
@@ -318,6 +326,7 @@ final class GeneracionValeApiTest extends TestCase
             'simple_interest_percentage' => '0.020000',
             'insurance_amount' => '100.0000',
             'fortnights_count' => 4,
+            'late_fee_amount' => '200.0000',
             'status' => 'PUBLISHED',
             'effective_from' => now()->subDay(),
             'reason' => 'Prueba',
@@ -444,11 +453,11 @@ final class GeneracionValeApiTest extends TestCase
 
         $this->assertSame('0.050000', $primerVale->distributor_profit_percentage);
         $this->assertSame('500.0000', $primerVale->distributor_profit_total);
-        $this->assertSame('12300.0000', $primerVale->client_total);
+        $this->assertSame('11900.0000', $primerVale->client_total);
         $this->assertNotSame($versionNueva->id, $primerVale->category_version_id);
         $this->assertSame('0.080000', $segundoVale->distributor_profit_percentage);
         $this->assertSame('800.0000', $segundoVale->distributor_profit_total);
-        $this->assertSame('12300.0000', $segundoVale->client_total);
+        $this->assertSame('11900.0000', $segundoVale->client_total);
         $this->assertSame($versionNueva->id, $segundoVale->category_version_id);
     }
 
@@ -471,7 +480,7 @@ final class GeneracionValeApiTest extends TestCase
     public function test_administrador_solo_lectura_no_puede_generar(): void
     {
         Sanctum::actingAs($this->usuarioConRol('admin'));
-        $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200])->assertForbidden();
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id])->assertForbidden();
     }
 
     public function test_producto_inactivo_saldo_insuficiente_y_cliente_ajeno_fallan_cerrado(): void
@@ -482,12 +491,12 @@ final class GeneracionValeApiTest extends TestCase
         LineaCredito::query()->where('distributor_id', $this->distribuidora->id)->update(['used_balance' => '25000.0000']);
         $this->crear()->assertStatus(409)->assertJsonPath('error.code', 'CREDIT_INSUFFICIENT');
         $ajeno = Cliente::factory()->create();
-        $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $ajeno->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200])->assertStatus(404)->assertJsonPath('error.code', 'CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR');
+        $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $ajeno->id, 'product_version_id' => $this->producto->id])->assertStatus(404)->assertJsonPath('error.code', 'CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR');
     }
 
     private function crear(?Cliente $cliente = null)
     {
-        return $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => ($cliente ?? $this->cliente)->id, 'product_version_id' => $this->producto->id, 'commission_rate' => 0.10, 'interest_rate' => 0.02, 'insurance_amount' => 100, 'installment_count' => 4, 'late_fee_amount' => 200]);
+        return $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => ($cliente ?? $this->cliente)->id, 'product_version_id' => $this->producto->id]);
     }
 
     private function feriar(string $voucherId): void
@@ -530,39 +539,6 @@ final class GeneracionValeApiTest extends TestCase
         ]);
 
         $this->producto->update(['nominal_amount' => '13000.0000']);
-    }
-
-    private function publicarConfiguracionFinanciera(): void
-    {
-        $valores = [
-            'LOAN_COMMISSION_PERCENTAGE' => ['PERCENTAGE', '0.1000'],
-            'INTEREST_RATE_PER_FORTNIGHT' => ['PERCENTAGE', '0.0300'],
-            'VOUCHER_INSURANCE_AMOUNT' => ['DECIMAL', '100.0000'],
-            'VOUCHER_MIN_FORTNIGHTS_COUNT' => ['INTEGER', 2],
-            'VOUCHER_MAX_FORTNIGHTS_COUNT' => ['INTEGER', 16],
-            'LATE_FEE_AMOUNT' => ['DECIMAL', '200.0000'],
-        ];
-
-        foreach ($valores as $key => [$tipo, $valor]) {
-            $definicion = ConfigurationDefinition::query()->create([
-                'key' => $key,
-                'name' => $key,
-                'value_type' => $tipo,
-                'status' => 'ACTIVE',
-                'created_by' => $this->actor->id,
-            ]);
-            ConfigurationVersion::query()->create([
-                'configuration_definition_id' => $definicion->id,
-                'version' => 1,
-                'value' => $valor,
-                'status' => 'PUBLISHED',
-                'effective_from' => now()->subDay(),
-                'reason' => 'Configuración financiera de prueba',
-                'created_by' => $this->actor->id,
-                'published_by' => $this->actor->id,
-                'published_at' => now(),
-            ]);
-        }
     }
 
     private function usuarioConRol(string $rol, ?string $branchId = null): User

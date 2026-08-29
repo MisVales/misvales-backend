@@ -18,4 +18,18 @@ final class ImportarArchivoBancarioRequest extends FormRequest
             'process_run_id' => ['required', 'uuid', 'exists:relation_process_runs,id'],
         ];
     }
+
+    public function messages(): array
+    {
+        return [
+            'file.uploaded' => 'No fue posible cargar el archivo bancario. Intenta seleccionarlo nuevamente.',
+            'file.required' => 'Selecciona el archivo bancario en formato XLSX.',
+            'file.file' => 'El archivo bancario no es válido.',
+            'file.mimes' => 'Archivo inválido. Solo se aceptan archivos Excel XLSX.',
+            'file.max' => 'El archivo bancario no puede exceder 10 MB.',
+            'process_run_id.required' => 'La corrida de conciliación es obligatoria.',
+            'process_run_id.uuid' => 'La corrida de conciliación no es válida.',
+            'process_run_id.exists' => 'La corrida de conciliación no existe.',
+        ];
+    }
 }

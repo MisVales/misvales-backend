@@ -18,13 +18,21 @@ class ServicioEvaluacionSolicitud
 {
     public function consultarEvaluacion(string $applicationId, string $coordinatorId): ?ApplicationEvaluation
     {
-        return ApplicationEvaluation::with('visit')->where('application_id', $applicationId)->where('evaluated_by', $coordinatorId)->latest('evaluated_at')->first();
+        $this->asegurarCoordinador($coordinatorId);
+        $application = DistributorApplication::query()->whereKey($applicationId)->where('coordinator_id', $coordinatorId)->first();
+        if ($application === null) {
+            throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        }
+
+        return ApplicationEvaluation::with('visit')->where('application_id', $application->id)->where('evaluated_by', $coordinatorId)->latest('evaluated_at')->first();
     }
 
     public function evaluar(
         string $applicationId, string $visitId, ApplicationEvaluationResult $result,
         string $reason, string $coordinatorId, ?array $payload, int $lockVersion
     ): ApplicationEvaluation {
+        $this->asegurarCoordinador($coordinatorId);
+
         return DB::transaction(function () use ($applicationId, $visitId, $result, $reason, $coordinatorId, $payload, $lockVersion) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
             if (! $application) {
@@ -41,7 +49,10 @@ class ServicioEvaluacionSolicitud
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_INVALID_STATE', 'Estado inválido.', 409);
             }
 
-            $visit = VerificationVisit::find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('application_id', $application->id)
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -82,5 +93,13 @@ class ServicioEvaluacionSolicitud
 
             return $eval;
         });
+    }
+
+    private function asegurarCoordinador(string $userId): void
+    {
+        $user = \App\Models\User::query()->find($userId);
+        if ($user === null || ! $user->hasRole('coordinator')) {
+            throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para evaluar solicitudes.', 403);
+        }
     }
 }

@@ -16,6 +16,11 @@ class LineaCreditoConsultaController extends Controller
     public function index(Request $request)
     {
         $user = $request->user();
+        abort_unless(
+            collect(['credit_lines.view_own', 'credit_lines.view_assigned', 'credit_lines.view_branch', 'credit_lines.view_global'])
+                ->contains(fn (string $permission): bool => $user->hasPermissionTo($permission)),
+            403,
+        );
         $query = LineaCredito::query()->with([
             'distribuidora.usuario',
             'distribuidora.relacionVigente',
@@ -23,7 +28,9 @@ class LineaCreditoConsultaController extends Controller
             'movimientos' => fn ($query) => $query->orderByDesc('sequence')->limit(1),
         ]);
 
-        if ($user->hasPermissionTo('credit_lines.view_own')) {
+        if ($user->hasPermissionTo('credit_lines.view_global')) {
+            // Alcance global explÃ­cito.
+        } elseif ($user->hasPermissionTo('credit_lines.view_own')) {
             $query->whereHas('distribuidora', fn ($query) => $query->where('user_id', $user->id));
         } elseif ($user->hasPermissionTo('credit_lines.view_assigned')) {
             $query->whereIn('distributor_id', CoordinatorDistributorAssignment::query()
@@ -49,6 +56,11 @@ class LineaCreditoConsultaController extends Controller
     public function show(Request $request, string $distributorId)
     {
         $user = $request->user();
+        abort_unless(
+            collect(['credit_lines.view_own', 'credit_lines.view_assigned', 'credit_lines.view_branch', 'credit_lines.view_global'])
+                ->contains(fn (string $permission): bool => $user->hasPermissionTo($permission)),
+            403,
+        );
 
         $query = LineaCredito::with([
             'distribuidora.usuario',
@@ -62,7 +74,9 @@ class LineaCreditoConsultaController extends Controller
         ])->where('distributor_id', $distributorId);
 
         // Aplicar el alcance antes de buscar el registro
-        if ($user->hasPermissionTo('credit_lines.view_own')) {
+        if ($user->hasPermissionTo('credit_lines.view_global')) {
+            // Alcance global explÃ­cito.
+        } elseif ($user->hasPermissionTo('credit_lines.view_own')) {
             $distribuidora = Distribuidora::where('user_id', $user->id)->first();
             if ($distribuidora) {
                 $query->where('distributor_id', $distribuidora->id);

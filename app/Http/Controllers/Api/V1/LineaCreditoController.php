@@ -19,6 +19,7 @@ class LineaCreditoController extends Controller
     public function me(Request $request)
     {
         $usuario = $request->user();
+        abort_unless($usuario->hasPermissionTo('credit_lines.view_own'), 403);
 
         $datos = $this->consultaLinea->consultarPorDistribuidora($usuario);
 

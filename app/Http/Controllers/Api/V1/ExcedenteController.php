@@ -18,6 +18,11 @@ final class ExcedenteController extends Controller
 {
     public function index(Request $request)
     {
+        abort_unless(
+            collect(['surpluses.view_own', 'surpluses.view_branch', 'surpluses.view_global'])
+                ->contains(fn (string $permission): bool => $request->user()->hasPermissionTo($permission)),
+            403,
+        );
         $query = ExcedenteDistribuidora::query()->with($this->surplusRelations())->latest();
         $this->scopeSurpluses($query, $request);
 

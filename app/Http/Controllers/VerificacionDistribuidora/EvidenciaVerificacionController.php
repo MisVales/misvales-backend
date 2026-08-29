@@ -21,7 +21,7 @@ class EvidenciaVerificacionController extends Controller
 
     public function consultarEvidencia(string $visitId)
     {
-        $media = $this->evidenciaService->consultarEvidencia($visitId);
+        $media = $this->evidenciaService->consultarEvidencia($visitId, auth()->id());
 
         return response()->json(['data' => $media], 200);
     }

@@ -1573,7 +1573,7 @@ Table "product_versions" {
   "id" uuid [not null]
   "product_id" uuid [not null]
   "version" integer [not null]
-  "insurance_amount" decimal(19,4) [not null]
+  "insurance_amount" decimal(19,4)
   "status" varchar(255) [not null]
   "effective_from" timestamptz [not null]
   "effective_to" timestamptz
@@ -1587,9 +1587,10 @@ Table "product_versions" {
   "description" text
   "lock_version" integer [not null, default: 0]
   "nominal_amount" decimal(19,4) [not null]
-  "loan_commission_percentage" decimal(9,6) [not null]
-  "simple_interest_percentage" decimal(9,6) [not null]
-  "fortnights_count" smallint [not null]
+  "loan_commission_percentage" decimal(9,6)
+  "simple_interest_percentage" decimal(9,6)
+  "fortnights_count" smallint
+  "late_fee_amount" decimal(19,4)
 
   indexes {
     ("id") [name: 'product_versions_id_primary', pk]

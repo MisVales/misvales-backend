@@ -25,7 +25,7 @@ class AplicarCorreccionSolicitudRequest extends FormRequest
             'lock_version' => 'required|integer|min:1',
             'visit_id' => 'required|uuid',
             'record_id' => 'nullable|uuid',
-            'difference_index' => 'sometimes|integer|min:0|max:99',
+            'difference_index' => 'required|integer|min:0|max:99',
         ];
     }
 

@@ -26,6 +26,11 @@ final class RelacionDistribuidoraController extends Controller
 
     public function index(Request $request)
     {
+        abort_unless(
+            collect(['relations.view_own', 'relations.view_assigned', 'relations.view_branch', 'relations.view_global'])
+                ->contains(fn (string $permission): bool => $request->user()->hasPermissionTo($permission)),
+            403,
+        );
         $query = RelacionDistribuidora::query()
             ->with(self::DETAIL_RELATIONS)
             ->latest('cutoff_at');

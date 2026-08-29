@@ -54,33 +54,61 @@ final class ServicioEvaluacionRecargo
             }
 
             DB::transaction(function () use ($relation, $now, $config, &$result) {
-                // Calcular el recargo sumando late_fee_amount de cada parcialidad ligada a su producto
+                // Cada recargo usa la condición que quedó congelada al emitir el vale.
+                // Solo los vales históricos sin snapshot recurren al producto actual.
                 $lateFeeTotal = '0.0000';
                 $lateFeeDetail = [];
 
-                $partidas = $relation->partidas()->with('installment.vale.product')->get();
+                $partidas = $relation->partidas()->with('installment.vale.producto')->get();
                 if ($partidas->isEmpty() && $relation->previous_relation_id) {
-                    $prev = $relation->previousRelation;
+                    $prev = $relation->anterior;
                     while ($prev && $partidas->isEmpty()) {
-                        $partidas = $prev->partidas()->with('installment.vale.product')->get();
-                        $prev = $prev->previousRelation;
+                        $partidas = $prev->partidas()->with('installment.vale.producto')->get();
+                        $prev = $prev->anterior;
                     }
                 }
 
                 foreach ($partidas as $partida) {
-                    $producto = $partida->installment?->vale?->product;
-                    if ($producto && ! is_null($producto->late_fee_amount)) {
-                        $lateFeeTotal = bcadd($lateFeeTotal, (string) $producto->late_fee_amount, 4);
+                    $vale = $partida->installment?->vale;
+                    if (! $vale) {
+                        continue;
+                    }
+
+                    $snapshot = is_array($vale->financial_snapshot) ? $vale->financial_snapshot : [];
+                    $condiciones = is_array($snapshot['financial_conditions'] ?? null)
+                        ? $snapshot['financial_conditions']
+                        : [];
+                    $configuracionesHistoricas = is_array($snapshot['financial_configuration_versions'] ?? null)
+                        ? $snapshot['financial_configuration_versions']
+                        : [];
+                    $recargoHistorico = is_array($configuracionesHistoricas['LATE_FEE_AMOUNT'] ?? null)
+                        ? ($configuracionesHistoricas['LATE_FEE_AMOUNT']['value'] ?? null)
+                        : null;
+
+                    // Los vales nuevos guardan la condición en financial_conditions. Los
+                    // emitidos antes de moverla al producto conservaron la versión global
+                    // y su valor dentro del snapshot; ambos caminos son inmutables.
+                    $desdeSnapshot = array_key_exists('late_fee_amount', $condiciones)
+                        || is_numeric($recargoHistorico);
+                    $montoRecargo = array_key_exists('late_fee_amount', $condiciones)
+                        ? $condiciones['late_fee_amount']
+                        : (is_numeric($recargoHistorico) ? $recargoHistorico : $vale->producto?->late_fee_amount);
+
+                    if (! is_numeric($montoRecargo) || bccomp((string) $montoRecargo, '0', 4) < 0) {
+                        continue;
+                    }
+
+                    $montoRecargo = bcadd((string) $montoRecargo, '0', 4);
+                    $lateFeeTotal = bcadd($lateFeeTotal, $montoRecargo, 4);
+                    $producto = $vale->producto;
+                    if ($producto) {
                         $lateFeeDetail[] = [
                             'relation_item_id' => $partida->id,
                             'product_id' => $producto->id,
-                            'late_fee_amount' => (string) $producto->late_fee_amount,
+                            'late_fee_amount' => $montoRecargo,
+                            'source' => $desdeSnapshot ? 'voucher_snapshot' : 'product_legacy_fallback',
                         ];
                     }
-                }
-
-                if (bccomp($lateFeeTotal, '0', 4) <= 0) {
-                    $lateFeeTotal = (string) ($config['amount'] ?? '300.0000');
                 }
 
                 $snapshot = array_merge(

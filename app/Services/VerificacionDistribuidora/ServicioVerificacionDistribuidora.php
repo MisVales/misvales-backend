@@ -21,6 +21,8 @@ class ServicioVerificacionDistribuidora
 
     public function consultarAsignadas(string $verifierId): Collection
     {
+        $this->asegurarVerificador($verifierId);
+
         return VerificationVisit::with([
             'application.datosPersonales',
             'application.branch:id,name',
@@ -33,6 +35,8 @@ class ServicioVerificacionDistribuidora
 
     public function consultarVisita(string $visitId, string $verifierId): VerificationVisit
     {
+        $this->asegurarVerificador($verifierId);
+
         $visit = VerificationVisit::with(['application', 'mediaFiles'])
             ->where('id', $visitId)
             ->where('verifier_id', $verifierId)
@@ -76,8 +80,14 @@ class ServicioVerificacionDistribuidora
 
     public function iniciarVisita(string $visitId, string $verifierId, int $lockVersion): VerificationVisit
     {
+        $this->asegurarVerificador($verifierId);
+
         return DB::transaction(function () use ($visitId, $verifierId, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -86,6 +96,9 @@ class ServicioVerificacionDistribuidora
             }
 
             $application = DistributorApplication::lockForUpdate()->find($visit->application_id);
+            if (! $application) {
+                throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+            }
 
             if ($visit->verifier_id !== $verifierId) {
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, null, 'Intento de inicio no autorizado');
@@ -131,8 +144,14 @@ class ServicioVerificacionDistribuidora
 
     public function actualizarVisita(string $visitId, string $verifierId, ?float $lat, ?float $lng, ?float $accuracy, int $lockVersion): void
     {
+        $this->asegurarVerificador($verifierId);
+
         DB::transaction(function () use ($visitId, $verifierId, $lat, $lng, $accuracy, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -159,8 +178,14 @@ class ServicioVerificacionDistribuidora
 
     public function registrarDiferencias(string $visitId, string $verifierId, array $differencesPayload, int $lockVersion): void
     {
+        $this->asegurarVerificador($verifierId);
+
         DB::transaction(function () use ($visitId, $verifierId, $differencesPayload, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -191,8 +216,14 @@ class ServicioVerificacionDistribuidora
         ?string $observations,
         int $lockVersion
     ): void {
+        $this->asegurarVerificador($verifierId);
+
         DB::transaction(function () use ($visitId, $verifierId, $result, $observations, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -255,5 +286,13 @@ class ServicioVerificacionDistribuidora
                 AuditHelper::log('APPLICATION_TERMINATED_UNFAVORABLE', 'DistributorApplication', $application->id, $verifierId, $application->branch_id, null, null, $observations, 'SUCCESS', $application->lock_version);
             }
         });
+    }
+
+    private function asegurarVerificador(string $userId): void
+    {
+        $user = \App\Models\User::query()->find($userId);
+        if ($user === null || ! $user->hasRole('verifier')) {
+            throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para operar visitas de verificación.', 403);
+        }
     }
 }

@@ -19,8 +19,14 @@ class ServicioEvidenciaVerificacion
 {
     public function adjuntarEvidencia(string $visitId, string $verifierId, UploadedFile $file, string $fileType, int $lockVersion): MediaFile
     {
+        $this->asegurarVerificador($verifierId);
+
         return DB::transaction(function () use ($visitId, $verifierId, $file, $fileType, $lockVersion) {
-            $visit = VerificationVisit::lockForUpdate()->find($visitId);
+            $visit = VerificationVisit::query()
+                ->whereKey($visitId)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if (! $visit) {
                 throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
             }
@@ -60,6 +66,8 @@ class ServicioEvidenciaVerificacion
                 'size_bytes' => $file->getSize(),
                 'sha256' => $sha256,
                 'uploaded_by' => $verifierId,
+                'validation_status' => 'VALIDATED',
+                'validated_at' => now(),
             ]);
             $media->bindings()->create([
                 'owner_type' => 'verification_visit',
@@ -76,8 +84,14 @@ class ServicioEvidenciaVerificacion
         });
     }
 
-    public function consultarEvidencia(string $visitId): Collection
+    public function consultarEvidencia(string $visitId, string $userId): Collection
     {
+        $visit = VerificationVisit::find($visitId);
+        if (! $visit) {
+            throw new BusinessException('VERIFICATION_VISIT_NOT_FOUND', 'Visita no encontrada.', 404);
+        }
+        $this->authorizeView($visit, $userId, 'consulta de evidencias');
+
         return MediaFile::whereHas('bindings', fn ($query) => $query
             ->where('owner_type', 'verification_visit')
             ->where('owner_id', $visitId))
@@ -96,27 +110,7 @@ class ServicioEvidenciaVerificacion
         if ($visit === null) {
             throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'La evidencia no está vinculada a una visita.', 404);
         }
-        $application = DistributorApplication::find($visit->application_id);
-        $user = User::find($userId);
-
-        $isGeneralManager = method_exists($user, 'hasRole') ? $user->hasRole('general_manager') : false;
-        $isAdmin = method_exists($user, 'hasRole') ? $user->hasRole('admin') : false;
-
-        $authorized = false;
-        if ($isGeneralManager || $isAdmin) {
-            $authorized = true;
-        } elseif ($visit->verifier_id === $userId) {
-            $authorized = true;
-        } elseif ($application->coordinator_id === $userId) {
-            $authorized = true;
-        } elseif (method_exists($user, 'hasRole') && $user->hasRole('branch_manager') && $user->branch_id === $application->branch_id) {
-            $authorized = true;
-        }
-
-        if (! $authorized) {
-            AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'MediaFile', $mediaId, $userId, $application->branch_id, null, null, 'Intento de descarga de evidencia', 'DENIED');
-            throw new BusinessException('AUTH_SCOPE_DENIED', 'No tiene permisos para descargar esta evidencia.', 403);
-        }
+        $application = $this->authorizeView($visit, $userId, 'descarga de evidencia', $mediaId);
 
         if (! Storage::disk($media->disk)->exists($media->path)) {
             throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'El archivo no existe.', 404);
@@ -129,13 +123,19 @@ class ServicioEvidenciaVerificacion
 
     public function eliminarEvidenciaAbierta(string $mediaId, string $verifierId): void
     {
+        $this->asegurarVerificador($verifierId);
+
         DB::transaction(function () use ($mediaId, $verifierId) {
             $media = MediaFile::find($mediaId);
             if (! $media) {
                 throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'Evidencia no encontrada.', 404);
             }
             $binding = $media->bindings()->where('owner_type', 'verification_visit')->first();
-            $visit = $binding === null ? null : VerificationVisit::lockForUpdate()->find($binding->owner_id);
+            $visit = $binding === null ? null : VerificationVisit::query()
+                ->whereKey($binding->owner_id)
+                ->where('verifier_id', $verifierId)
+                ->lockForUpdate()
+                ->first();
             if ($visit === null) {
                 throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'La evidencia no está vinculada a una visita.', 404);
             }
@@ -154,5 +154,56 @@ class ServicioEvidenciaVerificacion
 
             AuditHelper::log('VERIFICATION_EVIDENCE_REMOVED', 'MediaFile', $mediaId, $verifierId, null, null, null, 'Eliminada por el verificador', 'SUCCESS');
         });
+    }
+
+    private function asegurarVerificador(string $userId): void
+    {
+        $user = User::query()->find($userId);
+        if ($user === null || ! $user->hasRole('verifier')) {
+            throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para gestionar evidencias.', 403);
+        }
+    }
+
+    private function authorizeView(VerificationVisit $visit, string $userId, string $action, ?string $entityId = null): DistributorApplication
+    {
+        $application = DistributorApplication::find($visit->application_id);
+        $user = User::find($userId);
+
+        if (! $application) {
+            throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        }
+
+        $canViewEvidence = $user !== null && (
+            $user->hasRole('general_manager')
+            || $user->hasRole('admin')
+            || $user->hasRole('verifier')
+            || $user->hasRole('coordinator')
+            || $user->hasRole('branch_manager')
+        );
+        if (! $canViewEvidence) {
+            throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para consultar evidencias.', 403);
+        }
+
+        $authorized = ($user->hasRole('general_manager') || $user->hasRole('admin'))
+            || ($user->hasRole('verifier') && $visit->verifier_id === $userId)
+            || ($user->hasRole('coordinator') && $application->coordinator_id === $userId)
+            || ($user->hasRole('branch_manager') && $user->hasScopeForBranch($application->branch_id));
+
+        if (! $authorized) {
+            AuditHelper::log(
+                'VERIFICATION_ACCESS_DENIED',
+                $entityId === null ? 'VerificationVisit' : 'MediaFile',
+                $entityId ?? $visit->id,
+                $userId,
+                $application->branch_id,
+                null,
+                null,
+                'Intento no autorizado de '.$action,
+                'DENIED'
+            );
+            throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'Evidencia no encontrada.', 404);
+        }
+
+        return $application;
     }
 }

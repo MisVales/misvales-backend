@@ -19,11 +19,6 @@ class ProductoServicio
             $producto = Product::create([
                 'code' => $datos['code'],
                 'status' => BaseStatus::ACTIVE,
-                'loan_commission_percentage' => isset($datos['loan_commission_percentage']) ? bcadd((string) $datos['loan_commission_percentage'], '0', 6) : null,
-                'simple_interest_percentage' => isset($datos['simple_interest_percentage']) ? bcadd((string) $datos['simple_interest_percentage'], '0', 6) : null,
-                'insurance_amount' => isset($datos['insurance_amount']) ? bcadd((string) $datos['insurance_amount'], '0', 4) : null,
-                'fortnights_count' => isset($datos['fortnights_count']) ? (int) $datos['fortnights_count'] : null,
-                'late_fee_amount' => isset($datos['late_fee_amount']) ? bcadd((string) $datos['late_fee_amount'], '0', 4) : null,
                 'created_by' => $usuarioId,
             ]);
 
@@ -35,21 +30,59 @@ class ProductoServicio
 
     public function crearVersion(Product $producto, array $datos, string $usuarioId): ProductVersion
     {
-        $ultimaVersion = $producto->versions()->max('version') ?? 0;
+        return DB::transaction(function () use ($producto, $datos, $usuarioId): ProductVersion {
+            $producto = Product::query()->lockForUpdate()->findOrFail($producto->id);
 
-        $effectiveFrom = now('America/Monterrey')->setTimezone('UTC');
+            $ultimaVersion = $producto->versions()->max('version') ?? 0;
+            $effectiveFrom = now('America/Monterrey')->setTimezone('UTC');
+            $condiciones = $this->normalizarCondicionesFinancieras($datos, $producto, true);
 
-        return ProductVersion::create([
-            'product_id' => $producto->id,
-            'version' => $ultimaVersion + 1,
-            'name' => $datos['name'],
-            'description' => $datos['description'] ?? null,
-            'nominal_amount' => $this->normalizarMonto($datos['nominal_amount']),
-            'status' => VersionStatus::DRAFT,
-            'effective_from' => $effectiveFrom,
-            'reason' => $datos['reason'],
-            'created_by' => $usuarioId,
-        ]);
+            return ProductVersion::create([
+                'product_id' => $producto->id,
+                'version' => $ultimaVersion + 1,
+                'name' => $datos['name'],
+                'description' => $datos['description'] ?? null,
+                'nominal_amount' => $this->normalizarMonto($datos['nominal_amount']),
+                'status' => VersionStatus::DRAFT,
+                'effective_from' => $effectiveFrom,
+                'reason' => $datos['reason'],
+                'created_by' => $usuarioId,
+                ...$condiciones,
+            ]);
+        });
+    }
+
+    /**
+     * Las condiciones se editan en la versión borrador. Una versión nueva hereda
+     * las condiciones publicadas cuando no las recibe; una edición de borrador
+     * sólo cambia los campos que sí se recibieron.
+     *
+     * @return array<string, string|int|null>
+     */
+    private function normalizarCondicionesFinancieras(array $datos, Product|ProductVersion|null $origen = null, bool $heredar = false): array
+    {
+        $atributos = [];
+
+        foreach (['loan_commission_percentage', 'simple_interest_percentage'] as $campo) {
+            if (array_key_exists($campo, $datos) || $heredar) {
+                $valor = array_key_exists($campo, $datos) ? $datos[$campo] : $origen?->{$campo};
+                $atributos[$campo] = is_null($valor) ? null : bcadd((string) $valor, '0', 6);
+            }
+        }
+
+        foreach (['insurance_amount', 'late_fee_amount'] as $campo) {
+            if (array_key_exists($campo, $datos) || $heredar) {
+                $valor = array_key_exists($campo, $datos) ? $datos[$campo] : $origen?->{$campo};
+                $atributos[$campo] = is_null($valor) ? null : bcadd((string) $valor, '0', 4);
+            }
+        }
+
+        if (array_key_exists('fortnights_count', $datos) || $heredar) {
+            $valor = array_key_exists('fortnights_count', $datos) ? $datos['fortnights_count'] : $origen?->fortnights_count;
+            $atributos['fortnights_count'] = is_null($valor) ? null : (int) $valor;
+        }
+
+        return $atributos;
     }
 
     private function normalizarMonto(mixed $valor): string
@@ -84,6 +117,9 @@ class ProductoServicio
         if (array_key_exists('reason', $datos)) {
             $version->reason = $datos['reason'];
         }
+        foreach ($this->normalizarCondicionesFinancieras($datos) as $campo => $valor) {
+            $version->{$campo} = $valor;
+        }
         $version->save();
 
         return $version;
@@ -91,33 +127,20 @@ class ProductoServicio
 
     public function publicarVersion(ProductVersion $version, array $datos, string $usuarioId): ProductVersion
     {
-        if ($version->status !== VersionStatus::DRAFT) {
-            throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
-        }
-
-        if (is_null($version->name) || is_null($version->nominal_amount)) {
-            throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin nombre e importe nominal.');
-        }
-
-        $producto = $version->product;
-        if (
-            is_null($producto->loan_commission_percentage) ||
-            is_null($producto->simple_interest_percentage) ||
-            is_null($producto->insurance_amount) ||
-            is_null($producto->fortnights_count) ||
-            is_null($producto->late_fee_amount)
-        ) {
-            throw new BusinessException('PRODUCT_FINANCIAL_CONFIG_INCOMPLETE', 'No se puede publicar una versión sin configurar las condiciones financieras del producto (comisión, interés, seguro, quincenas, recargo).');
-        }
-
-        if (array_key_exists('lock_version', $datos)) {
-            if ($version->lock_version !== (int) $datos['lock_version']) {
-                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del producto fue modificada por otro usuario.');
-            }
-            $version->lock_version++;
-        }
-
         return DB::transaction(function () use ($version, $datos, $usuarioId) {
+            $version = ProductVersion::query()->lockForUpdate()->findOrFail($version->id);
+            if ($version->status !== VersionStatus::DRAFT) {
+                throw new BusinessException('PRODUCT_VERSION_IMMUTABLE', 'Solo las versiones en DRAFT pueden ser publicadas.');
+            }
+            if (is_null($version->name) || is_null($version->nominal_amount)) {
+                throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin nombre e importe nominal.');
+            }
+            if ($version->lock_version !== (int) $datos['lock_version']) {
+                throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'La versión del producto fue modificada por otro usuario.', 409);
+            }
+            $this->asegurarCondicionesFinancierasCompletas($version);
+
+            $producto = Product::query()->lockForUpdate()->findOrFail($version->product_id);
             $publicadaEn = now();
             $versionPrevia = ProductVersion::where('product_id', $version->product_id)
                 ->where('status', VersionStatus::PUBLISHED)
@@ -136,18 +159,47 @@ class ProductoServicio
                 $versionPrevia->save();
             }
 
+            $producto->fill($this->normalizarCondicionesFinancieras($version->getAttributes()));
+            $producto->updated_by = $usuarioId;
+            $producto->save();
+
             $version->effective_from = $publicadaEn;
             $version->status = VersionStatus::PUBLISHED;
             $version->reason .= "\n[Publicación]: ".$datos['reason'];
             $version->published_by = $usuarioId;
             $version->published_at = $publicadaEn;
+            $version->lock_version++;
             $version->save();
 
             Cache::forget('productos:todos_vigentes');
-            Cache::forget("producto:{$version->product->code}");
+            Cache::forget("producto:{$producto->code}");
 
             return $version;
         });
+    }
+
+    private function asegurarCondicionesFinancierasCompletas(ProductVersion $version): void
+    {
+        $campos = [
+            'loan_commission_percentage' => 'comisión',
+            'simple_interest_percentage' => 'interés',
+            'insurance_amount' => 'seguro',
+            'fortnights_count' => 'quincenas',
+            'late_fee_amount' => 'recargo',
+        ];
+        $faltantes = array_values(array_filter(
+            $campos,
+            static fn (string $etiqueta, string $campo): bool => is_null($version->{$campo}),
+            ARRAY_FILTER_USE_BOTH,
+        ));
+
+        if ($faltantes !== []) {
+            throw new BusinessException(
+                'PRODUCT_FINANCIAL_CONFIG_INCOMPLETE',
+                'No se puede publicar una versión sin configurar: '.implode(', ', $faltantes).'.',
+                422,
+            );
+        }
     }
 
     public function desactivarProducto(Product $producto, string $usuarioId): Product

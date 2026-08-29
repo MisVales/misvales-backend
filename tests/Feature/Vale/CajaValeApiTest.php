@@ -134,7 +134,16 @@ final class CajaValeApiTest extends TestCase
         $category = Category::query()->create(['code' => 'CASH-CAT', 'status' => 'ACTIVE', 'created_by' => $this->distributorUser->id]);
         $categoryVersion = CategoryVersion::query()->create(['category_id' => $category->id, 'version' => 1, 'name' => 'Base', 'profit_percentage' => '0.050000', 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
         AsignacionCategoriaDistribuidora::query()->create(['distributor_id' => $distributor->id, 'category_version_id' => $categoryVersion->id, 'starts_at' => now()->subDay(), 'assigned_by' => $this->distributorUser->id]);
-        $product = Product::query()->create(['code' => 'CASH-10000', 'status' => 'ACTIVE', 'created_by' => $this->distributorUser->id]);
+        $product = Product::query()->create([
+            'code' => 'CASH-10000',
+            'status' => 'ACTIVE',
+            'loan_commission_percentage' => '0.100000',
+            'simple_interest_percentage' => '0.020000',
+            'insurance_amount' => '100.0000',
+            'fortnights_count' => 4,
+            'late_fee_amount' => '300.0000',
+            'created_by' => $this->distributorUser->id,
+        ]);
         $productVersion = ProductVersion::query()->create(['product_id' => $product->id, 'version' => 1, 'name' => 'Vale caja', 'nominal_amount' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'simple_interest_percentage' => '0.020000', 'insurance_amount' => '100.0000', 'fortnights_count' => 4, 'status' => 'PUBLISHED', 'effective_from' => now()->subDay(), 'reason' => 'Test', 'created_by' => $this->distributorUser->id, 'published_by' => $this->distributorUser->id, 'published_at' => now()]);
         $this->voucher = Vale::query()->create(['folio' => 'VAL-2026-99999999', 'type' => 'PREVALE', 'status' => EstadoVale::GENERADO, 'client_id' => $client->id, 'distributor_id' => $distributor->id, 'branch_id' => $this->branch->id, 'credit_line_id' => $line->id, 'product_id' => $product->id, 'product_version_id' => $productVersion->id, 'category_version_id' => $categoryVersion->id, 'capital' => '10000.0000', 'loan_commission_percentage' => '0.100000', 'loan_commission_amount' => '1000.0000', 'simple_interest_percentage' => '0.020000', 'fortnights_count' => 4, 'insurance_amount' => '100.0000', 'interest_total' => '800.0000', 'misvales_total' => '11900.0000', 'misvales_payment_per_fortnight' => '2975.0000', 'distributor_profit_percentage' => '0.050000', 'distributor_profit_total' => '500.0000', 'distributor_profit_per_fortnight' => '125.0000', 'client_payment_per_fortnight' => '3100.0000', 'client_total' => '12400.0000', 'financial_snapshot' => [], 'created_by' => $this->distributorUser->id, 'generated_at' => now()]);
         $this->publishRelationConfiguration();
@@ -2056,7 +2065,7 @@ final class CajaValeApiTest extends TestCase
         $coordinator = $this->user('coordinator', $this->branch->id);
         CoordinatorDistributorAssignment::create(['coordinator_id' => $coordinator->id, 'distributor_id' => $d->id, 'branch_id' => $this->branch->id, 'status' => 'ACTIVE', 'valid_from' => now()->subDay(), 'valid_to' => null, 'assigned_by' => $manager->id]);
         Sanctum::actingAs($this->distributorUser);
-        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id, 'commission_rate' => 0.10, 'interest_rate' => 0.03, 'insurance_amount' => 100, 'installment_count' => 4])
+        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id])
             ->assertStatus(409)
             ->assertJsonPath('error.code', 'DISTRIBUTOR_DELINQUENCY_BLOCK');
         try {
@@ -2077,7 +2086,7 @@ final class CajaValeApiTest extends TestCase
         $this->assertDatabaseHas('distributor_operational_blocks', ['distributor_id' => $d->id, 'status' => 'RELEASED']);
 
         $this->voucher->update(['status' => 'CASHED', 'cashed_at' => now()]);
-        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id, 'commission_rate' => 0.10, 'interest_rate' => 0.03, 'insurance_amount' => 100, 'installment_count' => 4])
+        $this->postIdempotent('/api/v1/vouchers', ['client_id' => $this->voucher->client_id, 'product_version_id' => $this->voucher->product_version_id])
             ->assertSuccessful();
     }
 
@@ -2446,12 +2455,6 @@ final class CajaValeApiTest extends TestCase
             'RELATION_PAYMENT_BANK' => ['JSON', ['name' => 'Banco configurado', 'beneficiary' => 'MisVales', 'agreement' => 'CONV-TEST', 'clabe' => '012345678901234567']],
             'BANK_UPLOAD_DEADLINE_TIME' => ['TIME', '08:00'],
             'POST_DUE_EVALUATION_TIME' => ['TIME', '08:30'],
-            'LATE_FEE_AMOUNT' => ['DECIMAL', '300.0000'],
-            'LOAN_COMMISSION_PERCENTAGE' => ['PERCENTAGE', '0.100000'],
-            'INTEREST_RATE_PER_FORTNIGHT' => ['PERCENTAGE', '0.030000'],
-            'VOUCHER_INSURANCE_AMOUNT' => ['DECIMAL', '100.0000'],
-            'VOUCHER_MIN_FORTNIGHTS_COUNT' => ['INTEGER', 2],
-            'VOUCHER_MAX_FORTNIGHTS_COUNT' => ['INTEGER', 16],
         ];
 
         foreach ($values as $key => [$type, $value]) {

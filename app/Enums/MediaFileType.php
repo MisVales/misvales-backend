@@ -4,6 +4,9 @@ namespace App\Enums;
 
 enum MediaFileType: string
 {
+    case FACHADA = 'FACHADA';
+    case INTERIOR = 'INTERIOR';
+    case DOCUMENTO = 'DOCUMENTO';
     case RESIDENCE_EXTERIOR = 'RESIDENCE_EXTERIOR';
     case RESIDENCE_INTERIOR = 'RESIDENCE_INTERIOR';
     case IDENTIFICATION_EVIDENCE = 'IDENTIFICATION_EVIDENCE';

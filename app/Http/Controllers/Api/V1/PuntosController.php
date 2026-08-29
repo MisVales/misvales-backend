@@ -19,6 +19,7 @@ final class PuntosController extends Controller
     public function balance(Request $request)
     {
         $user = $request->user();
+        abort_unless($this->hasAnyViewPermission($user), 403);
         $distributorId = $request->query('distributor_id');
 
         if ($distributorId) {
@@ -48,6 +49,7 @@ final class PuntosController extends Controller
 
     public function redemptions(Request $request)
     {
+        abort_unless($this->hasAnyViewPermission($request->user()), 403);
         $query = PointRedemptionRequest::query()
             ->with(['distribuidora.usuario', 'distribuidora.sucursal', 'solicitante', 'autorizador', 'entregador'])
             ->latest('requested_at');
@@ -87,17 +89,17 @@ final class PuntosController extends Controller
     public function store(Request $request)
     {
         $validated = $request->validate([
-            'points' => ['required', 'integer', 'min:1'],
+            'points' => ['required', 'integer', 'min:1', 'max:1000000000'],
             'distributor_id' => ['sometimes', 'nullable', 'uuid', 'exists:distributors,id'],
         ]);
 
         $user = $request->user();
+        abort_unless($user->hasPermissionTo('points.request_own'), 403);
+
+        $distributor = $user->distribuidora;
+        abort_unless($distributor, 404, 'DISTRIBUTOR_NOT_FOUND');
         if (! empty($validated['distributor_id'])) {
-            abort_unless($user->hasPermissionTo('points.request_own') || $user->hasPermissionTo('points.authorize_branch') || $user->hasPermissionTo('points.authorize_global'), 403);
-            $distributor = Distribuidora::findOrFail($validated['distributor_id']);
-        } else {
-            $distributor = $user->distribuidora;
-            abort_unless($distributor, 404, 'DISTRIBUTOR_NOT_FOUND');
+            abort_unless($validated['distributor_id'] === $distributor->id, 404);
         }
 
         $redemption = $this->servicioPuntos->solicitarCanje($distributor, $validated['points'], $user);
@@ -166,7 +168,7 @@ final class PuntosController extends Controller
             return;
         }
 
-        if ($user->distribuidora) {
+        if ($user->hasPermissionTo('points.view_own') && $user->distribuidora) {
             $query->where('distributor_id', $user->distribuidora->id);
 
             return;
@@ -184,10 +186,16 @@ final class PuntosController extends Controller
         if ($user->hasPermissionTo('points.view_branch') && $user->hasScopeForBranch($distributor->branch_id)) {
             return;
         }
-        if ($user->distribuidora && $user->distribuidora->id === $distributor->id) {
+        if ($user->hasPermissionTo('points.view_own') && $user->distribuidora && $user->distribuidora->id === $distributor->id) {
             return;
         }
         abort(403);
+    }
+
+    private function hasAnyViewPermission(User $user): bool
+    {
+        return collect(['points.view_own', 'points.view_branch', 'points.view_global'])
+            ->contains(fn (string $permission): bool => $user->hasPermissionTo($permission));
     }
 
     private function authorizeViewRedemption(PointRedemptionRequest $redemption, Request $request): void

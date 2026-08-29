@@ -86,6 +86,20 @@ final class InitialAdministratorSeeder extends Seeder
         $name = trim((string) config('bootstrap.initial_admin.name'));
         $email = trim((string) config('bootstrap.initial_admin.email'));
 
+        if (app()->environment('local') && ! $enabled) {
+            $email = 'administrador@gmail.com';
+
+            return User::query()->firstOrCreate(
+                ['normalized_email' => $email],
+                [
+                    'name' => 'Administrador Demo',
+                    'email' => $email,
+                    'password' => null,
+                    'state' => 'INVITED',
+                ],
+            );
+        }
+
         if ($enabled) {
             if ($name === '' || $email === '') {
                 throw new RuntimeException('Configure INITIAL_ADMIN_NAME e INITIAL_ADMIN_EMAIL para inicializar el sistema.');

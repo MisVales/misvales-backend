@@ -6,6 +6,7 @@ use App\Enums\VersionStatus;
 use App\Http\Middleware\RequireMfaCompleted;
 use App\Http\Middleware\TrackSessionActivity;
 use App\Models\ConfigurationDefinition;
+use App\Models\Product;
 use App\Models\ProductVersion;
 use App\Models\Role;
 use App\Models\User;
@@ -136,13 +137,18 @@ class Module3ApiFeatureTest extends TestCase
         $response->assertStatus(422);
     }
 
-    public function test_manager_creates_and_publishes_an_amount_only_product(): void
+    public function test_manager_creates_and_publishes_a_product_with_its_financial_conditions(): void
     {
         $created = $this->actingAs($this->admin)->postJson('/api/v1/products', [
             'code' => 'VALE-15000',
             'name' => 'Vale de $15,000',
             'description' => 'Importe nominal disponible para otorgar.',
             'nominal_amount' => 15000,
+            'loan_commission_percentage' => 0.10,
+            'simple_interest_percentage' => 0.03,
+            'insurance_amount' => 100,
+            'fortnights_count' => 8,
+            'late_fee_amount' => 200,
             'reason' => 'Alta del producto de prueba',
         ]);
 
@@ -150,18 +156,36 @@ class Module3ApiFeatureTest extends TestCase
             ->assertJsonPath('code', 'VALE-15000')
             ->assertJsonPath('versions.0.name', 'Vale de $15,000')
             ->assertJsonPath('versions.0.nominal_amount', '15000.0000')
+            ->assertJsonPath('loan_commission_percentage', null)
+            ->assertJsonPath('simple_interest_percentage', null)
+            ->assertJsonPath('insurance_amount', null)
+            ->assertJsonPath('fortnights_count', null)
+            ->assertJsonPath('late_fee_amount', null)
+            ->assertJsonPath('versions.0.loan_commission_percentage', '0.100000')
+            ->assertJsonPath('versions.0.simple_interest_percentage', '0.030000')
+            ->assertJsonPath('versions.0.insurance_amount', '100.0000')
+            ->assertJsonPath('versions.0.fortnights_count', 8)
+            ->assertJsonPath('versions.0.late_fee_amount', '200.0000')
             ->assertJsonPath('versions.0.status', 'DRAFT');
 
         $version = ProductVersion::query()->where('product_id', $created->json('id'))->sole();
-        self::assertNull($version->loan_commission_percentage);
-        self::assertNull($version->simple_interest_percentage);
-        self::assertNull($version->insurance_amount);
-        self::assertNull($version->fortnights_count);
+        self::assertSame('0.100000', $version->loan_commission_percentage);
+        self::assertSame('0.030000', $version->simple_interest_percentage);
+        self::assertSame('100.0000', $version->insurance_amount);
+        self::assertSame(8, $version->fortnights_count);
+        self::assertSame('200.0000', $version->late_fee_amount);
 
         $this->actingAs($this->admin)->postJson("/api/v1/product-versions/{$version->id}/publish", [
             'reason' => 'Publicación inmediata del catálogo',
             'lock_version' => $version->lock_version,
         ])->assertOk()
             ->assertJsonPath('status', 'PUBLISHED');
+
+        $producto = Product::query()->findOrFail($created->json('id'));
+        self::assertSame('0.100000', $producto->loan_commission_percentage);
+        self::assertSame('0.030000', $producto->simple_interest_percentage);
+        self::assertSame('100.0000', $producto->insurance_amount);
+        self::assertSame(8, $producto->fortnights_count);
+        self::assertSame('200.0000', $producto->late_fee_amount);
     }
 }

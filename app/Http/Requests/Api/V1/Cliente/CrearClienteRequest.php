@@ -60,7 +60,7 @@ class CrearClienteRequest extends FormRequest
             'second_last_name' => ['nullable', 'string', 'max:120'],
             'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
             'rfc' => ['nullable', 'string'],
-            'birth_date' => ['required', 'date_format:Y-m-d'],
+            'birth_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
             'birth_place' => ['required', 'string', 'max:160'],
             'birth_state' => ['required', 'string', 'max:120'],
             'birth_city' => ['required', 'string', 'max:120'],
@@ -94,6 +94,8 @@ class CrearClienteRequest extends FormRequest
     {
         return [
             'curp.regex' => 'La CURP no tiene un formato válido.',
+            'birth_date.after_or_equal' => 'La fecha de nacimiento debe ser igual o posterior al 01/01/1900.',
+            'birth_date.before_or_equal' => 'La fecha de nacimiento no puede estar en el futuro.',
         ];
     }
 

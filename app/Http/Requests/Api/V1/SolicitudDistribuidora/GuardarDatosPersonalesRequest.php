@@ -10,6 +10,16 @@ final class GuardarDatosPersonalesRequest extends FormRequest
 {
     use AllowsPartialDrafts, RechazaPropiedadesDesconocidas;
 
+    protected function prepareForValidation(): void
+    {
+        $telefono = $this->input('phone_number');
+        if (is_string($telefono)) {
+            $this->merge([
+                'phone_number' => preg_replace('/(?!^)\D/', '', trim($telefono)),
+            ]);
+        }
+    }
+
     public function authorize(): bool
     {
         return true;
@@ -32,7 +42,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'birth_state' => ['required', 'string', 'max:100'],
             'birth_city' => ['required', 'string', 'max:100'],
             'email' => ['required', 'email:rfc', 'max:254', 'unique:users,normalized_email'],
-            'phone_number' => ['required', 'string', 'regex:/^\+\d{1,4}\d{6,14}$/'],
+            'phone_number' => ['required', 'string', 'regex:/^\+\d{1,4}\d{10}$/'],
             'identification_country' => ['required_if:nationality,FOREIGN', 'nullable', 'string', 'max:2'],
             'official_id_type' => ['required', 'string', 'max:25', Rule::in(['INE', 'PASSPORT', 'PROFESSIONAL_LICENSE', 'OTHER'])],
             'official_id_number' => ['required', 'string', 'min:3', 'max:25'],
@@ -48,7 +58,7 @@ final class GuardarDatosPersonalesRequest extends FormRequest
             'curp.regex' => 'La CURP ingresada no cumple con el formato (18 caracteres alfanuméricos).',
             'rfc.max' => 'El RFC no puede exceder 15 caracteres.',
             'rfc.regex' => 'El RFC ingresado no cumple con el formato válido mexicano.',
-            'phone_number.regex' => 'El teléfono debe incluir el código de país y ser un número válido (ej. +521234567890).',
+            'phone_number.regex' => 'El teléfono debe incluir el código de país y exactamente 10 dígitos nacionales (ej. +521234567890).',
             'email.email' => 'El correo electrónico debe ser válido (ej. correo@ejemplo.com).',
             'email.unique' => 'Este correo electrónico ya está registrado para otro usuario en el sistema.',
             'birth_date.before_or_equal' => 'La persona solicitante debe tener al menos 18 años.',

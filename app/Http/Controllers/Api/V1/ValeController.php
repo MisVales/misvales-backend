@@ -24,6 +24,7 @@ final class ValeController extends Controller
         return response()->json(['data' => $productos->map(fn (ProductVersion $version): array => [
             'id' => $version->id, 'product_id' => $version->product_id, 'code' => $version->product->code,
             'name' => $version->name, 'nominal_amount' => $version->nominal_amount,
+            'fortnights_count' => $version->fortnights_count,
         ])]);
     }
 

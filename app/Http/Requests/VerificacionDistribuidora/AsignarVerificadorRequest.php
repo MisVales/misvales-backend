@@ -18,7 +18,12 @@ class AsignarVerificadorRequest extends FormRequest
     {
         return [
             'verifier_id' => 'required|uuid|exists:users,id',
-            'scheduled_for' => ['required', 'date'],
+            'scheduled_for' => [
+                'required',
+                'string',
+                'regex:/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(?::\d{2}(?:\.\d{1,6})?)?(?:Z|[+-]\d{2}:\d{2})$/',
+                'date',
+            ],
             'lock_version' => 'required|integer|min:1',
         ];
     }
@@ -34,7 +39,12 @@ class AsignarVerificadorRequest extends FormRequest
             $policy = $policyService->obtener();
             $timezone = $policy['timezone'] ?? config('app.timezone');
 
-            $scheduled = CarbonImmutable::parse((string) $this->input('scheduled_for'))->setTimezone($timezone);
+            try {
+                $scheduled = CarbonImmutable::parse((string) $this->input('scheduled_for'))->setTimezone($timezone);
+            } catch (\Throwable) {
+                $validator->errors()->add('scheduled_for', 'La fecha y hora de la visita no son válidas.');
+                return;
+            }
             $now = CarbonImmutable::now($timezone);
             $slotMinutes = (int) ($policy['slot_minutes'] ?? 15);
             $minutesToNextSlot = $slotMinutes - ($now->minute % $slotMinutes);
@@ -54,6 +64,7 @@ class AsignarVerificadorRequest extends FormRequest
     public function messages(): array
     {
         return [
+            'scheduled_for.regex' => 'La fecha y hora deben usar un formato ISO válido, por ejemplo 2026-08-28T15:00:00.000Z.',
             'scheduled_for.required' => 'Selecciona la fecha y hora de la visita.',
             'scheduled_for.date' => 'La fecha y hora de la visita no son válidas.',
         ];

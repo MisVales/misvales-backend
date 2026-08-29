@@ -15,8 +15,23 @@ use Illuminate\Support\Facades\DB;
 
 class ServicioAutorizacionSolicitud
 {
-    public function consultarAutorizacion(string $applicationId): ?ApplicationAuthorization
+    public function consultarAutorizacion(string $applicationId, string $managerId): ?ApplicationAuthorization
     {
+        $application = DistributorApplication::query()->whereKey($applicationId)->first();
+        if ($application === null) {
+            throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        }
+        $manager = User::query()->find($managerId);
+        $isGlobalManager = $manager?->hasRole('general_manager') === true;
+        $isBranchManager = $manager?->hasRole('branch_manager') === true
+            && $manager->hasScopeForBranch($application->branch_id);
+        if (! $isGlobalManager && ! $isBranchManager) {
+            if ($manager === null || (! $manager->hasRole('general_manager') && ! $manager->hasRole('branch_manager'))) {
+                throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para consultar autorizaciones.', 403);
+            }
+            throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
+        }
+
         return ApplicationAuthorization::with('manager')->where('application_id', $applicationId)->first();
     }
 
@@ -46,8 +61,13 @@ class ServicioAutorizacionSolicitud
             }
 
             $manager = User::find($managerId);
-            $isGeneralManager = method_exists($manager, 'hasRole') ? $manager->hasRole('general_manager') : false;
-            $isBranchManager = method_exists($manager, 'hasRole') ? $manager->hasRole('branch_manager') : true;
+            $isGeneralManager = $manager?->hasRole('general_manager') === true;
+            $isBranchManager = $manager?->hasRole('branch_manager') === true
+                && $manager->hasScopeForBranch($application->branch_id);
+
+            if ($manager === null || (! $isGeneralManager && ! $isBranchManager)) {
+                throw new BusinessException('AUTH_SCOPE_DENIED', 'No tienes permiso para autorizar solicitudes.', 403);
+            }
 
             if (! $isGeneralManager && in_array($managerId, [$application->coordinator_id, $application->created_by], true)) {
                 throw new BusinessException('SEGREGATION_OF_DUTIES_VIOLATION', 'Quien participó en la solicitud no puede autorizarla.', 403);
@@ -61,10 +81,6 @@ class ServicioAutorizacionSolicitud
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'Solo el gerente general puede autorizar una solicitud creada por un gerente de sucursal.', 403);
             }
 
-            if (! $isGeneralManager && (! $isBranchManager || $manager->branch_id !== $application->branch_id)) {
-                AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $managerId, $application->branch_id, null, null, 'Intento de autorización', 'DENIED');
-                throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
-            }
             if ($application->status !== ApplicationStatus::MANAGER_AUTHORIZATION) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_READY_FOR_AUTHORIZATION', 'Estado inválido.', 409);
             }

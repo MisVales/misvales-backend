@@ -14,7 +14,7 @@ class AutorizacionSolicitudController extends Controller
 
     public function consultarAutorizacion(string $applicationId)
     {
-        $auth = $this->autorizacionService->consultarAutorizacion($applicationId);
+        $auth = $this->autorizacionService->consultarAutorizacion($applicationId, auth()->id());
 
         return new ApplicationAuthorizationResource($auth);
     }
