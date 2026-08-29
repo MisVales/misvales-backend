@@ -19,6 +19,12 @@ class CrearProductoRequest extends FormRequest
             'description' => ['nullable', 'string'],
             'nominal_amount' => ['required', 'numeric', 'min:100', 'multiple_of:100'],
             'reason' => ['required', 'string'],
+            // Condiciones financieras del producto
+            'loan_commission_percentage' => ['nullable', 'numeric', 'between:0,1'],
+            'simple_interest_percentage' => ['nullable', 'numeric', 'between:0,1'],
+            'insurance_amount' => ['nullable', 'numeric', 'min:0'],
+            'fortnights_count' => ['nullable', 'integer', 'min:1'],
+            'late_fee_amount' => ['nullable', 'numeric', 'min:0'],
         ];
     }
 }
