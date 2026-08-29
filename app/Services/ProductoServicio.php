@@ -19,6 +19,11 @@ class ProductoServicio
             $producto = Product::create([
                 'code' => $datos['code'],
                 'status' => BaseStatus::ACTIVE,
+                'loan_commission_percentage' => isset($datos['loan_commission_percentage']) ? bcadd((string) $datos['loan_commission_percentage'], '0', 6) : null,
+                'simple_interest_percentage' => isset($datos['simple_interest_percentage']) ? bcadd((string) $datos['simple_interest_percentage'], '0', 6) : null,
+                'insurance_amount' => isset($datos['insurance_amount']) ? bcadd((string) $datos['insurance_amount'], '0', 4) : null,
+                'fortnights_count' => isset($datos['fortnights_count']) ? (int) $datos['fortnights_count'] : null,
+                'late_fee_amount' => isset($datos['late_fee_amount']) ? bcadd((string) $datos['late_fee_amount'], '0', 4) : null,
                 'created_by' => $usuarioId,
             ]);
 
@@ -92,6 +97,17 @@ class ProductoServicio
 
         if (is_null($version->name) || is_null($version->nominal_amount)) {
             throw new BusinessException('PRODUCT_INCOMPLETE', 'No se puede publicar un producto sin nombre e importe nominal.');
+        }
+
+        $producto = $version->product;
+        if (
+            is_null($producto->loan_commission_percentage) ||
+            is_null($producto->simple_interest_percentage) ||
+            is_null($producto->insurance_amount) ||
+            is_null($producto->fortnights_count) ||
+            is_null($producto->late_fee_amount)
+        ) {
+            throw new BusinessException('PRODUCT_FINANCIAL_CONFIG_INCOMPLETE', 'No se puede publicar una versión sin configurar las condiciones financieras del producto (comisión, interés, seguro, quincenas, recargo).');
         }
 
         if (array_key_exists('lock_version', $datos)) {
