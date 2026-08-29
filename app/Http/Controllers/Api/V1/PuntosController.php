@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Distribuidora;
 use App\Models\PointRedemptionRequest;
+use App\Models\User;
 use App\Services\Puntos\ServicioCanjePuntos;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;

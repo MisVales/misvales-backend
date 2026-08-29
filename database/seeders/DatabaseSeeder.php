@@ -26,6 +26,7 @@ class DatabaseSeeder extends Seeder
             ConfigurationDefinitionsSeeder::class,
             InitialConfigurationVersionsSeeder::class,
             InitialCatalogSeeder::class,
+            DemoProductsSeeder::class,
             DemoDistributorApplicationSeeder::class,
         ]);
 

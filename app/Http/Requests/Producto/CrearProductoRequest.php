@@ -16,11 +16,9 @@ class CrearProductoRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'code' => ['required', 'string', 'max:255', 'unique:products,code'],
             'name' => ['required', 'string', 'max:255'],
             'description' => ['nullable', 'string'],
             'nominal_amount' => ['required', 'decimal:0,4', 'min:100', 'multiple_of:100'],
-            'reason' => ['required', 'string'],
             // Condiciones financieras del producto
             'loan_commission_percentage' => ['nullable', 'decimal:0,6', 'between:0,1'],
             'simple_interest_percentage' => ['nullable', 'decimal:0,6', 'between:0,1'],

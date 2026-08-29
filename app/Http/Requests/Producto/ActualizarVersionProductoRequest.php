@@ -24,7 +24,6 @@ class ActualizarVersionProductoRequest extends FormRequest
             'insurance_amount' => ['sometimes', 'nullable', 'decimal:0,4', 'min:0'],
             'fortnights_count' => ['sometimes', 'nullable', 'integer', 'min:1'],
             'late_fee_amount' => ['sometimes', 'nullable', 'decimal:0,4', 'min:0'],
-            'reason' => ['required', 'string'],
             'lock_version' => ['required', 'integer', 'min:0'],
         ];
     }

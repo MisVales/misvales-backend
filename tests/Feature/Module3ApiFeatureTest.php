@@ -114,10 +114,7 @@ class Module3ApiFeatureTest extends TestCase
     public function test_cannot_create_product_without_its_catalog_data()
     {
         // Producto base
-        $response = $this->actingAs($this->admin)->postJson('/api/v1/products', [
-            'code' => 'PROD01',
-            'reason' => 'Nuevo',
-        ], ['X-Request-Id' => Str::uuid()->toString()]);
+        $response = $this->actingAs($this->admin)->postJson('/api/v1/products', [], ['X-Request-Id' => Str::uuid()->toString()]);
 
         $response->assertStatus(422)
             ->assertJsonPath('error.code', 'VALIDATION_ERROR');
@@ -140,7 +137,6 @@ class Module3ApiFeatureTest extends TestCase
     public function test_manager_creates_and_publishes_a_product_with_its_financial_conditions(): void
     {
         $created = $this->actingAs($this->admin)->postJson('/api/v1/products', [
-            'code' => 'VALE-15000',
             'name' => 'Vale de $15,000',
             'description' => 'Importe nominal disponible para otorgar.',
             'nominal_amount' => 15000,
@@ -149,12 +145,12 @@ class Module3ApiFeatureTest extends TestCase
             'insurance_amount' => 100,
             'fortnights_count' => 8,
             'late_fee_amount' => 200,
-            'reason' => 'Alta del producto de prueba',
         ]);
 
         $created->assertCreated()
-            ->assertJsonPath('code', 'VALE-15000')
+            ->assertJsonPath('code', fn (string $code): bool => str_starts_with($code, 'VAL-'))
             ->assertJsonPath('versions.0.name', 'Vale de $15,000')
+            ->assertJsonPath('versions.0.reason', 'Alta automática del producto.')
             ->assertJsonPath('versions.0.nominal_amount', '15000.0000')
             ->assertJsonPath('loan_commission_percentage', null)
             ->assertJsonPath('simple_interest_percentage', null)

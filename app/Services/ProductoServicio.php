@@ -10,6 +10,7 @@ use App\Models\ProductVersion;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 class ProductoServicio
 {
@@ -17,11 +18,12 @@ class ProductoServicio
     {
         return DB::transaction(function () use ($datos, $usuarioId) {
             $producto = Product::create([
-                'code' => $datos['code'],
+                'code' => 'VAL-'.Str::upper((string) Str::ulid()),
                 'status' => BaseStatus::ACTIVE,
                 'created_by' => $usuarioId,
             ]);
 
+            $datos['reason'] = 'Alta automática del producto.';
             $this->crearVersion($producto, $datos, $usuarioId);
 
             return $producto->load('versions');
@@ -45,7 +47,7 @@ class ProductoServicio
                 'nominal_amount' => $this->normalizarMonto($datos['nominal_amount']),
                 'status' => VersionStatus::DRAFT,
                 'effective_from' => $effectiveFrom,
-                'reason' => $datos['reason'],
+                'reason' => $datos['reason'] ?? 'Nueva versión automática del producto.',
                 'created_by' => $usuarioId,
                 ...$condiciones,
             ]);

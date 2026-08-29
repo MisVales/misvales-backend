@@ -22,7 +22,6 @@ trait MensajesProductoFinanciero
             'fortnights_count.min' => 'El número de quincenas debe ser al menos 1.',
             'late_fee_amount.decimal' => 'El recargo debe tener como máximo 4 decimales.',
             'late_fee_amount.min' => 'El recargo no puede ser negativo.',
-            'reason.required' => 'Indica el motivo del alta o del cambio.',
             'lock_version.required' => 'La versión de edición es obligatoria.',
             'lock_version.integer' => 'La versión de edición no es válida.',
         ];
