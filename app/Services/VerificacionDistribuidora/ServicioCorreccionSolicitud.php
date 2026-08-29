@@ -44,9 +44,11 @@ class ServicioCorreccionSolicitud
     public function aplicarCorreccion(
         string $applicationId, string $visitId, ApplicationCorrectionSection $section,
         string $fieldPath, string $coordinatorId, int $lockVersion,
-        ?string $recordId, int $differenceIndex
+        ?string $recordId, int $differenceIndex,
+        mixed $customNewValue = null,
+        ?string $customReason = null
     ): ApplicationCorrection {
-        return DB::transaction(function () use ($applicationId, $visitId, $section, $fieldPath, $coordinatorId, $lockVersion, $recordId, $differenceIndex) {
+        return DB::transaction(function () use ($applicationId, $visitId, $section, $fieldPath, $coordinatorId, $lockVersion, $recordId, $differenceIndex, $customNewValue, $customReason) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
             if (! $application) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
@@ -82,8 +84,8 @@ class ServicioCorreccionSolicitud
             if ($application->lock_version !== $lockVersion) {
                 throw new BusinessException('RESOURCE_VERSION_CONFLICT', 'Conflicto de concurrencia.', 409);
             }
-            $newValuePayload = $difference['observed_value'] ?? null;
-            $reason = (string) ($difference['description'] ?? 'Corrección indicada por el verificador.');
+            $newValuePayload = $customNewValue ?? $difference['observed_value'] ?? $difference['dato_observado'] ?? null;
+            $reason = (string) ($customReason ?? $difference['description'] ?? 'Corrección indicada por el verificador.');
             if ($newValuePayload === null || $newValuePayload === '') {
                 throw new BusinessException('APPLICATION_CORRECTION_VALUE_MISSING', 'El verificador no capturó el valor corregido para esta diferencia.', 422);
             }
@@ -132,8 +134,32 @@ class ServicioCorreccionSolicitud
         $camposDirectos = [
             'first_name', 'first_last_name', 'second_last_name', 'birth_date', 'birth_place',
             'birth_state', 'birth_city', 'email', 'phone_number', 'official_id_type',
+            'nationality', 'birth_country', 'identification_country',
         ];
         if (in_array($fieldPath, $camposDirectos, true)) {
+            if ($fieldPath === 'birth_country' || $fieldPath === 'identification_country') {
+                $newValue = match (mb_strtoupper(trim((string) $newValue), 'UTF-8')) {
+                    'MÉXICO', 'MEXICO', 'MEXICANA', 'MEXICANO', 'MX' => 'MX',
+                    'ESTADOS UNIDOS', 'USA', 'EEUU', 'US' => 'US',
+                    'HAITÍ', 'HAITI', 'HT' => 'HT',
+                    'COLOMBIA', 'CO' => 'CO',
+                    'VENEZUELA', 'VE' => 'VE',
+                    'GUATEMALA', 'GT' => 'GT',
+                    'HONDURAS', 'HN' => 'HN',
+                    'EL SALVADOR', 'SV' => 'SV',
+                    'NICARAGUA', 'NI' => 'NI',
+                    'CUBA', 'CU' => 'CU',
+                    default => mb_substr(mb_strtoupper(trim((string) $newValue), 'UTF-8'), 0, 2),
+                };
+            }
+
+            if ($fieldPath === 'nationality') {
+                $newValue = match (mb_strtoupper(trim((string) $newValue), 'UTF-8')) {
+                    'MEXICANA', 'MEXICANO', 'MÉXICO', 'MEXICO', 'MX' => 'MEXICAN',
+                    default => 'FOREIGN',
+                };
+            }
+
             $anterior = $datos->getAttribute($fieldPath);
             $datos->setAttribute($fieldPath, $newValue);
             $datos->save();
@@ -156,14 +182,27 @@ class ServicioCorreccionSolicitud
         }
 
         [$ciphertext, $hmac, $metodoCifrado, $metodoHmac] = $columnas;
-        $anterior = $datos->getAttribute($ciphertext);
-        $nuevoCifrado = $protector->{$metodoCifrado}($newValue);
+        $anteriorCifrado = $datos->getAttribute($ciphertext);
+        $anteriorDescifrado = null;
+        if ($anteriorCifrado) {
+            try {
+                $anteriorDescifrado = $protector->descifrar($anteriorCifrado);
+            } catch (\Throwable) {
+                $anteriorDescifrado = $anteriorCifrado;
+            }
+        }
+        $nuevoNormalizado = match ($fieldPath) {
+            'curp' => $protector->normalizarCurp($newValue),
+            'rfc' => $protector->normalizarRfc($newValue),
+            default => mb_strtoupper(trim($newValue)),
+        };
+        $nuevoCifrado = $protector->{$metodoCifrado}($nuevoNormalizado);
         $datos->forceFill([
             $ciphertext => $nuevoCifrado,
-            $hmac => $protector->{$metodoHmac}($newValue),
+            $hmac => $protector->{$metodoHmac}($nuevoNormalizado),
         ])->save();
 
-        return [$anterior, $nuevoCifrado];
+        return [$anteriorDescifrado, $nuevoNormalizado];
     }
 
     /** @return array{mixed, mixed} */
@@ -200,9 +239,9 @@ class ServicioCorreccionSolicitud
         return [$previous, $record->getAttribute($fieldPath)];
     }
 
-    public function finalizarCorrecciones(string $applicationId, string $coordinatorId, int $lockVersion): void
+    public function finalizarCorrecciones(string $applicationId, string $coordinatorId, int $lockVersion, bool $force = false): void
     {
-        DB::transaction(function () use ($applicationId, $coordinatorId, $lockVersion) {
+        DB::transaction(function () use ($applicationId, $coordinatorId, $lockVersion, $force) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
             if (! $application) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_FOUND', 'Solicitud no encontrada.', 404);
@@ -224,7 +263,7 @@ class ServicioCorreccionSolicitud
                 ->whereNotNull('difference_index')
                 ->distinct()
                 ->count('difference_index');
-            if ($correctionCount < count($differences)) {
+            if (! $force && $correctionCount < count($differences)) {
                 throw new BusinessException('APPLICATION_CORRECTIONS_PENDING', 'Faltan diferencias por corregir.', 409);
             }
 

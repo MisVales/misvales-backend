@@ -17,6 +17,20 @@ class ApplicationCorrectionResource extends JsonResource
         $previous = is_array($previousPayload) ? ($previousPayload['value'] ?? null) : $previousPayload;
         $accepted = is_array($acceptedPayload) ? ($acceptedPayload['value'] ?? null) : $acceptedPayload;
 
+        $decryptIfEncrypted = function ($val) {
+            if (is_string($val) && str_starts_with($val, 'eyJpdi')) {
+                try {
+                    return \Illuminate\Support\Facades\Crypt::decryptString($val);
+                } catch (\Throwable) {
+                    return $val;
+                }
+            }
+            return $val;
+        };
+
+        $previous = $decryptIfEncrypted($previous);
+        $accepted = $decryptIfEncrypted($accepted);
+
         return [
             'id' => $this->id,
             'application_id' => $this->application_id,
