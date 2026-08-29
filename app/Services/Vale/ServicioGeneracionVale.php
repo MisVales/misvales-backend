@@ -57,23 +57,14 @@ final class ServicioGeneracionVale
             ->get();
     }
 
-    /** @return array{category: array{name: string, percentage: string}, conditions: array{commission_rate: string, interest_rate: string, insurance_amount: string, minimum_installment_count: int, maximum_installment_count: int, late_fee_amount: string}} */
+    /** @return array{category: array{name: string, percentage: string}} */
     public function contextoFinanciero(User $actor): array
     {
         $distribuidora = $this->resolverDistribuidoraActiva($actor);
         $categoria = $this->resolverCategoriaVigente($distribuidora);
-        $configuracion = $this->configuracionFinanciera->resolver()['values'];
 
         return [
             'category' => ['name' => $categoria->name, 'percentage' => (string) $categoria->profit_percentage],
-            'conditions' => [
-                'commission_rate' => $configuracion['loan_commission_percentage'],
-                'interest_rate' => $configuracion['simple_interest_percentage'],
-                'insurance_amount' => $configuracion['insurance_amount'],
-                'minimum_installment_count' => $configuracion['minimum_installment_count'],
-                'maximum_installment_count' => $configuracion['maximum_installment_count'],
-                'late_fee_amount' => $configuracion['late_fee_amount'],
-            ],
         ];
     }
 
@@ -121,20 +112,20 @@ final class ServicioGeneracionVale
             ->values();
     }
 
-    public function previsualizar(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): array
+    public function previsualizar(User $actor, string $clienteId, string $versionProductoId): array
     {
-        $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
+        $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId);
 
         return $this->respuestaPrevisualizacion($contexto);
     }
 
-    public function generar(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): Vale
+    public function generar(User $actor, string $clienteId, string $versionProductoId): Vale
     {
-        return DB::transaction(function () use ($actor, $clienteId, $versionProductoId, $installmentCount): Vale {
+        return DB::transaction(function () use ($actor, $clienteId, $versionProductoId): Vale {
             $distribuidora = Distribuidora::query()->where('user_id', $actor->id)->firstOrFail();
             $linea = LineaCredito::query()->where('distributor_id', $distribuidora->id)->lockForUpdate()->firstOrFail();
 
-            $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId, $installmentCount);
+            $contexto = $this->resolverContexto($actor, $clienteId, $versionProductoId);
             $calculo = $contexto['calculation'];
             $tipo = $this->esValeDigital($distribuidora->id) ? TipoVale::VALE_DIGITAL : TipoVale::PREVALE;
             $folio = $this->siguienteFolio();
@@ -229,7 +220,7 @@ final class ServicioGeneracionVale
         }, 3);
     }
 
-    private function resolverContexto(User $actor, string $clienteId, string $versionProductoId, int $installmentCount): array
+    private function resolverContexto(User $actor, string $clienteId, string $versionProductoId): array
     {
         $distribuidora = $this->resolverDistribuidoraActiva($actor);
         if (BloqueoOperativoDistribuidora::query()->where('distributor_id', $distribuidora->id)->where('type', 'DELINQUENCY')->where('status', 'ACTIVE')->exists()) {
@@ -257,27 +248,13 @@ final class ServicioGeneracionVale
 
         $categoria = $this->resolverCategoriaVigente($distribuidora);
 
-        $configuracion = $this->configuracionFinanciera->resolver();
-        $valoresGlobales = $configuracion['values'];
-        if ($installmentCount < $valoresGlobales['minimum_installment_count'] || $installmentCount > $valoresGlobales['maximum_installment_count']) {
-            throw new ExcepcionVale(
-                'VOUCHER_INSTALLMENT_COUNT_OUT_OF_RANGE',
-                'El número de quincenas debe estar dentro del rango global vigente.',
-                422,
-                [
-                    'minimum_installment_count' => $valoresGlobales['minimum_installment_count'],
-                    'maximum_installment_count' => $valoresGlobales['maximum_installment_count'],
-                ],
-            );
-        }
+        $valoresProducto = $this->configuracionFinanciera->resolver($versionProducto->product)['values'];
         $condiciones = [
-            'commission_rate' => $valoresGlobales['loan_commission_percentage'],
-            'interest_rate' => $valoresGlobales['simple_interest_percentage'],
-            'insurance_amount' => $valoresGlobales['insurance_amount'],
-            'installment_count' => $installmentCount,
-            'minimum_installment_count' => $valoresGlobales['minimum_installment_count'],
-            'maximum_installment_count' => $valoresGlobales['maximum_installment_count'],
-            'late_fee_amount' => $valoresGlobales['late_fee_amount'],
+            'commission_rate' => $valoresProducto['loan_commission_percentage'],
+            'interest_rate' => $valoresProducto['simple_interest_percentage'],
+            'insurance_amount' => $valoresProducto['insurance_amount'],
+            'installment_count' => $valoresProducto['fortnights_count'],
+            'late_fee_amount' => $valoresProducto['late_fee_amount'],
             'category_rate' => (string) $categoria->profit_percentage,
         ];
         $calculo = $this->calculador->calcular(
@@ -296,7 +273,7 @@ final class ServicioGeneracionVale
             throw new ExcepcionVale('CREDIT_50_PERCENT_RULE_NOT_SATISFIED', 'El producto no está dentro del rango permitido por la restricción vigente.', 409, ['lower_limit' => $credito->lower_limit, 'upper_limit' => $credito->upper_limit]);
         }
 
-        return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $categoria, 'calculation' => $calculo, 'credit' => $credito, 'financial_conditions' => $condiciones, 'financial_configuration_versions' => $configuracion['versions']];
+        return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $categoria, 'calculation' => $calculo, 'credit' => $credito, 'financial_conditions' => $condiciones, 'financial_configuration_versions' => []];
     }
 
     private function resolverCategoriaVigente(Distribuidora $distribuidora): CategoryVersion
