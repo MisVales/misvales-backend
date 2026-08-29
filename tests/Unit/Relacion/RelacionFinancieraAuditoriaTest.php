@@ -152,6 +152,98 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         self::assertSame('75.0000', $plan['distributor_profit_per_fortnight']);
     }
 
+    public function test_cinco_vencimientos_consecutivos_maria(): void
+    {
+        // Caso obligatorio del usuario:
+        // 8/8 vigente = 17121
+        // +375 = 17496
+        // +375 = 17871
+        // +375 = 18246
+        // +375 = 18621
+        // +375 = 18996
+        $saldoVigente = $this->calcularSaldoRelacion('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8);
+        self::assertSame('17121.0000', $saldoVigente);
+
+        $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
+        $multa = '300.0000';
+        $gananciaQuincena = $plan['distributor_profit_per_fortnight']; // 75.0000
+        $incremento = bcadd($multa, $gananciaQuincena, 4); // 375.0000
+
+        self::assertSame('375.0000', $incremento);
+
+        $vencimiento1 = bcadd($saldoVigente, $incremento, 4);
+        self::assertSame('17496.0000', $vencimiento1, '1.er vencimiento debe ser 17,496');
+
+        $vencimiento2 = bcadd($vencimiento1, $incremento, 4);
+        self::assertSame('17871.0000', $vencimiento2, '2.º vencimiento debe ser 17,871');
+
+        $vencimiento3 = bcadd($vencimiento2, $incremento, 4);
+        self::assertSame('18246.0000', $vencimiento3, '3.er vencimiento debe ser 18,246');
+
+        $vencimiento4 = bcadd($vencimiento3, $incremento, 4);
+        self::assertSame('18621.0000', $vencimiento4, '4.º vencimiento debe ser 18,621');
+
+        $vencimiento5 = bcadd($vencimiento4, $incremento, 4);
+        self::assertSame('18996.0000', $vencimiento5, '5.º vencimiento debe ser 18,996');
+    }
+
+    public function test_diferentes_porcentajes_categoria_incrementan_dinamicamente(): void
+    {
+        // Vale con 8% de categoría: Ganancia = 10,000 * 0.08 = 800 / 8Q = 100 quincenal
+        // Multa = $300. Incremento esperado = $300 + $100 = $400
+        $plan8 = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.080000');
+        $multa = '300.0000';
+        $incremento8 = bcadd($multa, $plan8['distributor_profit_per_fortnight'], 4);
+        self::assertSame('100.0000', $plan8['distributor_profit_per_fortnight']);
+        self::assertSame('400.0000', $incremento8);
+
+        // Vale con 4% de categoría: Ganancia = 10,000 * 0.04 = 400 / 8Q = 50 quincenal
+        // Multa = $250. Incremento esperado = $250 + $50 = $300
+        $plan4 = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.040000');
+        $multa250 = '250.0000';
+        $incremento4 = bcadd($multa250, $plan4['distributor_profit_per_fortnight'], 4);
+        self::assertSame('50.0000', $plan4['distributor_profit_per_fortnight']);
+        self::assertSame('300.0000', $incremento4);
+    }
+
+    public function test_diferentes_montos_de_multa(): void
+    {
+        $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
+        $ganancia = $plan['distributor_profit_per_fortnight']; // 75.0000
+
+        foreach (['150.0000' => '225.0000', '250.0000' => '325.0000', '500.0000' => '575.0000'] as $multa => $esperado) {
+            $incremento = bcadd($multa, $ganancia, 4);
+            self::assertSame($esperado, $incremento);
+        }
+    }
+
+    public function test_vale_pagado_antes_del_siguiente_corte_no_acumula_recargo_adicional(): void
+    {
+        $saldoVigente = $this->calcularSaldoRelacion('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8);
+        $pagoRealizado = $saldoVigente;
+        $saldoRestante = bcsub($saldoVigente, $pagoRealizado, 4);
+
+        self::assertSame('0.0000', $saldoRestante);
+    }
+
+    public function test_parcialidad_parcialmente_pagada_reduce_saldo(): void
+    {
+        $saldoVigente = $this->calcularSaldoRelacion('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8);
+        $pagoParcial = '5000.0000';
+        $saldoRestante = bcsub($saldoVigente, $pagoParcial, 4);
+
+        self::assertSame('12121.0000', $saldoRestante);
+    }
+
+    public function test_redondeo_en_ultima_quincena_mantiene_exactitud(): void
+    {
+        // Verifica que la cuota fija periódica del cliente y MisVales permanezca exacta
+        $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
+        self::assertSame('1887.0000', $plan['client_payment_per_fortnight']);
+        self::assertSame('1812.0000', $plan['misvales_payment_per_fortnight']);
+        self::assertSame('75.0000', $plan['distributor_profit_per_fortnight']);
+    }
+
     public function test_diferentes_recargos_y_plazos(): void
     {
         $saldoCorte2 = $this->calcularSaldoRelacion('4000.0000', '0.100000', '0.030000', 4, '50.0000', '0.040000', 2, '200.0000');

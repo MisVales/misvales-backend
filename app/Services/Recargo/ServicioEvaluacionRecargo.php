@@ -59,6 +59,14 @@ final class ServicioEvaluacionRecargo
                 $lateFeeDetail = [];
 
                 $partidas = $relation->partidas()->with('installment.vale.product')->get();
+                if ($partidas->isEmpty() && $relation->previous_relation_id) {
+                    $prev = $relation->previousRelation;
+                    while ($prev && $partidas->isEmpty()) {
+                        $partidas = $prev->partidas()->with('installment.vale.product')->get();
+                        $prev = $prev->previousRelation;
+                    }
+                }
+
                 foreach ($partidas as $partida) {
                     $producto = $partida->installment?->vale?->product;
                     if ($producto && ! is_null($producto->late_fee_amount)) {
@@ -72,7 +80,7 @@ final class ServicioEvaluacionRecargo
                 }
 
                 if (bccomp($lateFeeTotal, '0', 4) <= 0) {
-                    return;
+                    $lateFeeTotal = (string) ($config['amount'] ?? '300.0000');
                 }
 
                 $snapshot = array_merge(
@@ -84,21 +92,24 @@ final class ServicioEvaluacionRecargo
                 if ($created) {
                     $locked = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
                     $profitForfeited = '0.0000';
-                    foreach ($locked->partidas()->get() as $partida) {
-                        $snapshot = is_array($partida->snapshot) ? $partida->snapshot : json_decode($partida->snapshot, true);
-                        $profit = (string) ($snapshot['distributor_profit'] ?? '0.0000');
-                        if (bccomp($profit, '0.0000', 4) > 0 && empty($snapshot['distributor_profit_forfeited'])) {
-                            $snapshot['distributor_profit_forfeited'] = true;
-                            $snapshot['original_misvales_payment'] = (string) $partida->misvales_amount;
-                            $profitForfeited = bcadd($profitForfeited, $profit, 4);
+                    foreach ($partidas as $partida) {
+                        $snapshotItem = is_array($partida->snapshot) ? $partida->snapshot : json_decode($partida->snapshot, true);
+                        $profit = (string) ($partida->installment?->vale?->distributor_profit_per_fortnight
+                            ?? $snapshotItem['distributor_profit']
+                            ?? '0.0000');
+
+                        if ($partida->relation_id === $relation->id && empty($snapshotItem['distributor_profit_forfeited'])) {
+                            $snapshotItem['distributor_profit_forfeited'] = true;
+                            $snapshotItem['original_misvales_payment'] = (string) $partida->misvales_amount;
                             $newBalance = bcadd((string) $partida->balance, $profit, 4);
                             $newMisvales = bcadd((string) $partida->misvales_amount, $profit, 4);
                             DB::table('distributor_relation_items')->where('id', $partida->id)->update([
                                 'balance' => $newBalance,
                                 'misvales_amount' => $newMisvales,
-                                'snapshot' => json_encode($snapshot),
+                                'snapshot' => json_encode($snapshotItem),
                             ]);
                         }
+                        $profitForfeited = bcadd($profitForfeited, $profit, 4);
                     }
                     $locked->surcharge_total = bcadd($locked->surcharge_total, $lateFeeTotal, 4);
                     $locked->misvales_total = bcadd($locked->misvales_total, $profitForfeited, 4);

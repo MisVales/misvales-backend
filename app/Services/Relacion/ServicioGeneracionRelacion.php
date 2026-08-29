@@ -3,6 +3,7 @@
 namespace App\Services\Relacion;
 
 use App\Models\AuditLog;
+use App\Models\Distribuidora;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
 use App\Notifications\NotificacionEventoDominio;
@@ -94,13 +95,18 @@ final class ServicioGeneracionRelacion
             ->get()
             ->unique('voucher_id')
             ->values();
-        $groups = $installments->groupBy(fn ($item) => $item->vale->distributor_id);
-        foreach ($groups as $items) {
-            $first = $items->first();
-            $d = $first->vale->distribuidora;
-            $line = $d->lineaCredito;
+        $distributorIds = $installments->pluck('vale.distributor_id')->unique()->filter();
+        $carriedDistributorIds = RelacionDistribuidora::query()
+            ->where('cutoff_at', '<', $cutoff)
+            ->where('balance', '>', 0)
+            ->pluck('distributor_id')
+            ->unique();
+        $allDistributorIds = $distributorIds->merge($carriedDistributorIds)->unique()->values();
+        $processedCount = 0;
+        foreach ($allDistributorIds as $distId) {
+            $items = $installments->filter(fn ($item) => $item->vale->distributor_id === $distId);
             $previousRelations = RelacionDistribuidora::query()
-                ->where('distributor_id', $d->id)
+                ->where('distributor_id', $distId)
                 ->where('cutoff_at', '<', $cutoff)
                 ->orderBy('cutoff_at')
                 ->lockForUpdate()
@@ -109,6 +115,17 @@ final class ServicioGeneracionRelacion
             $outstandingRelations = $previousRelations->filter(
                 fn (RelacionDistribuidora $candidate): bool => bccomp($candidate->balance, '0', 4) > 0,
             );
+
+            if ($items->isEmpty() && $outstandingRelations->isEmpty()) {
+                continue;
+            }
+
+            $first = $items->first();
+            $d = $first?->vale?->distribuidora ?? Distribuidora::with(['usuario', 'sucursal', 'lineaCredito', 'coordinadorVigente.coordinator', 'solicitud.domicilioActual'])->find($distId);
+            if (! $d) {
+                continue;
+            }
+            $line = $d->lineaCredito;
             $carry = $outstandingRelations->reduce(function (array $total, RelacionDistribuidora $candidate): array {
                 foreach ($this->saldoPendientePorComponente($candidate) as $component => $amount) {
                     $total[$component] = bcadd($total[$component], $amount, 4);
@@ -157,7 +174,7 @@ final class ServicioGeneracionRelacion
             ]));
         }
 
-        return $groups->count();
+        return $processedCount;
     }
 
     private function saldoPendientePorComponente(?RelacionDistribuidora $relation): array
