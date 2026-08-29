@@ -23,10 +23,10 @@ class DatabaseSeeder extends Seeder
             RolePermissionsSeeder::class,
             HeadquartersBranchSeeder::class,
             LocalDemoUsersSeeder::class,
-            DemoDistributorApplicationSeeder::class,
             ConfigurationDefinitionsSeeder::class,
             InitialConfigurationVersionsSeeder::class,
             InitialCatalogSeeder::class,
+            DemoDistributorApplicationSeeder::class,
         ]);
 
         $this->call(app()->environment('testing')
