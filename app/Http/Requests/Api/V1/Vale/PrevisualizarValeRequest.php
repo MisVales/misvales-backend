@@ -17,7 +17,6 @@ final class PrevisualizarValeRequest extends FormRequest
         return [
             'client_id' => ['required', 'uuid'],
             'product_version_id' => ['required', 'uuid'],
-            'installment_count' => ['required', 'integer', 'min:1'],
         ];
     }
 }

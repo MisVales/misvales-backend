@@ -54,7 +54,6 @@ final class ValeController extends Controller
             $request->user(),
             $request->validated('client_id'),
             $request->validated('product_version_id'),
-            $request->validated('installment_count'),
         )]);
     }
 
@@ -64,7 +63,6 @@ final class ValeController extends Controller
             $request->user(),
             $request->validated('client_id'),
             $request->validated('product_version_id'),
-            $request->validated('installment_count'),
         ));
     }
 
