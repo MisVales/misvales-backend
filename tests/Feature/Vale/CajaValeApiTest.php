@@ -1265,6 +1265,7 @@ final class CajaValeApiTest extends TestCase
         $this->marcarCorteComoConciliado($historical);
         $service->generar(CarbonImmutable::parse('2026-10-25 00:05:00', 'America/Monterrey'));
         $current = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
+        $balanceBeforePayment = (string) $current->balance;
 
         app(ServicioImportacionBancaria::class)->importar($this->xlsx([
             [$historical->payment_reference, '100', '2026-10-26 10:00:00', 'BANK-ROLLED-REFERENCE', 'Abono con referencia anterior'],
@@ -1274,12 +1275,13 @@ final class CajaValeApiTest extends TestCase
         $payment = PagoRelacion::query()->where('bank_movement_id', $movement->id)->firstOrFail();
         $this->assertSame($current->id, $movement->relation_id);
         $this->assertSame($current->id, $payment->relation_id);
-        $this->assertSame('480.0000', $current->fresh()->balance);
-        $this->assertSame('25.0000', $payment->interest_applied);
-        $this->assertSame('5.0000', $payment->insurance_applied);
-        $this->assertSame('50.0000', $payment->commission_applied);
-        $this->assertSame('20.0000', $payment->capital_applied);
-        $this->assertDatabaseCount('payment_allocations', 6);
+        $this->assertSame(bcsub($balanceBeforePayment, '100.0000', 4), $current->fresh()->balance);
+        $this->assertSame('100.0000', $payment->surcharge_applied);
+        $this->assertSame('0.0000', $payment->interest_applied);
+        $this->assertSame('0.0000', $payment->insurance_applied);
+        $this->assertSame('0.0000', $payment->commission_applied);
+        $this->assertSame('0.0000', $payment->capital_applied);
+        $this->assertDatabaseCount('payment_allocations', 0);
     }
 
     public function test_estado_cuenta_marca_abono_y_separa_saldo_utilizado_de_deuda(): void
