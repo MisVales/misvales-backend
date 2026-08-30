@@ -12,11 +12,11 @@ use Illuminate\Support\Facades\DB;
 final class ServicioSaldoValeRelacion
 {
     /** @return array<string, array<string, mixed>> keyed by voucher id */
-    public function posiciones(RelacionDistribuidora $relation, bool $asGenerated = false): array
+    public function posiciones(RelacionDistribuidora $relation, bool $asGenerated = false, bool $includeCurrentLateFee = false): array
     {
         $chain = $this->chain($relation);
-        $lateFeeUnits = $chain->mapWithKeys(function (RelacionDistribuidora $candidate) use ($relation, $asGenerated): array {
-            if ($asGenerated && $candidate->id === $relation->id) {
+        $lateFeeUnits = $chain->mapWithKeys(function (RelacionDistribuidora $candidate) use ($relation, $asGenerated, $includeCurrentLateFee): array {
+            if ($asGenerated && ! $includeCurrentLateFee && $candidate->id === $relation->id) {
                 return [$candidate->id => '0.0000'];
             }
             $fee = DB::table('relation_late_fees')
@@ -92,11 +92,15 @@ final class ServicioSaldoValeRelacion
     }
 
     /** @return list<array<string,mixed>> */
-    public function resumenes(RelacionDistribuidora $relation, bool $includeAssessed = false): array
+    public function resumenes(RelacionDistribuidora $relation, bool $includeAssessed = false, bool $includeCurrentLateFee = false): array
     {
         $summaries = [];
         foreach ($this->chain($relation) as $candidate) {
-            $positions = $this->posiciones($candidate, true);
+            $positions = $this->posiciones(
+                $candidate,
+                asGenerated: true,
+                includeCurrentLateFee: $includeCurrentLateFee && $candidate->id === $relation->id,
+            );
             foreach ($candidate->partidas()->with(['installment.vale', 'sourceInstallment.vale'])->get() as $item) {
                 $source = $item->sourceInstallment ?? $item->installment;
                 $voucherId = $source?->voucher_id;

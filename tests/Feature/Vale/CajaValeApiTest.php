@@ -1243,6 +1243,49 @@ final class CajaValeApiTest extends TestCase
         self::assertStringNotContainsString('<h2>TOTAL GENERAL</h2>', $statementHtml);
         self::assertStringStartsWith('%PDF-', $statementService->generar($current->distribuidora));
 
+        $current->forceFill([
+            'financial_status' => 'OVERDUE',
+            'balance' => '42607.0000',
+            'surcharge_total' => '6000.0000',
+        ])->save();
+        DB::table('relation_late_fees')->insert([
+            'id' => (string) Str::uuid(),
+            'relation_id' => $current->id,
+            'type' => 'LATE_FEE',
+            'amount' => '1200.0000',
+            'applied_at' => now(),
+            'configuration_snapshot' => json_encode([
+                'late_fee_unit_amount' => '300.0000',
+                'late_fee_units' => 4,
+            ]),
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $overdueStatement = $statementService->preparar($current->distribuidora);
+        self::assertSame('42607.0000', $overdueStatement['general']['misvales_payment']);
+        self::assertSame('6000.0000', $overdueStatement['general']['surcharge']);
+        self::assertSame('42607.0000', $overdueStatement['general']['total']);
+        self::assertSame('42607.0000', $overdueStatement['general']['outstanding']);
+        $overdueMaria = collect(collect($overdueStatement['cuts'])->last()['clients'])
+            ->first(fn (array $client): bool => collect($client['rows'])->contains('folio', 'VAL-TABLA-MARIA'));
+        self::assertNotNull($overdueMaria);
+        self::assertSame('17796.0000', $overdueMaria['subtotal']['total']);
+        self::assertSame('2700.0000', $overdueMaria['subtotal']['surcharge']);
+        $overdueHtml = view('relations.account-statement', [
+            'statement' => $overdueStatement,
+            'logo' => 'data:image/jpeg;base64,',
+        ])->render();
+        self::assertStringContainsString('Total a pagar a MisVales: $17,796.00', $overdueHtml);
+        self::assertStringContainsString('Total definitivo MisVales</span><strong>$42,607.00', $overdueHtml);
+
+        DB::table('relation_late_fees')->where('relation_id', $current->id)->delete();
+        $current->forceFill([
+            'financial_status' => 'PENDING',
+            'balance' => '41407.0000',
+            'surcharge_total' => '4800.0000',
+        ])->save();
+
         self::assertSame(1, $service->generar(CarbonImmutable::parse('2027-06-27 06:05:00', 'America/Monterrey')));
         $next = RelacionDistribuidora::query()->latest('cutoff_at')->firstOrFail();
         $secondTerminal = $next->partidas()->where('source_voucher_installment_id', $firstTerminal->source_voucher_installment_id)->where('occurrence_type', 'TERMINAL_OVERDUE')->sole();

@@ -24,8 +24,12 @@ final class ServicioPdfEstadoCuenta
         $latestRelation = $relations->last();
         $movementRows = collect($this->movementRows($relations, $latestRelation));
         $relationIndexes = $relations->pluck('id')->flip();
-        $cuts = $relations->values()->map(function (RelacionDistribuidora $relation, int $index) use ($movementRows, $relationIndexes): array {
-            $pendingByVoucher = collect($this->saldos->resumenes($relation))->pluck('cumulative_misvales_due', 'voucher_id');
+        $cuts = $relations->values()->map(function (RelacionDistribuidora $relation, int $index) use ($latestRelation, $movementRows, $relationIndexes): array {
+            $includeCurrentLateFee = $latestRelation !== null && $relation->id === $latestRelation->id;
+            $pendingByVoucher = collect($this->saldos->resumenes(
+                $relation,
+                includeCurrentLateFee: $includeCurrentLateFee,
+            ))->pluck('cumulative_misvales_due', 'voucher_id');
             $rows = $movementRows
                 ->filter(fn (array $row): bool => (int) $relationIndexes[$row['relation_id']] <= $index)
                 ->values();
@@ -102,7 +106,11 @@ final class ServicioPdfEstadoCuenta
         }
         $items = $relations->flatMap->partidas->keyBy('id');
         $rows = [];
-        foreach ($this->saldos->resumenes($latestRelation, true) as $summary) {
+        foreach ($this->saldos->resumenes(
+            $latestRelation,
+            includeAssessed: true,
+            includeCurrentLateFee: true,
+        ) as $summary) {
             $previousAssessed = $previousSurcharge = '0.0000';
             foreach ($summary['occurrences'] as $occurrence) {
                 $item = $items->get($occurrence['relation_item_id']);
