@@ -15,9 +15,7 @@ final class CrearClienteParaValeRequest extends FormRequest
     public function rules(): array
     {
         return [
-            'first_name' => ['required', 'string', 'max:120'],
-            'first_last_name' => ['required', 'string', 'max:120'],
-            'second_last_name' => ['nullable', 'string', 'max:120'],
+            'registration_draft_id' => ['required', 'uuid', 'exists:client_registration_drafts,id'],
         ];
     }
 }

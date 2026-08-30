@@ -88,29 +88,32 @@ final class CajaValeController extends Controller
             $vale,
             $request->user(),
             $request->integer('lock_version'),
-            $request->validated('bank_name'),
-            $request->validated('clabe')
+            null,
+            null,
+            true,
         )->load(['cliente', 'distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
     }
 
     public function cash(Vale $vale, FeriarValeRequest $request, ServicioCajaVale $service): ValeCajaResource
     {
-        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->string('bank_transaction_number')->toString(), $request->integer('lock_version'))->load(['cliente', 'distribuidora.cuentaBancariaVigente', 'distribuidora.usuario', 'distribuidora.solicitud.datosPersonales', 'distribuidora.solicitud.domicilioActual', 'distribuidora.archivosSolicitud', 'versionProducto']));
+        return new ValeCajaResource($service->feriar($vale, $request->user(), $request->validated('payment_method'), $request->validated('bank_transaction_number'), $request->validated('clabe'), $request->integer('lock_version'))->load(['cliente', 'cliente.domicilioVigente', 'cliente.archivosAdjuntos', 'cliente.cuentaBancariaVigente', 'versionProducto']));
     }
 
     public function requestModification(Vale $vale, SolicitarModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)
     {
-        return response()->json(['data' => $service->solicitar($vale, $request->user(), $request->validated('fields'), $request->validated('changes'), $request->validated('reason'))], 201);
+        return response()->json(['data' => $service->solicitar($vale, $request->user(), $request->validated('fields'), $request->validated('changes'))], 201);
     }
 
     public function listModifications(Request $request)
     {
         $user = $request->user();
-        if (! $user->hasPermissionTo('voucher_modifications.authorize_global') && ! $user->hasPermissionTo('voucher_modifications.authorize_branch')) {
+        $esGerenteGeneral = $user->hasRole('general_manager') && $user->hasPermissionTo('voucher_modifications.authorize_global');
+        $esGerenteSucursal = $user->hasRole('branch_manager') && $user->hasPermissionTo('voucher_modifications.authorize_branch');
+        if (! $esGerenteGeneral && ! $esGerenteSucursal) {
             throw new ExcepcionVale('MODIFICATION_AUTHORIZE_FORBIDDEN', 'Sin permiso.', 403);
         }
         $query = SolicitudModificacionVale::query()->with('vale.cliente')->where('status', 'REQUESTED');
-        if (! $user->hasPermissionTo('voucher_modifications.authorize_global')) {
+        if (! $esGerenteGeneral) {
             $query->whereIn('branch_id', $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->select('branch_id'));
         }
 
@@ -119,7 +122,7 @@ final class CajaValeController extends Controller
 
     public function decideModification(SolicitudModificacionVale $solicitud, DecidirModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)
     {
-        return response()->json(['data' => $service->decidir($solicitud, $request->user(), $request->validated('decision') === 'AUTHORIZE', $request->validated('reason'), $request->integer('lock_version'))]);
+        return response()->json(['data' => $service->decidir($solicitud, $request->user(), $request->validated('decision') === 'AUTHORIZE', null, $request->integer('lock_version'))]);
     }
 
     public function applyModification(SolicitudModificacionVale $solicitud, AplicarModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)

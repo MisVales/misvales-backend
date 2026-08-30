@@ -15,8 +15,7 @@ final class LiberarValeRequest extends FormRequest
     {
         return [
             'lock_version' => ['required', 'integer', 'min:1'],
-            'bank_name' => ['nullable', 'required_with:clabe', 'string', 'max:160'],
-            'clabe' => ['nullable', 'required_with:bank_name', 'string', 'regex:/^\\d{18}$/'],
+            'matches' => ['required', 'accepted'],
         ];
     }
 }

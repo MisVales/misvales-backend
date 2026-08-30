@@ -100,7 +100,7 @@ final class RolePermissionsSeeder extends Seeder
                 'clients.view_portfolio', 'credit_lines.view_assigned', 'credit_line_movements.view_assigned',
                 'credit_increase_requests.view_assigned', 'credit_increase_requests.preauthorize_assigned',
                 'credit_increase_requests.reject_assigned', 'vouchers.view_assigned',
-                'voucher_modifications.authorize_branch', 'relations.view_assigned',
+                'relations.view_assigned',
                 'points.view_branch',
                 'bank_movements.view_branch',
                 'payment_clarifications.view_assigned', 'manual_reconciliation.view_assigned',

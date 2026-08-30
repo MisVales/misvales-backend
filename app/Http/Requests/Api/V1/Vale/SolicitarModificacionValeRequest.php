@@ -2,12 +2,16 @@
 
 namespace App\Http\Requests\Api\V1\Vale;
 
+use App\Exceptions\ApiException;
+use App\Http\Requests\Traits\ValidaDireccionEstructurada;
+use Illuminate\Contracts\Validation\Validator;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Validation\Validator;
 
 final class SolicitarModificacionValeRequest extends FormRequest
 {
+    use ValidaDireccionEstructurada;
+
     public function authorize(): bool
     {
         return true;
@@ -17,41 +21,22 @@ final class SolicitarModificacionValeRequest extends FormRequest
     {
         return [
             'fields' => ['required', 'array', 'min:1'],
-            'fields.*' => ['required', 'distinct', Rule::in(['curp', 'address'])],
-            'changes' => ['required', 'array', 'min:1'],
-            'changes.curp' => ['sometimes', 'string', 'size:18', 'regex:/^[A-Z\d]{18}$/i'],
-            'changes.address' => ['sometimes', 'array'],
-            'changes.address.street' => ['required_with:changes.address', 'string', 'max:100'],
-            'changes.address.exterior_number' => ['required_with:changes.address', 'string', 'max:20'],
-            'changes.address.interior_number' => ['nullable', 'string', 'max:20'],
-            'changes.address.neighborhood' => ['required_with:changes.address', 'string', 'max:100'],
-            'changes.address.postal_code' => ['required_with:changes.address', 'digits:5'],
-            'changes.address.municipality' => ['required_with:changes.address', 'string', 'max:100'],
-            'changes.address.city' => ['required_with:changes.address', 'string', 'max:100'],
-            'changes.address.state' => ['required_with:changes.address', 'string', 'max:50'],
-            'changes.address.country' => ['nullable', 'string', 'size:2'],
-            'reason' => ['required', 'string', 'max:500'],
+            'fields.*' => [Rule::in(['first_name', 'first_last_name', 'second_last_name', 'birth_date', 'phone_number', 'address', 'curp'])],
+            'changes' => ['required', 'array'],
+            'changes.first_name' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
+            'changes.first_last_name' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
+            'changes.second_last_name' => ['sometimes', 'required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
+            'changes.birth_date' => ['sometimes', 'required', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
+            'changes.phone_number' => ['sometimes', 'required', 'string', 'regex:/^\+\d{1,4}\d{10}$/'],
+            'changes.curp' => ['sometimes', 'required', 'string', 'regex:/^[A-Z\d]{18}$/i'],
+            'changes.address' => ['sometimes', 'required', 'array'],
+            ...$this->reglasDireccionEstructurada('changes.address'),
+            ...$this->reglasCodigoPostalMexicano('changes.address'),
         ];
     }
 
-    public function after(): array
+    protected function failedValidation(Validator $validator): void
     {
-        return [function (Validator $validator): void {
-            $fields = collect($this->input('fields', []))->sort()->values()->all();
-            $changes = collect(array_keys($this->input('changes', [])))->sort()->values()->all();
-
-            if ($fields !== $changes) {
-                $validator->errors()->add('changes', 'Captura exactamente los campos seleccionados para corrección.');
-            }
-        }];
-    }
-
-    public function messages(): array
-    {
-        return [
-            'changes.curp.size' => 'La CURP debe tener exactamente 18 caracteres.',
-            'changes.curp.regex' => 'La CURP debe contener exactamente 18 letras o números.',
-            'changes.address.postal_code.digits' => 'El código postal debe tener exactamente 5 dígitos numéricos.',
-        ];
+        throw new ApiException('MODIFICATION_VALIDATION_FAILED', 'Los datos de corrección no cumplen las validaciones del registro de cliente.', 422, $validator->errors()->toArray(), []);
     }
 }

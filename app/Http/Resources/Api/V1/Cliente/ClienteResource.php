@@ -28,6 +28,7 @@ class ClienteResource extends JsonResource
             'id' => $this->id,
             'client_number' => $this->client_number,
             'full_name' => trim(implode(' ', array_filter([$this->first_name, $this->first_last_name, $this->second_last_name]))),
+            'phone_number' => $this->phone_number,
             'curp_masked' => $curp === null ? null : $protector->enmascarar($curp, 4, 3),
             'birth_date' => $this->birth_date?->format('Y-m-d'),
             'address' => $this->whenLoaded('domicilioVigente', fn () => $this->domicilioVigente ? [

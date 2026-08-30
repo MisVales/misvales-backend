@@ -17,7 +17,7 @@ class Cliente extends Model
 
     protected $fillable = [
         'client_number', 'first_name', 'first_last_name', 'second_last_name',
-        'birth_date', 'birth_place', 'birth_state', 'birth_city',
+        'phone_number', 'birth_date', 'birth_place', 'birth_state', 'birth_city',
         'official_id_type', 'official_id_media_id', 'created_by',
     ];
 

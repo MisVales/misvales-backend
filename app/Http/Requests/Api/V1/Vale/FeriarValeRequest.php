@@ -3,6 +3,7 @@
 namespace App\Http\Requests\Api\V1\Vale;
 
 use Illuminate\Foundation\Http\FormRequest;
+use Illuminate\Validation\Rule;
 
 final class FeriarValeRequest extends FormRequest
 {
@@ -13,7 +14,12 @@ final class FeriarValeRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['bank_transaction_number' => ['required', 'string', 'max:25', 'regex:/^\d+$/'], 'lock_version' => ['required', 'integer', 'min:1']];
+        return [
+            'payment_method' => ['required', Rule::in(['CASH', 'TRANSFER'])],
+            'bank_transaction_number' => ['nullable', 'required_if:payment_method,TRANSFER', 'string', 'max:25', 'regex:/^\d+$/'],
+            'clabe' => ['nullable', 'required_if:payment_method,TRANSFER', 'string', 'regex:/^\d{18}$/'],
+            'lock_version' => ['required', 'integer', 'min:1'],
+        ];
     }
 
     public function messages(): array

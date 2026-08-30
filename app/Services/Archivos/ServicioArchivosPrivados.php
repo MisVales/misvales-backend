@@ -17,6 +17,7 @@ final class ServicioArchivosPrivados
 {
     private const PURPOSES = [
         'PHOTO' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif'],
+        'CLIENT_INE_FRONT' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif'],
         'IDENTIFICATION' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
         'ADDRESS_PROOF' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
         'VEHICLE_EVIDENCE' => ['jpg', 'jpeg', 'jfif', 'png', 'webp', 'gif', 'bmp', 'tif', 'tiff', 'heic', 'heif', 'avif', 'pdf'],
@@ -29,7 +30,7 @@ final class ServicioArchivosPrivados
         'GENERATED_DOCUMENT' => ['pdf'],
     ];
 
-    private const OWNERS = ['verification_visit', 'client', 'payment_clarification', 'surplus_refund_request', 'bank_file_import', 'distributor_relation', 'distributor_application', 'application_vehicle', 'application_asset_liability', 'application_commercial_credit'];
+    private const OWNERS = ['verification_visit', 'client', 'client_registration_draft', 'payment_clarification', 'surplus_refund_request', 'bank_file_import', 'distributor_relation', 'distributor_application', 'application_vehicle', 'application_asset_liability', 'application_commercial_credit'];
 
     private const RECORD_OWNER_PURPOSES = [
         'application_vehicle' => 'VEHICLE_EVIDENCE',
@@ -52,7 +53,8 @@ final class ServicioArchivosPrivados
             throw ValidationException::withMessages(['owner_id' => ['La entidad propietaria no existe.']]);
         }
         $ownsClient = $ownerType === 'client' && DB::table('client_distributor_assignments as a')->join('distributors as d', 'd.id', '=', 'a.distributor_id')->where('a.client_id', $ownerId)->whereNull('a.ends_at')->where('d.user_id', $actor->id)->exists();
-        abort_unless($actor->hasPermissionTo('media.download_global') || $actor->hasScopeForBranch($branchId) || $ownsClient, 403);
+        $ownsDraft = $ownerType === 'client_registration_draft' && DB::table('client_registration_drafts as draft')->join('distributors as d', 'd.id', '=', 'draft.distributor_id')->where('draft.id', $ownerId)->where('d.user_id', $actor->id)->exists();
+        abort_unless($actor->hasPermissionTo('media.download_global') || $actor->hasScopeForBranch($branchId) || $ownsClient || $ownsDraft, 403);
         $clientExtension = strtolower($file->getClientOriginalExtension());
         $mime = $file->getMimeType() ?: 'application/octet-stream';
         $extension = $this->canonicalExtension($mime);
@@ -110,7 +112,7 @@ final class ServicioArchivosPrivados
 
         if (! $authorized) {
             foreach ($bindings as $binding) {
-                if (in_array($binding->purpose, ['IDENTIFICATION', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE', 'PHOTO', 'DOCUMENT'], true)) {
+                if (in_array($binding->purpose, ['IDENTIFICATION', 'CLIENT_INE_FRONT', 'ADDRESS_PROOF', 'VEHICLE_EVIDENCE', 'ASSET_EVIDENCE', 'COMMERCIAL_EVIDENCE', 'PHOTO', 'DOCUMENT'], true)) {
                     $applicationId = $this->applicationId($binding->owner_type, $binding->owner_id)
                         ?? ($binding->owner_type === 'distributor_application' ? $binding->owner_id : null);
 
@@ -177,6 +179,7 @@ final class ServicioArchivosPrivados
         [$table, $column] = match ($ownerType) {
             'verification_visit' => ['verification_visits', 'application_id'],
             'client' => ['client_distributor_assignments', 'branch_id'],
+            'client_registration_draft' => ['client_registration_drafts', 'branch_id'],
             'payment_clarification' => ['payment_clarifications', 'relation_id'],
             'surplus_refund_request' => ['surplus_refund_requests', 'branch_id'],
             'bank_file_import' => ['bank_file_imports', 'branch_id'],

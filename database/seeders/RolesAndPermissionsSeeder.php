@@ -298,7 +298,6 @@ class RolesAndPermissionsSeeder extends Seeder
                     'credit_increase_requests.reject_assigned',
                     'vouchers.view_assigned',
                     'relations.view_assigned',
-                    'voucher_modifications.authorize_branch',
                     'bank_movements.view_branch', 'payment_clarifications.view_assigned',
                     'manual_reconciliation.view_assigned', 'manual_reconciliation.authorize_branch',
                     'risk.view_assigned', 'delinquency_removal.request_assigned',

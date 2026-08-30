@@ -15,36 +15,10 @@ class CrearClienteRequest extends FormRequest
     protected function prepareForValidation(): void
     {
         $curp = $this->input('curp');
-        if (empty($curp)) {
-            $randomDigits = str_pad((string) random_int(0, 999999), 6, '0', STR_PAD_LEFT);
-            $randomEnd = str_pad((string) random_int(0, 99), 2, '0', STR_PAD_LEFT);
-            $curp = "AAAA{$randomDigits}HAAAAA{$randomEnd}";
-        } else {
+        if (! empty($curp)) {
             $curp = mb_strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', trim($curp)));
+            $this->merge(['curp' => $curp]);
         }
-
-        $this->merge([
-            'curp' => $curp,
-            'birth_date' => $this->input('birth_date', '2000-01-01'),
-            'birth_place' => $this->input('birth_place', 'N/A'),
-            'birth_state' => $this->input('birth_state', 'N/A'),
-            'birth_city' => $this->input('birth_city', 'N/A'),
-            'official_id_type' => $this->input('official_id_type', 'OTHER'),
-            'address' => $this->input('address', [
-                'street' => 'Conocido',
-                'exterior_number' => 'SN',
-                'neighborhood' => 'Centro',
-                'postal_code' => '00000',
-                'municipality' => 'N/A',
-                'city' => 'N/A',
-                'state' => 'N/A',
-            ]),
-            'bank_account' => $this->input('bank_account', [
-                'bank_name' => 'N/A',
-                'account_holder_name' => $this->input('first_name').' '.$this->input('first_last_name'),
-                'clabe' => '000000000000000000',
-            ]),
-        ]);
     }
 
     public function authorize(): bool

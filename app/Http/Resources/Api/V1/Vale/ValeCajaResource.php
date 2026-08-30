@@ -4,7 +4,6 @@ namespace App\Http\Resources\Api\V1\Vale;
 
 use App\Models\SolicitudModificacionVale;
 use App\Services\Cliente\ProtectorDatosCliente;
-use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
 
@@ -13,18 +12,13 @@ final class ValeCajaResource extends JsonResource
     public function toArray(Request $request): array
     {
         $protector = app(ProtectorDatosCliente::class);
-        $distribuidora = $this->distribuidora;
-        $cuenta = $distribuidora?->cuentaBancariaVigente;
-        $solicitud = $distribuidora?->solicitud;
-        $datosPersonales = $solicitud?->datosPersonales;
-        $domicilio = $solicitud?->domicilioActual;
-        $archivos = $distribuidora?->archivosSolicitud ?? collect();
-        $identificacionAdjunta = $archivos->firstWhere('purpose', 'IDENTIFICATION');
-        $comprobanteAdjunto = $archivos->firstWhere('purpose', 'ADDRESS_PROOF');
-        $protectorSolicitud = app(ProtectorDatosSolicitud::class);
-        $numeroIdentificacion = $datosPersonales?->official_id_number_ciphertext === null
-            ? null
-            : $protectorSolicitud->descifrar($datosPersonales->official_id_number_ciphertext);
+        $cliente = $this->cliente;
+        $domicilio = $cliente?->domicilioVigente;
+        $archivos = $cliente?->archivosAdjuntos ?? collect();
+        $ine = $cliente?->official_id_media_id ?? $archivos->firstWhere('purpose', 'CLIENT_INE_FRONT')?->media_file_id;
+        $comprobante = $domicilio?->address_proof_media_id ?? $archivos->firstWhere('purpose', 'ADDRESS_PROOF')?->media_file_id;
+        $cuenta = $cliente?->cuentaBancariaVigente;
+        $clabe = $cuenta?->clabe_ciphertext === null ? null : $protector->descifrar($cuenta->clabe_ciphertext);
         $solicitudModificacion = $this->resource->relationLoaded('solicitudesModificacion')
             ? $this->resource->solicitudesModificacion->first()
             : null;
@@ -34,6 +28,50 @@ final class ValeCajaResource extends JsonResource
                 ? ['id' => $solicitudModificacion->id, 'lock_version' => $solicitudModificacion->lock_version, 'status' => $solicitudModificacion->status]
                 : null;
 
-        return [...(new ValeResource($this->resource))->toArray($request), 'document_owner' => $solicitud === null ? null : ['owner_type' => 'distributor_application', 'owner_id' => $solicitud->id], 'identity' => ['official_id_type' => $datosPersonales?->official_id_type, 'official_id_number' => $numeroIdentificacion, 'official_id_number_masked' => $numeroIdentificacion === null ? null : $protectorSolicitud->enmascarar($numeroIdentificacion, 2, 2), 'official_id_media_id' => $identificacionAdjunta?->media_file_id], 'address' => ($domicilio || $comprobanteAdjunto) ? ['street' => $domicilio?->street, 'exterior_number' => $domicilio?->exterior_number, 'interior_number' => $domicilio?->interior_number, 'neighborhood' => $domicilio?->neighborhood, 'postal_code' => $domicilio?->postal_code, 'municipality' => $domicilio?->municipality, 'city' => $domicilio?->city, 'state' => $domicilio?->state, 'country' => $domicilio?->country, 'address_proof_media_id' => $comprobanteAdjunto?->media_file_id] : null, 'bank_account' => $cuenta?->clabe_ciphertext === null ? null : ['bank_name' => $cuenta->bank_name, 'account_holder_name' => $cuenta->account_holder_name, 'clabe_masked' => $protector->ultimosCuatro($protector->descifrar($cuenta->clabe_ciphertext))], 'modification_request' => $solicitudPropia, 'released_at' => $this->released_at?->toIso8601String(), 'cashed_at' => $this->cashed_at?->toIso8601String()];
+        return [
+            ...(new ValeResource($this->resource))->toArray($request),
+            'client_verification' => $cliente === null ? null : [
+                'id' => $cliente->id,
+                'first_name' => $cliente->first_name,
+                'first_last_name' => $cliente->first_last_name,
+                'second_last_name' => $cliente->second_last_name,
+                'full_name' => trim(implode(' ', array_filter([$cliente->first_name, $cliente->first_last_name, $cliente->second_last_name]))),
+                'birth_date' => $cliente->birth_date?->format('Y-m-d'),
+                'phone_number' => $cliente->phone_number,
+                'identity' => [
+                    'official_id_type' => $cliente->official_id_type,
+                    'official_id_media_id' => $ine,
+                ],
+                'address' => $domicilio === null ? null : [
+                    'street' => $domicilio->street,
+                    'exterior_number' => $domicilio->exterior_number,
+                    'interior_number' => $domicilio->interior_number,
+                    'neighborhood' => $domicilio->neighborhood,
+                    'postal_code' => $domicilio->postal_code,
+                    'municipality' => $domicilio->municipality,
+                    'city' => $domicilio->city,
+                    'state' => $domicilio->state,
+                    'country' => $domicilio->country,
+                    'address_proof_media_id' => $comprobante,
+                ],
+            ],
+            'identity' => ['official_id_type' => $cliente?->official_id_type, 'official_id_number' => null, 'official_id_number_masked' => null, 'official_id_media_id' => $ine],
+            'address' => $domicilio === null ? null : [
+                'street' => $domicilio->street,
+                'exterior_number' => $domicilio->exterior_number,
+                'interior_number' => $domicilio->interior_number,
+                'neighborhood' => $domicilio->neighborhood,
+                'postal_code' => $domicilio->postal_code,
+                'municipality' => $domicilio->municipality,
+                'city' => $domicilio->city,
+                'state' => $domicilio->state,
+                'country' => $domicilio->country,
+                'address_proof_media_id' => $comprobante,
+            ],
+            'bank_account' => $cuenta === null ? null : ['bank_name' => $cuenta->bank_name, 'account_holder_name' => $cuenta->account_holder_name, 'clabe_masked' => $clabe === null ? null : $protector->ultimosCuatro($clabe)],
+            'modification_request' => $solicitudPropia,
+            'released_at' => $this->released_at?->toIso8601String(),
+            'cashed_at' => $this->cashed_at?->toIso8601String(),
+        ];
     }
 }

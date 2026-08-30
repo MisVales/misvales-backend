@@ -36,12 +36,13 @@ final class ServicioRegistroCliente
                     throw new ExcepcionCliente('CLIENT_ASSIGNMENT_NOT_ACTIVE', 'La distribuidora no tiene una asignación activa.', 409);
                 }
 
-                $curp = $this->normalizadorCurp->normalizar($datos['curp']);
-                $curpHmac = $this->protector->hmacCurp($curp);
+                $curp = $this->nuloSiVacio($datos['curp'] ?? null);
+                $curp = $curp === null ? null : $this->normalizadorCurp->normalizar($curp);
+                $curpHmac = $curp === null ? null : $this->protector->hmacCurp($curp);
                 $domicilioNormalizado = $this->normalizadorDomicilio->normalizar($datos['address']);
                 $huellaDomicilio = $this->generadorHuella->generar($domicilioNormalizado);
 
-                if (Cliente::query()->where('curp_hmac', $curpHmac)->exists()) {
+                if ($curpHmac !== null && Cliente::query()->where('curp_hmac', $curpHmac)->exists()) {
                     throw new ExcepcionCliente(
                         'CLIENT_CURP_EXISTS',
                         'La CURP ya se encuentra registrada.',
@@ -69,10 +70,11 @@ final class ServicioRegistroCliente
                     'first_last_name' => trim($datos['first_last_name']),
                     'second_last_name' => $this->nuloSiVacio($datos['second_last_name'] ?? null),
                     'birth_date' => $datos['birth_date'],
-                    'birth_place' => trim($datos['birth_place']),
-                    'birth_state' => trim($datos['birth_state']),
-                    'birth_city' => trim($datos['birth_city']),
-                    'official_id_type' => $datos['official_id_type'],
+                    'phone_number' => trim((string) ($datos['phone_number'] ?? '')) ?: null,
+                    'birth_place' => $this->nuloSiVacio($datos['birth_place'] ?? null),
+                    'birth_state' => $this->nuloSiVacio($datos['birth_state'] ?? null),
+                    'birth_city' => $this->nuloSiVacio($datos['birth_city'] ?? null),
+                    'official_id_type' => $datos['official_id_type'] ?? null,
                     'official_id_media_id' => $datos['official_id_media_id'] ?? null,
                     'created_by' => $actor->id,
                 ]);
@@ -80,7 +82,7 @@ final class ServicioRegistroCliente
                 $rfc = $this->normalizarIdentificador($datos['rfc'] ?? null);
                 $identificacion = $this->normalizarIdentificador($datos['official_id_number'] ?? null);
                 $cliente->forceFill([
-                    'curp_ciphertext' => $this->protector->cifrar($curp),
+                    'curp_ciphertext' => $curp === null ? null : $this->protector->cifrar($curp),
                     'curp_hmac' => $curpHmac,
                     'rfc_ciphertext' => $rfc === null ? null : $this->protector->cifrar($rfc),
                     'rfc_hmac' => $rfc === null ? null : $this->protector->hmacExacto($rfc),
@@ -108,23 +110,25 @@ final class ServicioRegistroCliente
                 ]);
                 $domicilio->forceFill(['normalized_fingerprint_hmac' => $huellaDomicilio])->save();
 
-                $cuenta = new CuentaBancariaCliente([
-                    'client_id' => $cliente->id,
-                    'bank_name' => trim($datos['bank_account']['bank_name']),
-                    'account_holder_name' => trim($datos['bank_account']['account_holder_name']),
-                    'is_current' => true,
-                    'starts_at' => $ahora,
-                    'created_by' => $actor->id,
-                ]);
-                $numeroCuenta = $this->nuloSiVacio($datos['bank_account']['account_number'] ?? null);
-                $clabe = trim($datos['bank_account']['clabe']);
-                $cuenta->forceFill([
-                    'account_number_ciphertext' => $numeroCuenta === null ? null : $this->protector->cifrar($numeroCuenta),
-                    'account_number_hmac' => $numeroCuenta === null ? null : $this->protector->hmacExacto($numeroCuenta),
-                    'clabe_ciphertext' => $this->protector->cifrar($clabe),
-                    'clabe_hmac' => $this->protector->hmacExacto($clabe),
-                    'lock_version' => 1,
-                ])->save();
+                if (isset($datos['bank_account']['clabe']) && trim((string) $datos['bank_account']['clabe']) !== '') {
+                    $cuenta = new CuentaBancariaCliente([
+                        'client_id' => $cliente->id,
+                        'bank_name' => trim((string) ($datos['bank_account']['bank_name'] ?? '')),
+                        'account_holder_name' => trim((string) ($datos['bank_account']['account_holder_name'] ?? implode(' ', array_filter([$datos['first_name'], $datos['first_last_name'], $datos['second_last_name'] ?? null])))),
+                        'is_current' => true,
+                        'starts_at' => $ahora,
+                        'created_by' => $actor->id,
+                    ]);
+                    $numeroCuenta = $this->nuloSiVacio($datos['bank_account']['account_number'] ?? null);
+                    $clabe = trim($datos['bank_account']['clabe']);
+                    $cuenta->forceFill([
+                        'account_number_ciphertext' => $numeroCuenta === null ? null : $this->protector->cifrar($numeroCuenta),
+                        'account_number_hmac' => $numeroCuenta === null ? null : $this->protector->hmacExacto($numeroCuenta),
+                        'clabe_ciphertext' => $this->protector->cifrar($clabe),
+                        'clabe_hmac' => $this->protector->hmacExacto($clabe),
+                        'lock_version' => 1,
+                    ])->save();
+                }
 
                 AsignacionClienteDistribuidora::create([
                     'client_id' => $cliente->id,

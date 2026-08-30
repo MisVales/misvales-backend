@@ -38,8 +38,8 @@ use App\Http\Controllers\Api\V1\PuntosController;
 use App\Http\Controllers\Api\V1\ReenvioInvitacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\RelacionDistribuidoraController;
 use App\Http\Controllers\Api\V1\ReportesExportController;
-use App\Http\Controllers\Api\V1\ResumenOperacionController;
 use App\Http\Controllers\Api\V1\ResumenInicioDistribuidoraController;
+use App\Http\Controllers\Api\V1\ResumenOperacionController;
 use App\Http\Controllers\Api\V1\RiesgoDistribuidoraController;
 use App\Http\Controllers\Api\V1\RoleController;
 use App\Http\Controllers\Api\V1\SecurityController;
@@ -290,6 +290,8 @@ Route::prefix('v1')->group(function () {
         // Módulo 7 - Clientes finales y cartera informativa
         Route::get('clients', [ClienteController::class, 'index'])->middleware('permission:clients.view');
         Route::post('clients', [ClienteController::class, 'store'])->middleware(['permission:clients.create', 'idempotency']);
+        Route::post('client-registration-drafts', [ClienteController::class, 'createRegistrationDraft'])->middleware(['permission:clients.create', 'idempotency']);
+        Route::post('client-registration-drafts/{draft}/complete', [ClienteController::class, 'completeRegistrationDraft'])->middleware(['permission:clients.create', 'idempotency']);
         Route::post('voucher-clients', [ClienteController::class, 'storeForVoucher'])->middleware(['permission:clients.create', 'idempotency']);
         Route::get('clients/{client}', [ClienteController::class, 'show'])->middleware('permission:clients.view');
         Route::get('clients/{client}/bank-accounts', [CuentaBancariaClienteController::class, 'index'])

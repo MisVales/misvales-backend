@@ -19,6 +19,7 @@ class ClienteDetalleResource extends ClienteResource
             'first_name' => $this->first_name,
             'first_last_name' => $this->first_last_name,
             'second_last_name' => $this->second_last_name,
+            'phone_number' => $this->phone_number,
             'curp' => $this->when($puedeVerSensible, fn () => $protector->descifrar($this->curp_ciphertext)),
             'rfc_masked' => $rfc === null ? null : $protector->enmascarar($rfc, 3, 3),
             'rfc' => $this->when($puedeVerSensible, $rfc),

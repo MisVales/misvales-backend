@@ -13,6 +13,6 @@ final class DecidirModificacionValeRequest extends FormRequest
 
     public function rules(): array
     {
-        return ['decision' => ['required', 'in:AUTHORIZE,REJECT'], 'reason' => ['required', 'string', 'max:500'], 'lock_version' => ['required', 'integer', 'min:1']];
+        return ['decision' => ['required', 'in:AUTHORIZE,REJECT'], 'lock_version' => ['required', 'integer', 'min:1']];
     }
 }
