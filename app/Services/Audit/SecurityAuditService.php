@@ -37,15 +37,21 @@ class SecurityAuditService
             'occurred_at' => now(),
         ]);
 
+        $previousValues = $data['previous'] ?? $metadata['previous_values'] ?? null;
+        $newValues = $data['new'] ?? $metadata['new_values'] ?? $metadata;
+        $reason = $data['reason'] ?? $metadata['reason'] ?? null;
+
         AuditHelper::log(
             eventName: $data['event_type'],
             entityType: $data['entity_type'] ?? 'SecurityEvent',
             entityId: $data['entity_id'] ?? $event->id,
             actorId: $data['actor_user_id'] ?? $request->user()?->id,
             branchId: $data['branch_id'] ?? null,
-            new: $metadata,
+            previous: is_array($previousValues) && count($previousValues) > 0 ? $previousValues : null,
+            new: is_array($newValues) && count($newValues) > 0 ? $newValues : $metadata,
+            reason: $reason,
             result: $data['outcome'] ?? 'SUCCESS',
-            evidence: ['security_event_id' => $event->id],
+            evidence: ['security_event_id' => $event->id, 'metadata' => $metadata],
         );
     }
 

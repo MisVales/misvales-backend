@@ -198,7 +198,26 @@ class ServicioRevisionCoordinador
             ]);
             $visit->forceFill(['status' => VerificationVisitStatus::ASSIGNED])->save();
 
-            AuditHelper::log('VERIFICATION_VISIT_ASSIGNED', 'VerificationVisit', $visit->id, $coordinatorId, $application->branch_id, null, ['verifier_id' => $verifierId], null, 'SUCCESS', $visit->lock_version);
+            $newValues = [
+                'verifier_id' => $verifierId,
+                'verifier_name' => $verifier->name,
+                'verifier_email' => $verifier->email,
+                'scheduled_for' => $scheduled->toIso8601String(),
+            ];
+            $reason = "Asignación de verificador {$verifier->name} programada para {$scheduled->format('d/m/Y H:i')}";
+
+            AuditHelper::log(
+                'VERIFICATION_VISIT_ASSIGNED',
+                'VerificationVisit',
+                $visit->id,
+                $coordinatorId,
+                $application->branch_id,
+                null,
+                $newValues,
+                $reason,
+                'SUCCESS',
+                $visit->lock_version
+            );
 
             return $visit;
         });
