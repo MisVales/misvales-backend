@@ -63,7 +63,7 @@ class ServicioRevisionCoordinador
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $coordinatorId, $application->branch_id, null, null, 'No autorizado para devolver');
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
             }
-            if ($application->status !== ApplicationStatus::COORDINATOR_REVIEW) {
+            if (! in_array($application->status, [ApplicationStatus::COORDINATOR_REVIEW, ApplicationStatus::PHYSICAL_VERIFICATION], true)) {
                 if ($application->status === ApplicationStatus::TERMINATED_UNFAVORABLE) {
                     throw new BusinessException('DISTRIBUTOR_APPLICATION_ALREADY_TERMINATED', 'La solicitud ya está terminada.', 409);
                 }
@@ -110,6 +110,7 @@ class ServicioRevisionCoordinador
             ->get()
             ->map(fn (VerificationVisit $visit): array => [
                 'id' => $visit->id,
+                'application_id' => $visit->application_id,
                 'scheduled_for' => $visit->scheduled_for?->toIso8601String(),
                 'status' => $visit->status->value,
                 'application_number' => $visit->application?->application_number,
@@ -135,7 +136,7 @@ class ServicioRevisionCoordinador
                 AuditHelper::log('VERIFICATION_ACCESS_DENIED', 'DistributorApplication', $application->id, $coordinatorId, $application->branch_id, null, null, 'No autorizado para asignar');
                 throw new BusinessException('AUTH_SCOPE_DENIED', 'No autorizado.', 403);
             }
-            if ($application->status !== ApplicationStatus::COORDINATOR_REVIEW) {
+            if (! in_array($application->status, [ApplicationStatus::COORDINATOR_REVIEW, ApplicationStatus::PHYSICAL_VERIFICATION], true)) {
                 throw new BusinessException('DISTRIBUTOR_APPLICATION_NOT_READY_FOR_VERIFICATION', 'La solicitud no está lista para verificación.', 409);
             }
 
