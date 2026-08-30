@@ -9,29 +9,50 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::table('clients', function (Blueprint $table): void {
-            $table->string('phone_number', 32)->nullable()->after('second_last_name');
-        });
+        if (! Schema::hasColumn('clients', 'phone_number')) {
+            Schema::table('clients', function (Blueprint $table): void {
+                $table->string('phone_number', 32)->nullable()->after('second_last_name');
+            });
+        }
 
-        Schema::create('client_registration_drafts', function (Blueprint $table): void {
-            $table->uuid('id')->primary();
-            $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
-            $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
-            $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
-            $table->foreignUuid('client_id')->nullable()->constrained('clients')->restrictOnDelete();
-            $table->json('payload');
-            $table->string('status', 16)->default('OPEN');
-            $table->timestampTz('completed_at')->nullable();
-            $table->timestampsTz();
+        if (! Schema::hasTable('client_registration_drafts')) {
+            Schema::create('client_registration_drafts', function (Blueprint $table): void {
+                $table->uuid('id')->primary();
+                $table->foreignUuid('distributor_id')->constrained('distributors')->restrictOnDelete();
+                $table->foreignUuid('branch_id')->constrained('branches')->restrictOnDelete();
+                $table->foreignUuid('created_by')->constrained('users')->restrictOnDelete();
+                $table->foreignUuid('client_id')->nullable()->constrained('clients')->restrictOnDelete();
+                $table->json('payload');
+                $table->string('status', 16)->default('OPEN');
+                $table->timestampTz('completed_at')->nullable();
+                $table->timestampsTz();
 
-            $table->index(['distributor_id', 'status', 'created_at']);
-            $table->index(['branch_id', 'status', 'created_at']);
-        });
+                $table->index(['distributor_id', 'status', 'created_at'], 'client_reg_drafts_dist_status_created_idx');
+                $table->index(['branch_id', 'status', 'created_at'], 'client_reg_drafts_branch_status_created_idx');
+            });
+        } else {
+            if (! Schema::hasIndex('client_registration_drafts', 'client_reg_drafts_dist_status_created_idx')) {
+                Schema::table('client_registration_drafts', function (Blueprint $table): void {
+                    $table->index(['distributor_id', 'status', 'created_at'], 'client_reg_drafts_dist_status_created_idx');
+                });
+            }
+            if (! Schema::hasIndex('client_registration_drafts', 'client_reg_drafts_branch_status_created_idx')) {
+                Schema::table('client_registration_drafts', function (Blueprint $table): void {
+                    $table->index(['branch_id', 'status', 'created_at'], 'client_reg_drafts_branch_status_created_idx');
+                });
+            }
+        }
 
-        Schema::table('voucher_cash_transactions', function (Blueprint $table): void {
-            $table->string('payment_method', 16)->default('TRANSFER')->after('voucher_id');
-            $table->foreignUuid('client_bank_account_id')->nullable()->after('payment_method')->constrained('client_bank_accounts')->restrictOnDelete();
-        });
+        if (! Schema::hasColumn('voucher_cash_transactions', 'payment_method')) {
+            Schema::table('voucher_cash_transactions', function (Blueprint $table): void {
+                $table->string('payment_method', 16)->default('TRANSFER')->after('voucher_id');
+            });
+        }
+        if (! Schema::hasColumn('voucher_cash_transactions', 'client_bank_account_id')) {
+            Schema::table('voucher_cash_transactions', function (Blueprint $table): void {
+                $table->foreignUuid('client_bank_account_id')->nullable()->after('payment_method')->constrained('client_bank_accounts')->restrictOnDelete();
+            });
+        }
 
         if (DB::getDriverName() === 'mysql') {
             DB::statement('ALTER TABLE client_bank_accounts MODIFY bank_name VARCHAR(255) NULL');
