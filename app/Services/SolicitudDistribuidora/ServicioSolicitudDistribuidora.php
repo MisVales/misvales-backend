@@ -275,10 +275,16 @@ final class ServicioSolicitudDistribuidora
                 $atributos['official_id_number_hmac'] = $officialIdHmac;
             }
 
+            $camposAuditoria = ['first_name', 'first_last_name', 'second_last_name', 'nationality', 'birth_date', 'birth_country', 'birth_state', 'birth_city', 'birth_place', 'phone_number', 'email', 'identification_country', 'official_id_type'];
+            $anteriores = collect($registro->getOriginal())->only($camposAuditoria)->filter(fn ($v) => $v !== null)->all();
             $registro->forceFill($atributos)->save();
+            $nuevos = collect($registro->getChanges())->only($camposAuditoria)->all();
+            if (empty($nuevos)) {
+                $nuevos = collect($atributos)->only($camposAuditoria)->all();
+            }
 
             $this->incrementarVersion($bloqueada);
-            $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_PERSONAL_DATA_UPDATED', [], ['fields_updated' => array_keys($datos)]);
+            $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_PERSONAL_DATA_UPDATED', $anteriores, $nuevos);
 
             return $registro->refresh()->setAttribute('application_lock_version', $bloqueada->lock_version);
         });
@@ -316,9 +322,15 @@ final class ServicioSolicitudDistribuidora
                 throw ValidationException::withMessages(['is_current' => ['La solicitud ya tiene un domicilio actual.']]);
             }
 
+            $eraNuevo = $domicilio === null;
+            $anteriores = $eraNuevo ? [] : collect($registro->getOriginal())->except(['id', 'application_id', 'created_at', 'updated_at'])->all();
             $registro->fill($atributos)->save();
+            $nuevos = $eraNuevo
+                ? collect($registro->getAttributes())->except(['id', 'application_id', 'created_at', 'updated_at'])->filter(fn ($v) => $v !== null)->all()
+                : collect($registro->getChanges())->except(['id', 'application_id', 'created_at', 'updated_at'])->all();
+
             $this->incrementarVersion($bloqueada);
-            $this->auditor->registrar($actor, $bloqueada, $domicilio === null ? 'DISTRIBUTOR_APPLICATION_RESIDENCE_ADDED' : 'DISTRIBUTOR_APPLICATION_RESIDENCE_UPDATED', [], ['residence_id' => $registro->id]);
+            $this->auditor->registrar($actor, $bloqueada, $eraNuevo ? 'DISTRIBUTOR_APPLICATION_RESIDENCE_ADDED' : 'DISTRIBUTOR_APPLICATION_RESIDENCE_UPDATED', $anteriores, $nuevos);
 
             return $registro->refresh()->setAttribute('application_lock_version', $bloqueada->lock_version);
         });
@@ -333,9 +345,10 @@ final class ServicioSolicitudDistribuidora
                 throw new AuthorizationException('El domicilio no pertenece a la solicitud.');
             }
 
+            $anteriores = collect($domicilio->getAttributes())->except(['id', 'application_id', 'created_at', 'updated_at'])->filter(fn ($v) => $v !== null)->all();
             $domicilio->delete();
             $this->incrementarVersion($bloqueada);
-            $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_RESIDENCE_REMOVED', ['residence_id' => $domicilio->id]);
+            $this->auditor->registrar($actor, $bloqueada, 'DISTRIBUTOR_APPLICATION_RESIDENCE_REMOVED', $anteriores, []);
         });
     }
 
@@ -486,9 +499,10 @@ final class ServicioSolicitudDistribuidora
                 }
             }
 
+            $anteriores = collect($registro->getAttributes())->except(['id', 'application_id', 'created_at', 'updated_at'])->filter(fn ($v) => $v !== null)->all();
             $registro->delete();
             $this->incrementarVersion($bloqueada);
-            $this->auditor->registrar($actor, $bloqueada, $this->eventoRegistro($registro, 'REMOVED'), ['record_id' => $registro->getKey()]);
+            $this->auditor->registrar($actor, $bloqueada, $this->eventoRegistro($registro, 'REMOVED'), $anteriores, []);
         });
     }
 
@@ -578,9 +592,14 @@ final class ServicioSolicitudDistribuidora
             $atributos = collect($datos)->except('lock_version')->all();
             $atributos['application_id'] = $bloqueada->id;
             $eraNuevo = ! $registro->exists;
+            $anteriores = $eraNuevo ? [] : collect($registro->getOriginal())->except(['id', 'application_id', 'created_at', 'updated_at'])->all();
             $registro->fill($atributos)->save();
+            $nuevos = $eraNuevo
+                ? collect($registro->getAttributes())->except(['id', 'application_id', 'created_at', 'updated_at'])->filter(fn ($v) => $v !== null)->all()
+                : collect($registro->getChanges())->except(['id', 'application_id', 'created_at', 'updated_at'])->all();
+
             $this->incrementarVersion($bloqueada);
-            $this->auditor->registrar($actor, $bloqueada, $this->eventoRegistro($registro, $eraNuevo ? 'ADDED' : 'UPDATED'), [], ['record_id' => $registro->getKey()]);
+            $this->auditor->registrar($actor, $bloqueada, $this->eventoRegistro($registro, $eraNuevo ? 'ADDED' : 'UPDATED'), $anteriores, $nuevos);
 
             return $registro->refresh()->setAttribute('application_lock_version', $bloqueada->lock_version);
         });

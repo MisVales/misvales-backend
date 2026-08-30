@@ -95,7 +95,16 @@ final class ServicioArchivosPrivados
                     ['created_by' => $actor->id],
                 );
             }
-            AuditHelper::log('PRIVATE_MEDIA_STORED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, ['owner_type' => $ownerType, 'owner_id' => $ownerId, 'purpose' => $purpose, 'sha256' => $hash, 'size_bytes' => $file->getSize()]);
+            $storedValues = [
+                'file_name' => $media->original_name,
+                'purpose' => $purpose,
+                'owner_type' => $ownerType,
+                'owner_id' => $ownerId,
+                'mime_type' => $mime,
+                'size_bytes' => $file->getSize(),
+                'sha256' => $hash,
+            ];
+            AuditHelper::log('PRIVATE_MEDIA_STORED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, $storedValues, "Carga de archivo: {$media->original_name} ({$purpose})");
 
             return $media;
         }, 3);
@@ -167,7 +176,13 @@ final class ServicioArchivosPrivados
 
         abort_unless($authorized && $media->validation_status === 'VALIDATED', 403);
         abort_unless(Storage::disk($media->disk)->exists($media->path), 404);
-        AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, ['purposes' => $bindings->pluck('purpose')->all()]);
+        $downloadValues = [
+            'file_name' => $media->original_name,
+            'mime_type' => $media->mime_type,
+            'size_bytes' => $media->size_bytes,
+            'purposes' => $bindings->pluck('purpose')->all(),
+        ];
+        AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, $downloadValues, "Descarga de archivo: {$media->original_name}");
 
         return Storage::disk($media->disk)->download($media->path, $media->original_name, ['Content-Type' => $media->mime_type, 'Cache-Control' => 'private, no-store']);
     }
