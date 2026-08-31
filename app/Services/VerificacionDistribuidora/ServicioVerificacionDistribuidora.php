@@ -205,7 +205,40 @@ class ServicioVerificacionDistribuidora
 
             $visit->forceFill(['differences_payload' => $differencesPayload])->save();
 
-            AuditHelper::log('VERIFICATION_DIFFERENCE_RECORDED', 'VerificationVisit', $visit->id, $verifierId, null, null, ['has_differences' => $differencesPayload['has_differences'] ?? false], null, 'SUCCESS', $visit->lock_version);
+            $previousValues = [];
+            $newValues = [];
+            $items = $differencesPayload['items'] ?? [];
+            $itemsCount = count($items);
+
+            foreach ($items as $item) {
+                $section = $item['section'] ?? 'seccion';
+                $field = $item['field'] ?? 'campo';
+                $label = ! empty($item['record_label']) ? "{$section} ({$item['record_label']}) - {$field}" : "{$section} - {$field}";
+
+                $previousValues[$label] = $item['declared_value'] ?? null;
+                $newValues[$label] = $item['observed_value'] ?? null;
+            }
+
+            if ($itemsCount === 0) {
+                $newValues['has_differences'] = $differencesPayload['has_differences'] ?? false;
+            }
+
+            $reason = $itemsCount > 0
+                ? "Se registraron {$itemsCount} diferencia(s) observadas durante la visita de verificación."
+                : "Sin diferencias reportadas en la visita de verificación.";
+
+            AuditHelper::log(
+                'VERIFICATION_DIFFERENCE_RECORDED',
+                'VerificationVisit',
+                $visit->id,
+                $verifierId,
+                null,
+                $previousValues ?: null,
+                $newValues,
+                $reason,
+                'SUCCESS',
+                $visit->lock_version
+            );
         });
     }
 
@@ -247,8 +280,8 @@ class ServicioVerificacionDistribuidora
                 throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita ya completada.', 409);
             }
 
-            $hasEvidence = $visit->mediaFiles()->exists();
-            if (! $hasEvidence) {
+            $evidenceCount = MediaFileBinding::where('owner_type', 'verification_visit')->where('owner_id', $visit->id)->count();
+            if ($evidenceCount === 0) {
                 throw new BusinessException('VERIFICATION_VISIT_EVIDENCE_REQUIRED', 'No se puede finalizar la visita sin evidencias.', 409);
             }
 
@@ -269,7 +302,14 @@ class ServicioVerificacionDistribuidora
                 'observations' => $observations,
             ])->save();
 
-            AuditHelper::log('VERIFICATION_VISIT_COMPLETED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, ['result' => $resEnum->value], $observations, 'SUCCESS', $visit->lock_version);
+            $newValues = [
+                'result' => $resEnum->value,
+                'observations' => $observations,
+                'completed_at' => now()->toIso8601String(),
+            ];
+            $visitReason = $observations ?? "Visita de verificación completada: {$resEnum->value}";
+
+            AuditHelper::log('VERIFICATION_VISIT_COMPLETED', 'VerificationVisit', $visit->id, $verifierId, $application->branch_id, null, $newValues, $visitReason, 'SUCCESS', $visit->lock_version);
 
             $appStatus = $resEnum === VerificationVisitResult::FAVORABLE
                 ? ApplicationStatus::COORDINATOR_EVALUATION

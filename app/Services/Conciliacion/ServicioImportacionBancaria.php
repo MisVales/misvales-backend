@@ -49,7 +49,10 @@ final class ServicioImportacionBancaria
             }
 
             $existingImport->setAttribute('replayed', true);
-            $this->auditor->registrar('BANK_FILE_REPLAYED', 'bank_file_import', $existingImport->id, $actor, $branchId);
+            $this->auditor->registrar('BANK_FILE_REPLAYED', 'bank_file_import', $existingImport->id, $actor, $branchId, null, [
+                'file_name' => $existingImport->original_name,
+                'file_size' => $existingImport->file_size,
+            ], "Reintento de procesamiento de archivo bancario {$existingImport->original_name}");
 
             return $existingImport;
         }
@@ -89,9 +92,11 @@ final class ServicioImportacionBancaria
                     'processed_at' => now(),
                 ]);
                 $this->auditor->registrar('BANK_FILE_PROCESSED', 'bank_file_import', $import->id, $actor, $branchId, null, [
+                    'file_name' => $import->original_name,
+                    'file_size' => $import->file_size,
                     'row_count' => count($movements),
                     'summary' => $summary,
-                ]);
+                ], "Archivo bancario {$import->original_name} procesado exitosamente (".count($movements)." movimientos)");
             }, 3);
 
             return $import->fresh()->setAttribute('replayed', false);
@@ -105,8 +110,12 @@ final class ServicioImportacionBancaria
                 $actor,
                 $branchId,
                 null,
-                ['error_code' => $domainException->errorCode],
-                null,
+                [
+                    'file_name' => $import->original_name,
+                    'file_size' => $import->file_size,
+                    'error' => $domainException->errorCode,
+                ],
+                "Archivo bancario {$import->original_name} rechazado: {$domainException->errorCode}",
                 null,
                 null,
                 'REJECTED'

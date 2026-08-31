@@ -4,7 +4,7 @@ namespace App\Services\Observabilidad;
 
 final class SanitizadorDatos
 {
-    private const SENSITIVE = ['password', 'token', 'cookie', 'curp', 'rfc', 'clabe', 'account', 'secret', 'document', 'file', 'credential', 'authorization'];
+    private const SENSITIVE = ['password', 'token', 'cookie', 'curp', 'rfc', 'clabe', 'secret', 'credential', 'authorization'];
 
     public function sanitize(mixed $value): mixed
     {

@@ -78,7 +78,14 @@ class ServicioEvidenciaVerificacion
 
             $visit->touch();
             Log::info("Evidencia subida: {$media->id} para visita {$visitId} por usuario {$verifierId}");
-            AuditHelper::log('VERIFICATION_EVIDENCE_UPLOADED', 'MediaFile', $media->id, $verifierId, null, null, ['file_type' => $fileType], null, 'SUCCESS');
+            $newValues = [
+                'file_name' => $media->original_name,
+                'file_type' => $fileType,
+                'mime_type' => $mime,
+                'size_bytes' => $file->getSize(),
+            ];
+            $reason = "Carga de evidencia: {$media->original_name} ({$fileType})";
+            AuditHelper::log('VERIFICATION_EVIDENCE_UPLOADED', 'MediaFile', $media->id, $verifierId, null, null, $newValues, $reason, 'SUCCESS');
 
             return $media;
         });
@@ -117,6 +124,13 @@ class ServicioEvidenciaVerificacion
         }
 
         Log::info("Descarga de evidencia {$mediaId} realizada por usuario {$userId}");
+        $downloadValues = [
+            'file_name' => $media->original_name,
+            'file_type' => $media->file_type,
+            'mime_type' => $media->mime_type,
+            'size_bytes' => $media->size_bytes,
+        ];
+        AuditHelper::log('VERIFICATION_EVIDENCE_DOWNLOADED', 'MediaFile', $media->id, $userId, $application->branch_id, null, $downloadValues, "Descarga de evidencia: {$media->original_name}", 'SUCCESS');
 
         return Storage::disk($media->disk)->download($media->path, $media->original_name);
     }
@@ -152,7 +166,12 @@ class ServicioEvidenciaVerificacion
             $media->delete();
             $visit->touch();
 
-            AuditHelper::log('VERIFICATION_EVIDENCE_REMOVED', 'MediaFile', $mediaId, $verifierId, null, null, null, 'Eliminada por el verificador', 'SUCCESS');
+            $removeValues = [
+                'file_name' => $media->original_name,
+                'file_type' => $media->file_type,
+                'size_bytes' => $media->size_bytes,
+            ];
+            AuditHelper::log('VERIFICATION_EVIDENCE_REMOVED', 'MediaFile', $mediaId, $verifierId, null, $removeValues, null, "Evidencia eliminada: {$media->original_name}", 'SUCCESS');
         });
     }
 
