@@ -412,7 +412,10 @@ Route::prefix('v1')->group(function () {
         Route::get('audit-logs', [CentroOperacionController::class, 'audits']);
         Route::get('operational-logs', [CentroOperacionController::class, 'logs']);
         Route::post('media', [ArchivoPrivadoController::class, 'store'])->middleware(['idempotency', 'throttle:20,1']);
-        Route::get('media/{media}/preview', [ArchivoPrivadoController::class, 'preview'])->middleware('throttle:60,1');
+        // Las auditorías de eliminación deben conservar la posibilidad de
+        // previsualizar la evidencia histórica aunque el registro esté
+        // marcado como eliminado lógico.
+        Route::get('media/{media}/preview', [ArchivoPrivadoController::class, 'preview'])->withTrashed()->middleware('throttle:60,1');
         Route::get('media/{media}/download', [ArchivoPrivadoController::class, 'download'])->middleware('throttle:60,1');
     });
 });
