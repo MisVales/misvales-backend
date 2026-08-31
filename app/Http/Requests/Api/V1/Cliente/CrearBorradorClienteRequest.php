@@ -23,11 +23,29 @@ final class CrearBorradorClienteRequest extends FormRequest
             'first_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
             'first_last_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
             'second_last_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
+            'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
             'birth_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
             'phone_number' => ['required', 'string', 'regex:/^\+\d{1,4}\d{10}$/'],
             'address' => ['required', 'array'],
             ...$this->reglasDireccionEstructurada('address'),
             ...$this->reglasCodigoPostalMexicano('address'),
+        ];
+    }
+
+    protected function prepareForValidation(): void
+    {
+        $curp = $this->input('curp');
+        if (! empty($curp)) {
+            $curp = mb_strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', trim($curp)));
+            $this->merge(['curp' => $curp]);
+        }
+    }
+
+    public function messages(): array
+    {
+        return [
+            'curp.required' => 'La CURP es obligatoria.',
+            'curp.regex' => 'La CURP no tiene un formato válido.',
         ];
     }
 

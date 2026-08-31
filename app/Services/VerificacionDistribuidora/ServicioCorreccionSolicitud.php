@@ -54,6 +54,7 @@ class ServicioCorreccionSolicitud
         ?string $customReason = null
     ): ApplicationCorrection {
         $this->asegurarCoordinador($coordinatorId);
+        $fieldPath = $this->campoCanonico($fieldPath);
 
         return DB::transaction(function () use ($applicationId, $visitId, $section, $fieldPath, $coordinatorId, $lockVersion, $recordId, $differenceIndex, $customNewValue, $customReason) {
             $application = DistributorApplication::lockForUpdate()->find($applicationId);
@@ -77,7 +78,7 @@ class ServicioCorreccionSolicitud
             $difference = $differences[$differenceIndex] ?? null;
             if (! is_array($difference)
                 || ($difference['section'] ?? '') !== $section->value
-                || ($difference['field'] ?? '') !== $fieldPath
+                || $this->campoCanonico((string) ($difference['field'] ?? '')) !== $fieldPath
                 || (isset($difference['record_id']) && $difference['record_id'] !== $recordId)) {
                 throw new BusinessException('APPLICATION_CORRECTION_DIFFERENCE_NOT_FOUND', 'Campo no reportado.', 404);
             }
@@ -208,6 +209,18 @@ class ServicioCorreccionSolicitud
             'rfc' => $protector->normalizarRfc($newValue),
             default => mb_strtoupper(trim($newValue)),
         };
+        if ($fieldPath === 'curp' && preg_match('/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/', $nuevoNormalizado) !== 1) {
+            throw new BusinessException('APPLICATION_CORRECTION_CURP_INVALID', 'La CURP corregida no tiene un formato válido.', 422);
+        }
+        if ($fieldPath === 'curp') {
+            $nuevoHmac = $protector->generarHmacCurp($nuevoNormalizado);
+            if (DatosPersonalesSolicitud::query()
+                ->where('curp_hmac', $nuevoHmac)
+                ->whereKeyNot($datos->id)
+                ->exists()) {
+                throw new BusinessException('APPLICATION_CORRECTION_CURP_EXISTS', 'La CURP ya está registrada en otra solicitud.', 409);
+            }
+        }
         $nuevoCifrado = $protector->{$metodoCifrado}($nuevoNormalizado);
         $datos->forceFill([
             $ciphertext => $nuevoCifrado,
@@ -215,6 +228,11 @@ class ServicioCorreccionSolicitud
         ])->save();
 
         return [$anteriorDescifrado, $nuevoNormalizado];
+    }
+
+    private function campoCanonico(string $fieldPath): string
+    {
+        return $fieldPath === 'curp_masked' ? 'curp' : $fieldPath;
     }
 
     /** @return array{mixed, mixed} */

@@ -4,10 +4,12 @@ namespace Tests\Feature\VerificacionDistribuidora;
 
 use App\Enums\ApplicationStatus;
 use App\Models\CreditoComercialSolicitud;
+use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
 use App\Models\FamiliarSolicitud;
 use App\Models\User;
 use App\Models\VerificationVisit;
+use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
 
 class CorreccionSolicitudTest extends Modulo5TestCase
 {
@@ -20,7 +22,7 @@ class CorreccionSolicitudTest extends Modulo5TestCase
 
         $response = $this->actingAsMfaUser($otherUser, ['coordinator'])
             ->postJson("/api/v1/distributor-applications/{$app->id}/corrections", [
-                'visit_id' => $visit->id, 'section' => 'personal_info', 'field_path' => 'first_name', 'new_value' => 'New', 'reason' => 'Fix', 'lock_version' => 1,
+                'visit_id' => $visit->id, 'section' => 'personal_info', 'field_path' => 'first_name', 'new_value' => 'New', 'reason' => 'Fix', 'lock_version' => 1, 'difference_index' => 0,
             ]);
 
         $response->assertStatus(403)->assertJsonPath('error.code', 'AUTH_SCOPE_DENIED');
@@ -64,6 +66,60 @@ class CorreccionSolicitudTest extends Modulo5TestCase
         $response->assertCreated()->assertJsonPath('data.target_record_id', $segundo->id)->assertJsonPath('data.difference_index', 1);
         $this->assertNull($primero->fresh()->school_name);
         $this->assertSame('Secundaria Central', $segundo->fresh()->school_name);
+    }
+
+    public function test_corrige_y_protege_la_curp_del_expediente(): void
+    {
+        $coordinator = User::factory()->create();
+        $app = DistributorApplication::factory()->create([
+            'coordinator_id' => $coordinator->id,
+            'status' => ApplicationStatus::COORDINATOR_CORRECTION,
+        ]);
+        $protector = app(ProtectorDatosSolicitud::class);
+        $personal = new DatosPersonalesSolicitud;
+        $personal->forceFill([
+            'application_id' => $app->id,
+            'first_name' => 'Ana',
+            'first_last_name' => 'Pérez',
+            'nationality' => 'MEXICAN',
+            'birth_country' => 'MX',
+            'birth_date' => '1990-01-01',
+            'birth_place' => 'Torreón',
+            'birth_state' => 'Coahuila',
+            'birth_city' => 'Torreón',
+            'email' => 'ana.curp@example.test',
+            'phone_number' => '8710000000',
+            'identification_country' => 'MX',
+            'official_id_type' => 'INE',
+            'curp_ciphertext' => $protector->cifrarCurp('PEAA900101MDFRRN01'),
+            'curp_hmac' => $protector->generarHmacCurp('PEAA900101MDFRRN01'),
+            'official_id_number_ciphertext' => $protector->cifrarIdentificacion('INE-TEST-001'),
+            'official_id_number_hmac' => $protector->generarHmacIdentificacion('INE-TEST-001'),
+        ])->save();
+        $visit = VerificationVisit::factory()->create([
+            'application_id' => $app->id,
+            'differences_payload' => ['items' => [[
+                'section' => 'personal_info',
+                'field' => 'curp',
+                'declared_value' => 'PEAA900101MDFRRN01',
+                'observed_value' => 'LUMA900101HDFABC09',
+                'description' => 'La CURP física no coincide.',
+            ]]],
+        ]);
+
+        $response = $this->actingAsMfaUser($coordinator, ['coordinator'])
+            ->postJson("/api/v1/distributor-applications/{$app->id}/corrections", [
+                'visit_id' => $visit->id,
+                'section' => 'personal_info',
+                'field_path' => 'curp',
+                'difference_index' => 0,
+                'lock_version' => $app->lock_version,
+            ]);
+
+        $response->assertCreated()
+            ->assertJsonPath('data.field_path', 'curp')
+            ->assertJsonPath('data.accepted_value', 'LUMA900101HDFABC09');
+        self::assertSame('LUMA900101HDFABC09', $protector->descifrar($personal->fresh()->curp_ciphertext));
     }
 
     public function test_acepta_observacion_de_comprobante_sin_escribir_texto_en_columna_uuid(): void

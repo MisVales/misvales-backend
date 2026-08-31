@@ -4,6 +4,7 @@ namespace App\Services\Cliente;
 
 use App\Enums\EstadoDistribuidora;
 use App\Exceptions\ExcepcionCliente;
+use App\Models\Cliente;
 use App\Models\ClientRegistrationDraft;
 use App\Models\Distribuidora;
 use App\Models\MediaFileBinding;
@@ -45,6 +46,7 @@ final class ServicioRegistroClienteBorrador
                 'first_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
                 'first_last_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
                 'second_last_name' => ['required', 'string', 'max:120', 'regex:/^\p{L}[\p{L}\s.\'\-]*$/u'],
+                'curp' => ['required', 'string', 'regex:/^[A-Z]{4}\d{6}[HM][A-Z]{5}[A-Z0-9]\d$/'],
                 'birth_date' => ['required', 'date_format:Y-m-d', 'after_or_equal:1900-01-01', 'before_or_equal:today'],
                 'phone_number' => ['required', 'string', 'regex:/^\+\d{1,4}\d{10}$/'],
                 'address' => ['required', 'array'],
