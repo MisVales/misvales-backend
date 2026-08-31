@@ -4,6 +4,7 @@ namespace App\Services\Cliente;
 
 use App\Enums\EstadoDistribuidora;
 use App\Exceptions\ExcepcionCliente;
+use App\Models\Cliente;
 use App\Models\ClientRegistrationDraft;
 use App\Models\Distribuidora;
 use App\Models\MediaFileBinding;
