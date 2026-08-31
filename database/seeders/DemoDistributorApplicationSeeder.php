@@ -60,23 +60,29 @@ final class DemoDistributorApplicationSeeder extends Seeder
             $branch = BranchRecord::query()
                 ->where('code', 'MATAMOROS')
                 ->where('status', 'ACTIVE')
-                ->firstOrFail();
+                ->first()
+                ?? BranchRecord::query()->where('status', 'ACTIVE')->firstOrFail();
 
             $coordinator = User::query()
                 ->where('normalized_email', 'coordinador@gmail.com')
-                ->firstOrFail();
+                ->first()
+                ?? User::query()->whereHas('roleScopes.role', fn ($q) => $q->where('code', 'coordinator'))->firstOrFail();
 
             $verifier = User::query()
                 ->where('normalized_email', 'verificador@gmail.com')
-                ->firstOrFail();
+                ->first()
+                ?? User::query()->whereHas('roleScopes.role', fn ($q) => $q->where('code', 'verifier'))->firstOrFail();
 
             $branchManager = User::query()
                 ->where('normalized_email', 'gerentesucursal@gmail.com')
-                ->firstOrFail();
+                ->first()
+                ?? User::query()->whereHas('roleScopes.role', fn ($q) => $q->where('code', 'branch_manager'))->firstOrFail();
 
             $generalManager = User::query()
                 ->where('normalized_email', 'gerentegeneral@gmail.com')
-                ->firstOrFail();
+                ->first()
+                ?? User::query()->whereHas('roleScopes.role', fn ($q) => $q->where('code', 'general_manager'))->first()
+                ?? User::query()->where('normalized_email', Str::lower((string) config('bootstrap.initial_general_manager.email')))->firstOrFail();
 
             $protector = app(ProtectorDatosSolicitud::class);
 
