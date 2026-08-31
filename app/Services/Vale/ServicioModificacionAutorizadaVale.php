@@ -42,8 +42,13 @@ final class ServicioModificacionAutorizadaVale
             throw new ExcepcionVale('VOUCHER_STATUS_INVALID', 'El estado del vale no permite solicitar corrección.', 409);
         }
         $this->validarCambiosReales($vale, $cambios);
+        $cliente = Cliente::query()->with('domicilioVigente')->findOrFail($vale->client_id);
+        $anteriores = $this->valoresActualesVisibles($cliente, $campos);
+        $nuevos = $this->valoresSolicitadosVisibles($campos, $cambios);
+        $estadoAnterior = $vale->status->value;
+        $detalleCambios = $this->detalleCambios($anteriores, $nuevos);
 
-        return DB::transaction(function () use ($vale, $cajera, $campos, $cambios): SolicitudModificacionVale {
+        return DB::transaction(function () use ($vale, $cajera, $campos, $cambios, $anteriores, $nuevos, $estadoAnterior, $detalleCambios): SolicitudModificacionVale {
             $solicitud = SolicitudModificacionVale::query()->create([
                 'voucher_id' => $vale->id,
                 'client_id' => $vale->client_id,
@@ -52,9 +57,19 @@ final class ServicioModificacionAutorizadaVale
                 'requested_fields' => $campos,
                 'requested_changes' => $cambios,
                 'reason' => self::MOTIVO_SISTEMA,
+                'changes_before' => $anteriores,
+                'changes_after' => $nuevos,
             ]);
             $vale->forceFill(['status' => 'CORRECTION_PENDING', 'lock_version' => $vale->lock_version + 1])->save();
-            AuditHelper::log('VOUCHER_MODIFICATION_REQUESTED', 'voucher_modification_requests', $solicitud->id, $cajera->id, $vale->branch_id, null, ['fields' => $campos, 'reason_code' => self::MOTIVO_SISTEMA]);
+            AuditHelper::log(
+                'VOUCHER_MODIFICATION_REQUESTED',
+                'voucher_modification_requests',
+                $solicitud->id,
+                $cajera->id,
+                $vale->branch_id,
+                ['status' => $estadoAnterior, 'changes' => $detalleCambios],
+                ['status' => 'CORRECTION_PENDING', 'changes' => $detalleCambios, 'reason_code' => self::MOTIVO_SISTEMA],
+            );
 
             return $solicitud;
         });
@@ -91,7 +106,23 @@ final class ServicioModificacionAutorizadaVale
                     $vale->forceFill(['status' => 'GENERATED', 'lock_version' => $vale->lock_version + 1])->save();
                 }
             }
-            AuditHelper::log($autorizar ? 'VOUCHER_MODIFICATION_AUTHORIZED' : 'VOUCHER_MODIFICATION_REJECTED', 'voucher_modification_requests', $solicitud->id, $autoridad->id, $solicitud->branch_id, ['status' => 'REQUESTED'], ['status' => $solicitud->status, 'fields' => $solicitud->requested_fields]);
+            $cliente = Cliente::query()->with('domicilioVigente')->findOrFail($solicitud->client_id);
+            $anteriores = is_array($solicitud->changes_before) && $solicitud->changes_before !== []
+                ? $solicitud->changes_before
+                : $this->valoresActualesVisibles($cliente, $solicitud->requested_fields);
+            $nuevos = is_array($solicitud->changes_after) && $solicitud->changes_after !== []
+                ? $solicitud->changes_after
+                : $this->valoresSolicitadosVisibles($solicitud->requested_fields, (array) $solicitud->requested_changes);
+            $detalleCambios = $this->detalleCambios($anteriores, $nuevos);
+            AuditHelper::log(
+                $autorizar ? 'VOUCHER_MODIFICATION_AUTHORIZED' : 'VOUCHER_MODIFICATION_REJECTED',
+                'voucher_modification_requests',
+                $solicitud->id,
+                $autoridad->id,
+                $solicitud->branch_id,
+                ['status' => 'REQUESTED', 'changes' => $detalleCambios],
+                ['status' => $solicitud->status, 'changes' => $detalleCambios, 'reason_code' => $solicitud->reason],
+            );
 
             return ['request' => $solicitud, 'token' => $token, 'expires_at' => $solicitud->token_expires_at?->toIso8601String()];
         });
@@ -125,12 +156,20 @@ final class ServicioModificacionAutorizadaVale
             }
 
             $cliente = Cliente::query()->lockForUpdate()->findOrFail($solicitud->client_id);
-            $anteriores = [];
-            $nuevos = [];
+            $camposAplicar = array_keys($cambios);
+            $tieneSnapshotAnterior = is_array($solicitud->changes_before) && $solicitud->changes_before !== [];
+            $actuales = $this->valoresActualesVisibles($cliente, $camposAplicar);
+            $anteriores = $tieneSnapshotAnterior ? $solicitud->changes_before : $actuales;
+            if ($tieneSnapshotAnterior && $actuales !== $anteriores) {
+                throw new ExcepcionVale('MODIFICATION_VERSION_CONFLICT', 'Los datos del cliente cambiaron desde que se creó la solicitud.', 409);
+            }
+            $nuevos = is_array($solicitud->changes_after) && $solicitud->changes_after !== []
+                ? $solicitud->changes_after
+                : $this->valoresSolicitadosVisibles($camposAplicar, $cambios);
+            $nuevosAplicados = [];
             foreach (['first_name', 'first_last_name', 'second_last_name', 'birth_date', 'phone_number'] as $campo) {
                 if (array_key_exists($campo, $cambios)) {
-                    $anteriores[$campo] = $cliente->{$campo};
-                    $nuevos[$campo] = $cambios[$campo];
+                    $nuevosAplicados[$campo] = $this->valorAuditable($campo, $cambios[$campo]);
                     $cliente->forceFill([$campo => $cambios[$campo]])->save();
                 }
             }
@@ -139,8 +178,7 @@ final class ServicioModificacionAutorizadaVale
                 if (Cliente::query()->where('curp_hmac', $hmac)->whereKeyNot($cliente->id)->exists()) {
                     throw new ExcepcionVale('CLIENT_CURP_EXISTS', 'La CURP ya pertenece a otro cliente.', 409);
                 }
-                $anteriores['curp_hmac'] = $cliente->curp_hmac;
-                $nuevos['curp_hmac'] = $hmac;
+                $nuevosAplicados['curp'] = $this->valorAuditable('curp', $cambios['curp']);
                 $cliente->forceFill(['curp_ciphertext' => $this->protector->cifrarCurp($cambios['curp']), 'curp_hmac' => $hmac])->save();
             }
             if (array_key_exists('address', $cambios)) {
@@ -150,18 +188,26 @@ final class ServicioModificacionAutorizadaVale
                     throw new ExcepcionVale('CLIENT_ADDRESS_EXISTS', 'El domicilio ya pertenece a otro cliente.', 409);
                 }
                 $actual = DomicilioCliente::query()->where('client_id', $cliente->id)->where('is_current', true)->whereNull('ends_at')->lockForUpdate()->first();
-                $anteriores['address'] = $actual?->only(['street', 'exterior_number', 'interior_number', 'neighborhood', 'postal_code', 'municipality', 'city', 'state', 'country']);
                 $actual?->update(['is_current' => false, 'ends_at' => now(), 'change_reason' => self::MOTIVO_SISTEMA]);
                 $nuevo = new DomicilioCliente([...$cambios['address'], 'client_id' => $cliente->id, 'is_current' => true, 'country' => $normalizado['country'], 'address_proof_media_id' => $actual?->address_proof_media_id, 'starts_at' => now(), 'created_by' => $cajera->id, 'change_reason' => self::MOTIVO_SISTEMA]);
                 $nuevo->forceFill(['normalized_fingerprint_hmac' => $huella])->save();
-                $nuevos['address'] = $nuevo->only(['street', 'exterior_number', 'interior_number', 'neighborhood', 'postal_code', 'municipality', 'city', 'state', 'country']);
+                $nuevosAplicados['address'] = $nuevo->only(['street', 'exterior_number', 'interior_number', 'neighborhood', 'postal_code', 'municipality', 'city', 'state', 'country']);
             }
-            if ($nuevos !== []) {
+            if ($nuevosAplicados !== []) {
                 $cliente->forceFill(['lock_version' => $cliente->lock_version + 1])->save();
             }
             $solicitud->forceFill(['status' => 'APPLIED', 'token_used_at' => now(), 'changes_before' => $anteriores, 'changes_after' => $nuevos, 'lock_version' => $solicitud->lock_version + 1])->save();
             $vale->forceFill(['status' => 'GENERATED', 'lock_version' => $vale->lock_version + 1])->save();
-            AuditHelper::log('VOUCHER_MODIFICATION_APPLIED', 'voucher_modification_requests', $solicitud->id, $cajera->id, $vale->branch_id, $anteriores, $nuevos);
+            $detalleCambios = $this->detalleCambios($actuales, $nuevosAplicados);
+            AuditHelper::log(
+                'VOUCHER_MODIFICATION_APPLIED',
+                'voucher_modification_requests',
+                $solicitud->id,
+                $cajera->id,
+                $vale->branch_id,
+                ['status' => 'AUTHORIZED', 'changes' => $detalleCambios],
+                ['status' => 'APPLIED', 'changes' => $detalleCambios],
+            );
 
             return $solicitud->refresh();
         });
@@ -202,6 +248,113 @@ final class ServicioModificacionAutorizadaVale
         if ($sinCambios !== []) {
             throw new ExcepcionVale('MODIFICATION_NO_CHANGES', 'No se detectaron cambios en: '.implode(', ', $sinCambios).'. Captura un valor diferente al actual.', 422);
         }
+    }
+
+    /** @return array<string, mixed> */
+    public function valoresActualesVisibles(Cliente $cliente, array $campos): array
+    {
+        $cliente->loadMissing('domicilioVigente');
+        $valores = [];
+        foreach ($campos as $campo) {
+            if (in_array($campo, ['first_name', 'first_last_name', 'second_last_name', 'birth_date', 'phone_number'], true)) {
+                $valores[$campo] = $this->valorAuditable($campo, $cliente->{$campo});
+                continue;
+            }
+            if ($campo === 'curp') {
+                $valores[$campo] = $this->curpVisible($cliente->curp_ciphertext);
+                continue;
+            }
+            if ($campo === 'address') {
+                $valores[$campo] = $cliente->domicilioVigente?->only([
+                    'street', 'exterior_number', 'interior_number', 'neighborhood', 'postal_code',
+                    'municipality', 'city', 'state', 'country',
+                ]);
+            }
+        }
+
+        return $valores;
+    }
+
+    /** @return array<int, array{field: string, before: mixed, after: mixed}> */
+    public function detallesAuditoria(SolicitudModificacionVale $solicitud): array
+    {
+        $campos = array_values(array_intersect((array) $solicitud->requested_fields, self::CAMPOS));
+        $anteriores = is_array($solicitud->changes_before) && $solicitud->changes_before !== []
+            ? $solicitud->changes_before
+            : null;
+        $nuevos = is_array($solicitud->changes_after) && $solicitud->changes_after !== []
+            ? $solicitud->changes_after
+            : $this->valoresSolicitadosVisibles($campos, (array) $solicitud->requested_changes);
+
+        if ($anteriores === null && in_array($solicitud->status, ['REQUESTED', 'AUTHORIZED', 'REJECTED'], true)) {
+            $cliente = $solicitud->cliente()->with('domicilioVigente')->first();
+            if ($cliente !== null) {
+                $anteriores = $this->valoresActualesVisibles($cliente, $campos);
+            }
+        }
+
+        if ($anteriores === null || $nuevos === []) {
+            return [];
+        }
+
+        return $this->detalleCambios($anteriores, $nuevos);
+    }
+
+    /** @return array<string, mixed> */
+    private function valoresSolicitadosVisibles(array $campos, array $cambios): array
+    {
+        $valores = [];
+        foreach ($campos as $campo) {
+            if (array_key_exists($campo, $cambios)) {
+                $valores[$campo] = $this->valorAuditable($campo, $cambios[$campo]);
+            }
+        }
+
+        return $valores;
+    }
+
+    /** @return array<int, array{field: string, before: mixed, after: mixed}> */
+    private function detalleCambios(array $anteriores, array $nuevos): array
+    {
+        $campos = array_values(array_unique([...array_keys($anteriores), ...array_keys($nuevos)]));
+
+        return array_map(fn (string $campo): array => [
+            'field' => $campo,
+            'before' => $this->valorAuditable($campo, $anteriores[$campo] ?? null),
+            'after' => $this->valorAuditable($campo, $nuevos[$campo] ?? null),
+        ], $campos);
+    }
+
+    private function curpVisible(?string $ciphertext): ?string
+    {
+        if ($ciphertext === null || $ciphertext === '') {
+            return null;
+        }
+
+        try {
+            return $this->valorAuditable('curp', $this->protector->descifrar($ciphertext));
+        } catch (\Throwable) {
+            return null;
+        }
+    }
+
+    private function valorAuditable(string $campo, mixed $valor): mixed
+    {
+        if ($valor instanceof \DateTimeInterface) {
+            return $valor->format('Y-m-d');
+        }
+        if ($campo === 'curp') {
+            if ($valor === null || $valor === '') {
+                return null;
+            }
+            $valor = (string) $valor;
+            return str_contains($valor, '*') ? $valor : $this->protector->enmascarar($valor, 4, 3);
+        }
+        if (is_array($valor)) {
+            return array_map(fn (mixed $item): mixed => $this->valorAuditable('', $item), $valor);
+        }
+
+        return $valor;
     }
 
     private function validarAutoridad(User $actor, SolicitudModificacionVale $solicitud): void

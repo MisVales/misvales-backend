@@ -207,20 +207,35 @@ class ServicioVerificacionDistribuidora
 
             $previousValues = [];
             $newValues = [];
+            $changes = [];
             $items = $differencesPayload['items'] ?? [];
             $itemsCount = count($items);
 
             foreach ($items as $item) {
                 $section = $item['section'] ?? 'seccion';
                 $field = $item['field'] ?? 'campo';
-                $label = ! empty($item['record_label']) ? "{$section} ({$item['record_label']}) - {$field}" : "{$section} - {$field}";
+                $recordId = $item['record_id'] ?? null;
+                $recordLabel = $item['record_label'] ?? null;
+                $before = $item['declared_value'] ?? null;
+                $after = $item['observed_value'] ?? null;
 
-                $previousValues[$label] = $item['declared_value'] ?? null;
-                $newValues[$label] = $item['observed_value'] ?? null;
+                $changes[] = [
+                    'field' => $field,
+                    'section' => $section,
+                    'record_id' => $recordId,
+                    'record_label' => $recordLabel,
+                    'before' => $before,
+                    'after' => $after,
+                ];
             }
 
             if ($itemsCount === 0) {
                 $newValues['has_differences'] = $differencesPayload['has_differences'] ?? false;
+            }
+
+            if ($changes !== []) {
+                $previousValues['changes'] = $changes;
+                $newValues['changes'] = $changes;
             }
 
             $reason = $itemsCount > 0

@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\RegistroOperacional;
+use App\Models\SolicitudModificacionVale;
 use App\Models\User;
 use App\Services\Audit\DatabaseIncidentRecorder;
 use App\Services\Observabilidad\SanitizadorDatos;
@@ -12,6 +13,7 @@ use App\Services\Operaciones\ServicioCorteManual;
 use App\Services\Operaciones\ServicioFinPeriodoPagoManual;
 use App\Services\Reportes\ServicioInicioReportes;
 use App\Services\Reportes\ServicioReportes;
+use App\Services\Vale\ServicioModificacionAutorizadaVale;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -151,7 +153,11 @@ final class CentroOperacionController extends Controller
         return response()->json(['data' => $data]);
     }
 
-    public function audits(Request $request, SanitizadorDatos $sanitizer): JsonResponse
+    public function audits(
+        Request $request,
+        SanitizadorDatos $sanitizer,
+        ServicioModificacionAutorizadaVale $modificationService,
+    ): JsonResponse
     {
         $request->validate([
             'search' => ['nullable', 'string', 'max:128'],
@@ -224,9 +230,29 @@ final class CentroOperacionController extends Controller
         }
 
         $page = $query->paginate(min($request->integer('per_page', 30), 100));
-        $page->getCollection()->transform(function (AuditLog $audit) use ($sanitizer): array {
+        $page->getCollection()->transform(function (AuditLog $audit) use ($sanitizer, $modificationService): array {
             $audit->actor?->setAppends([]);
             $row = $audit->toArray();
+            if (
+                $audit->entity_type === 'voucher_modification_requests'
+                && in_array($audit->event_name, [
+                    'VOUCHER_MODIFICATION_REQUESTED',
+                    'VOUCHER_MODIFICATION_AUTHORIZED',
+                    'VOUCHER_MODIFICATION_REJECTED',
+                    'VOUCHER_MODIFICATION_APPLIED',
+                ], true)
+                && is_string($audit->entity_id)
+                && ! isset(($row['new_value'] ?? [])['changes'])
+            ) {
+                $solicitud = SolicitudModificacionVale::query()->find($audit->entity_id);
+                $changes = $solicitud ? $modificationService->detallesAuditoria($solicitud) : [];
+                if ($changes !== []) {
+                    $row['previous_value'] = is_array($row['previous_value'] ?? null) ? $row['previous_value'] : [];
+                    $row['new_value'] = is_array($row['new_value'] ?? null) ? $row['new_value'] : [];
+                    $row['previous_value']['changes'] = $changes;
+                    $row['new_value']['changes'] = $changes;
+                }
+            }
             $row['previous_value'] = $sanitizer->sanitize($row['previous_value']);
             $row['new_value'] = $sanitizer->sanitize($row['new_value']);
             $row['evidence'] = $sanitizer->sanitize($row['evidence']);

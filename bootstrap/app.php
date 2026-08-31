@@ -399,6 +399,10 @@ return Application::configure(basePath: dirname(__DIR__))
         });
 
         $exceptions->renderable(function (Throwable $e, Request $request) use ($respondError) {
+            if ($e instanceof ApiException) {
+                return $respondError($request, $e->errorCode, $e->getMessage(), $e->httpStatus, $e->fields, $e->details, $e);
+            }
+
             $organizationError = match (true) {
                 $e instanceof OrganizationScopeDenied => ['AUTH_SCOPE_DENIED', 403, 'No tienes permiso para acceder a este registro.'],
                 $e instanceof BranchNotFound => ['BRANCH_NOT_FOUND', 404, 'Sucursal no encontrada.'],

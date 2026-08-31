@@ -417,11 +417,25 @@ final class CajaValeApiTest extends TestCase
         $stored = SolicitudModificacionVale::query()->findOrFail($request->json('data.id'));
         $this->assertSame('GODE561231HDFABC09', $stored->requested_changes['curp']);
         $this->assertStringNotContainsString('GODE561231HDFABC09', (string) $stored->getRawOriginal('requested_changes'));
+        $curpActual = app(ProtectorDatosCliente::class)->descifrar($stored->cliente->curp_ciphertext);
+        $this->assertSame(
+            app(ProtectorDatosCliente::class)->enmascarar($curpActual, 4, 3),
+            $stored->changes_before['curp'],
+        );
+        $solicitudAuditada = AuditLog::query()->where('event_name', 'VOUCHER_MODIFICATION_REQUESTED')->where('entity_id', $stored->id)->firstOrFail();
+        $this->assertSame('curp', $solicitudAuditada->new_value['changes'][0]['field']);
+        $this->assertSame(
+            app(ProtectorDatosCliente::class)->enmascarar('GODE561231HDFABC09', 4, 3),
+            $solicitudAuditada->new_value['changes'][0]['after'],
+        );
         $authority = $this->user('branch_manager', $this->branch->id);
         Sanctum::actingAs($authority);
         $this->getJson('/api/v1/voucher-modification-requests')->assertSuccessful()->assertJsonPath('data.0.requested_changes.curp', 'GODE561231HDFABC09');
         $decision = $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request->json('data.id').'/decision', ['decision' => 'AUTHORIZE', 'reason' => 'Validado', 'lock_version' => 1])->assertSuccessful();
         $this->assertNotNull($decision->json('data.token'));
+        $decisionAuditada = AuditLog::query()->where('event_name', 'VOUCHER_MODIFICATION_AUTHORIZED')->where('entity_id', $stored->id)->firstOrFail();
+        $this->assertSame('curp', $decisionAuditada->new_value['changes'][0]['field']);
+        $this->assertSame('AUTHORIZED', $decisionAuditada->new_value['status']);
         $this->assertGreaterThanOrEqual(298, now()->diffInSeconds(CarbonImmutable::parse($decision->json('data.expires_at')), false));
         $this->assertLessThanOrEqual(300, now()->diffInSeconds(CarbonImmutable::parse($decision->json('data.expires_at')), false));
         $otherCashier = $this->user('cashier', $this->branch->id);
@@ -430,6 +444,19 @@ final class CajaValeApiTest extends TestCase
         Sanctum::actingAs($this->cashier);
         $this->getJson("/api/v1/cashier/vouchers/{$this->voucher->id}")->assertSuccessful()->assertJsonPath('data.modification_request.status', 'AUTHORIZED');
         $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request->json('data.id').'/apply', ['token' => $decision->json('data.token'), 'lock_version' => 2])->assertSuccessful()->assertJsonPath('data.status', 'APPLIED');
+        $stored->refresh();
+        $this->assertSame(
+            app(ProtectorDatosCliente::class)->enmascarar($curpActual, 4, 3),
+            $stored->changes_before['curp'],
+        );
+        $this->assertSame(
+            app(ProtectorDatosCliente::class)->enmascarar('GODE561231HDFABC09', 4, 3),
+            $stored->changes_after['curp'],
+        );
+        $aplicacionAuditada = AuditLog::query()->where('event_name', 'VOUCHER_MODIFICATION_APPLIED')->where('entity_id', $stored->id)->firstOrFail();
+        $this->assertSame('curp', $aplicacionAuditada->new_value['changes'][0]['field']);
+        $this->assertSame($stored->changes_before['curp'], $aplicacionAuditada->new_value['changes'][0]['before']);
+        $this->assertSame($stored->changes_after['curp'], $aplicacionAuditada->new_value['changes'][0]['after']);
         $this->postIdempotent('/api/v1/voucher-modification-requests/'.$request->json('data.id').'/apply', ['token' => $decision->json('data.token'), 'lock_version' => 3])->assertStatus(409)->assertJsonPath('error.code', 'MODIFICATION_TOKEN_USED');
     }
 

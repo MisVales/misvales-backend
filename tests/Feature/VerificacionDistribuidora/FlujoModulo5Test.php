@@ -6,6 +6,7 @@ use App\Enums\ApplicationStatus;
 use App\Enums\VerificationVisitStatus;
 use App\Models\ApplicationAuthorization;
 use App\Models\ApplicationCorrection;
+use App\Models\AuditLog;
 use App\Models\Branch;
 use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
@@ -219,6 +220,7 @@ class FlujoModulo5Test extends Modulo5TestCase
                 'new_value' => 'Ana María',
                 'reason' => 'Se confirma el nombre observado.',
                 'visit_id' => $visit->id,
+                'difference_index' => 0,
                 'lock_version' => $application->lock_version,
             ])->assertCreated();
 
@@ -226,6 +228,10 @@ class FlujoModulo5Test extends Modulo5TestCase
         $correction = ApplicationCorrection::query()->where('application_id', $application->id)->firstOrFail();
         $this->assertSame(['value' => 'Ana'], $correction->previous_value_payload);
         $this->assertSame(['value' => 'Ana María'], $correction->new_value_payload);
+        $audit = AuditLog::query()->where('event_name', 'APPLICATION_CORRECTION_APPLIED')->where('entity_id', $correction->id)->firstOrFail();
+        $this->assertSame('first_name', $audit->new_value['changes'][0]['field']);
+        $this->assertSame('Ana', $audit->new_value['changes'][0]['before']);
+        $this->assertSame('Ana María', $audit->new_value['changes'][0]['after']);
         $this->assertDatabaseHas('audit_logs', [
             'event_name' => 'APPLICATION_CORRECTION_APPLIED',
             'entity_id' => $correction->id,

@@ -30,8 +30,8 @@ final class SolicitarModificacionValeRequest extends FormRequest
             'changes.phone_number' => ['sometimes', 'required', 'string', 'regex:/^\+\d{1,4}\d{10}$/'],
             'changes.curp' => ['sometimes', 'required', 'string', 'regex:/^[A-Z\d]{18}$/i'],
             'changes.address' => ['sometimes', 'required', 'array'],
-            ...$this->reglasDireccionEstructurada('changes.address'),
-            ...$this->reglasCodigoPostalMexicano('changes.address'),
+            ...$this->reglasDireccionEstructurada('changes.address', 'required_with:changes.address'),
+            ...$this->reglasCodigoPostalMexicano('changes.address', 'required_with:changes.address'),
         ];
     }
 

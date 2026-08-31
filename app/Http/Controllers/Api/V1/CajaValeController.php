@@ -104,7 +104,7 @@ final class CajaValeController extends Controller
         return response()->json(['data' => $service->solicitar($vale, $request->user(), $request->validated('fields'), $request->validated('changes'))], 201);
     }
 
-    public function listModifications(Request $request)
+    public function listModifications(Request $request, ServicioModificacionAutorizadaVale $service)
     {
         $user = $request->user();
         $esGerenteGeneral = $user->hasRole('general_manager') && $user->hasPermissionTo('voucher_modifications.authorize_global');
@@ -117,7 +117,19 @@ final class CajaValeController extends Controller
             $query->whereIn('branch_id', $user->roleScopes()->where('status', 'ACTIVE')->whereNull('revoked_at')->where('scope_type', 'BRANCH')->select('branch_id'));
         }
 
-        return response()->json(['data' => $query->latest()->get()]);
+        $solicitudes = $query->latest()->get();
+        $solicitudes->each(function (SolicitudModificacionVale $solicitud) use ($service): void {
+            if (is_array($solicitud->changes_before) && $solicitud->changes_before !== []) {
+                return;
+            }
+
+            $cliente = $solicitud->vale?->cliente;
+            if ($cliente !== null) {
+                $solicitud->setAttribute('changes_before', $service->valoresActualesVisibles($cliente, $solicitud->requested_fields));
+            }
+        });
+
+        return response()->json(['data' => $solicitudes]);
     }
 
     public function decideModification(SolicitudModificacionVale $solicitud, DecidirModificacionValeRequest $request, ServicioModificacionAutorizadaVale $service)

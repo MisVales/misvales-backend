@@ -19,6 +19,7 @@ final class ValeCajaResource extends JsonResource
         $comprobante = $domicilio?->address_proof_media_id ?? $archivos->firstWhere('purpose', 'ADDRESS_PROOF')?->media_file_id;
         $cuenta = $cliente?->cuentaBancariaVigente;
         $clabe = $cuenta?->clabe_ciphertext === null ? null : $protector->descifrar($cuenta->clabe_ciphertext);
+        $curp = $cliente?->curp_ciphertext === null ? null : $protector->descifrar($cliente->curp_ciphertext);
         $solicitudModificacion = $this->resource->relationLoaded('solicitudesModificacion')
             ? $this->resource->solicitudesModificacion->first()
             : null;
@@ -38,6 +39,7 @@ final class ValeCajaResource extends JsonResource
                 'full_name' => trim(implode(' ', array_filter([$cliente->first_name, $cliente->first_last_name, $cliente->second_last_name]))),
                 'birth_date' => $cliente->birth_date?->format('Y-m-d'),
                 'phone_number' => $cliente->phone_number,
+                'curp_masked' => $curp === null ? null : $protector->enmascarar($curp, 4, 3),
                 'identity' => [
                     'official_id_type' => $cliente->official_id_type,
                     'official_id_media_id' => $ine,

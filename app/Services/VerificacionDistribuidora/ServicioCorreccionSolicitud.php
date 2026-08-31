@@ -116,7 +116,23 @@ class ServicioCorreccionSolicitud
                 'reason' => $reason, 'corrected_by' => $coordinatorId, 'corrected_at' => now(),
             ]);
 
-            AuditHelper::log('APPLICATION_CORRECTION_APPLIED', 'ApplicationCorrection', $correction->id, $coordinatorId, $application->branch_id, null, ['field' => $fieldPath], $reason, 'SUCCESS', $application->lock_version);
+            $detalleCambio = [[
+                'field' => $fieldPath,
+                'before' => $this->valorAuditable($fieldPath, $previousValuePayload),
+                'after' => $this->valorAuditable($fieldPath, $persistedNewValue),
+            ]];
+            AuditHelper::log(
+                'APPLICATION_CORRECTION_APPLIED',
+                'ApplicationCorrection',
+                $correction->id,
+                $coordinatorId,
+                $application->branch_id,
+                ['field' => $fieldPath, 'section' => $section->value, 'record_id' => $recordId, 'changes' => $detalleCambio],
+                ['field' => $fieldPath, 'section' => $section->value, 'record_id' => $recordId, 'changes' => $detalleCambio],
+                $reason,
+                'SUCCESS',
+                $application->lock_version,
+            );
 
             return $correction;
         });
@@ -233,6 +249,37 @@ class ServicioCorreccionSolicitud
     private function campoCanonico(string $fieldPath): string
     {
         return $fieldPath === 'curp_masked' ? 'curp' : $fieldPath;
+    }
+
+    private function valorAuditable(string $fieldPath, mixed $value): mixed
+    {
+        if ($value instanceof \DateTimeInterface) {
+            return $value->format('Y-m-d');
+        }
+        if (is_array($value)) {
+            return array_map(fn (mixed $item): mixed => $this->valorAuditable('', $item), $value);
+        }
+        if (! is_string($value) || $value === '') {
+            return $value;
+        }
+        if ($fieldPath === 'curp') {
+            return str_contains($value, '*') ? $value : $this->enmascarar($value, 4, 3);
+        }
+        if (in_array($fieldPath, ['rfc', 'official_id_number'], true)) {
+            return str_contains($value, '*') ? $value : $this->enmascarar($value, 2, 2);
+        }
+
+        return $value;
+    }
+
+    private function enmascarar(string $value, int $inicio, int $final): string
+    {
+        $longitud = mb_strlen($value);
+        if ($longitud <= $inicio + $final) {
+            return str_repeat('*', $longitud);
+        }
+
+        return mb_substr($value, 0, $inicio).str_repeat('*', $longitud - $inicio - $final).mb_substr($value, -$final);
     }
 
     /** @return array{mixed, mixed} */
@@ -523,9 +570,21 @@ class ServicioCorreccionSolicitud
                 throw new BusinessException('APPLICATION_CORRECTIONS_PENDING', 'Faltan diferencias por corregir.', 409);
             }
 
+            $estadoAnterior = $application->status->value;
             $application->transitionTo(ApplicationStatus::COORDINATOR_EVALUATION, $coordinatorId, 'Correcciones terminadas');
 
-            AuditHelper::log('APPLICATION_CORRECTIONS_COMPLETED', 'DistributorApplication', $application->id, $coordinatorId, $application->branch_id, null, null, 'Etapa terminada', 'SUCCESS', $application->lock_version);
+            AuditHelper::log(
+                'APPLICATION_CORRECTIONS_COMPLETED',
+                'DistributorApplication',
+                $application->id,
+                $coordinatorId,
+                $application->branch_id,
+                ['status' => $estadoAnterior, 'correction_count' => $correctionCount],
+                ['status' => ApplicationStatus::COORDINATOR_EVALUATION->value, 'correction_count' => $correctionCount],
+                'Etapa terminada',
+                'SUCCESS',
+                $application->lock_version,
+            );
         });
     }
 

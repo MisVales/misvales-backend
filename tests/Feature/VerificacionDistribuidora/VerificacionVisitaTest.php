@@ -8,6 +8,7 @@ use App\Enums\VerificationVisitStatus;
 use App\Models\Branch;
 use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
+use App\Models\AuditLog;
 use App\Models\MediaFile;
 use App\Models\MediaFileBinding;
 use App\Models\User;
@@ -161,6 +162,10 @@ class VerificacionVisitaTest extends Modulo5TestCase
 
         $response->assertStatus(200);
         $this->assertEquals(true, VerificationVisit::find($visit->id)->differences_payload['has_differences']);
+        $audit = AuditLog::query()->where('event_name', 'VERIFICATION_DIFFERENCE_RECORDED')->where('entity_id', $visit->id)->firstOrFail();
+        $this->assertSame('first_name', $audit->new_value['changes'][0]['field']);
+        $this->assertSame('Nombre declarado', $audit->new_value['changes'][0]['before']);
+        $this->assertSame('Nombre observado', $audit->new_value['changes'][0]['after']);
     }
 
     public function test_consulta_visita_asignada_incluye_expediente_sin_usar_el_endpoint_general(): void
