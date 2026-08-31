@@ -173,6 +173,53 @@ final class DatabaseSeedersTest extends TestCase
             ->all());
         self::assertSame(5, DB::table('products')->count());
         self::assertSame(5, DB::table('product_versions')->count());
+        $seededProducts = DB::table('products as product')
+            ->join('product_versions as version', 'version.product_id', '=', 'product.id')
+            ->whereIn('product.code', ['VAL-1000', 'VAL-2000', 'VAL-3000', 'VAL-4000', 'VAL-5000'])
+            ->select(
+                'product.code',
+                'product.status',
+                'product.loan_commission_percentage',
+                'product.simple_interest_percentage',
+                'product.insurance_amount',
+                'product.fortnights_count',
+                'product.late_fee_amount',
+                'version.name',
+                'version.description',
+                'version.nominal_amount',
+                'version.loan_commission_percentage as version_commission',
+                'version.simple_interest_percentage as version_interest',
+                'version.insurance_amount as version_insurance',
+                'version.fortnights_count as version_fortnights',
+                'version.late_fee_amount as version_late_fee',
+                'version.status as version_status',
+            )
+            ->orderBy('product.code')
+            ->get();
+
+        self::assertCount(5, $seededProducts);
+        foreach ($seededProducts as $product) {
+            self::assertSame('ACTIVE', $product->status, $product->code);
+            self::assertSame('0.100000', $product->loan_commission_percentage, $product->code);
+            self::assertSame('0.050000', $product->simple_interest_percentage, $product->code);
+            self::assertSame('100.0000', $product->insurance_amount, $product->code);
+            self::assertSame(8, (int) $product->fortnights_count, $product->code);
+            self::assertSame('300.0000', $product->late_fee_amount, $product->code);
+            self::assertSame('PUBLISHED', $product->version_status, $product->code);
+            self::assertSame('0.100000', $product->version_commission, $product->code);
+            self::assertSame('0.050000', $product->version_interest, $product->code);
+            self::assertSame('100.0000', $product->version_insurance, $product->code);
+            self::assertSame(8, (int) $product->version_fortnights, $product->code);
+            self::assertSame('300.0000', $product->version_late_fee, $product->code);
+        }
+
+        self::assertSame(1, DB::table('role_permissions as role_permission')
+            ->join('roles as role', 'role.id', '=', 'role_permission.role_id')
+            ->join('permissions as permission', 'permission.id', '=', 'role_permission.permission_id')
+            ->where('role.code', 'admin')
+            ->where('permission.code', 'delinquency_removal.decide_global')
+            ->whereNull('role_permission.revoked_at')
+            ->count());
         foreach (['distributors', 'clients', 'vouchers'] as $table) {
             self::assertSame(0, DB::table($table)->count(), $table);
         }

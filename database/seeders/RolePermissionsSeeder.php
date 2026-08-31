@@ -123,6 +123,7 @@ final class RolePermissionsSeeder extends Seeder
                 'points.view_global',
                 'bank_movements.view_global', 'payment_clarifications.view_global',
                 'manual_reconciliation.view_global', 'surpluses.view_global', 'risk.view_global',
+                'delinquency_removal.decide_global',
                 'organization_changes.view', 'notifications.view_own',
                 'reports.view_global', 'audit.view_global', 'logs.view_global',
             ],
