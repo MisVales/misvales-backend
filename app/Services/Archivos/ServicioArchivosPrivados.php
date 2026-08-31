@@ -112,7 +112,7 @@ final class ServicioArchivosPrivados
         }, 3);
     }
 
-    public function descargar(MediaFile $media, User $actor): StreamedResponse
+    public function descargar(MediaFile $media, User $actor, bool $registrarAuditoria = true): StreamedResponse
     {
         $bindings = $media->bindings()->get();
         abort_if($bindings->isEmpty(), 404);
@@ -178,13 +178,15 @@ final class ServicioArchivosPrivados
 
         abort_unless($authorized && $media->validation_status === 'VALIDATED', 403);
         abort_unless(Storage::disk($media->disk)->exists($media->path), 404);
-        $downloadValues = [
-            'file_name' => $media->original_name,
-            'mime_type' => $media->mime_type,
-            'size_bytes' => $media->size_bytes,
-            'purposes' => $bindings->pluck('purpose')->all(),
-        ];
-        AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, $downloadValues, "Descarga de archivo: {$media->original_name}");
+        if ($registrarAuditoria) {
+            $downloadValues = [
+                'file_name' => $media->original_name,
+                'mime_type' => $media->mime_type,
+                'size_bytes' => $media->size_bytes,
+                'purposes' => $bindings->pluck('purpose')->all(),
+            ];
+            AuditHelper::log('PRIVATE_MEDIA_DOWNLOADED', 'media_file', $media->id, $actor->id, $actor->branch_id, null, $downloadValues, "Descarga de archivo: {$media->original_name}");
+        }
 
         return Storage::disk($media->disk)->download($media->path, $media->original_name, ['Content-Type' => $media->mime_type, 'Cache-Control' => 'private, no-store']);
     }

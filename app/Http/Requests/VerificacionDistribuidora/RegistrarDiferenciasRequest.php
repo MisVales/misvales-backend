@@ -3,6 +3,7 @@
 namespace App\Http\Requests\VerificacionDistribuidora;
 
 use App\Enums\ApplicationCorrectionSection;
+use App\Services\VerificacionDistribuidora\ValidadorValorVerificacion;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\Validator;
@@ -38,6 +39,20 @@ final class RegistrarDiferenciasRequest extends FormRequest
             $payload = $this->input('differences_payload', []);
             if ((bool) ($payload['has_differences'] ?? false) !== (($payload['items'] ?? []) !== [])) {
                 $validator->errors()->add('differences_payload', 'La bandera de diferencias debe coincidir con los elementos capturados.');
+            }
+
+            foreach (($payload['items'] ?? []) as $index => $item) {
+                if (! is_array($item)) {
+                    continue;
+                }
+                $message = ValidadorValorVerificacion::mensaje(
+                    (string) ($item['field'] ?? ''),
+                    $item['observed_value'] ?? null,
+                    true,
+                );
+                if ($message !== null) {
+                    $validator->errors()->add("differences_payload.items.{$index}.observed_value", $message);
+                }
             }
         }];
     }

@@ -8,6 +8,7 @@ use App\Models\AsignacionClienteDistribuidora;
 use App\Models\Branch;
 use App\Models\Cliente;
 use App\Models\Distribuidora;
+use App\Models\AuditLog;
 use App\Models\Role;
 use App\Models\User;
 use App\Models\UserRoleScope;
@@ -51,6 +52,9 @@ final class CierreOperativoApiTest extends TestCase
         self::assertNotSame('identificacion.jpg', basename($path));
         Storage::disk('private')->assertExists($path);
         $this->get("/api/v1/media/{$mediaId}/download")->assertOk()->assertHeader('cache-control', 'no-store, private');
+        $downloadAuditCount = AuditLog::query()->where('event_name', 'PRIVATE_MEDIA_DOWNLOADED')->count();
+        $this->get("/api/v1/media/{$mediaId}/preview")->assertOk();
+        $this->assertSame($downloadAuditCount, AuditLog::query()->where('event_name', 'PRIVATE_MEDIA_DOWNLOADED')->count());
         Sanctum::actingAs($this->user('distributor', Branch::factory()->create()->id));
         $this->get("/api/v1/media/{$mediaId}/download")->assertForbidden();
     }

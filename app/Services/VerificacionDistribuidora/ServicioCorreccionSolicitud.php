@@ -179,11 +179,17 @@ class ServicioCorreccionSolicitud
                 };
             }
 
+            $nationalityInput = mb_strtoupper(trim((string) $newValue), 'UTF-8');
             if ($fieldPath === 'nationality') {
                 $newValue = match (mb_strtoupper(trim((string) $newValue), 'UTF-8')) {
                     'MEXICANA', 'MEXICANO', 'MÉXICO', 'MEXICO', 'MX' => 'MEXICAN',
                     default => 'FOREIGN',
                 };
+            }
+
+            // El formulario canónico envía el código MEXICAN; no debe caer en FOREIGN por el valor por defecto.
+            if ($fieldPath === 'nationality' && $nationalityInput === 'MEXICAN') {
+                $newValue = 'MEXICAN';
             }
 
             $anterior = $datos->getAttribute($fieldPath);

@@ -31,6 +31,11 @@ class EvidenciaVerificacionController extends Controller
         return $this->evidenciaService->descargarEvidencia($mediaId, auth()->id());
     }
 
+    public function previsualizarEvidencia(string $mediaId)
+    {
+        return $this->evidenciaService->descargarEvidencia($mediaId, auth()->id(), false);
+    }
+
     public function eliminarEvidenciaAbierta(string $mediaId)
     {
         $this->evidenciaService->eliminarEvidenciaAbierta($mediaId, auth()->id());

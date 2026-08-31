@@ -105,7 +105,7 @@ class ServicioEvidenciaVerificacion
             ->get();
     }
 
-    public function descargarEvidencia(string $mediaId, string $userId)
+    public function descargarEvidencia(string $mediaId, string $userId, bool $registrarAuditoria = true)
     {
         $media = MediaFile::find($mediaId);
         if (! $media) {
@@ -123,14 +123,16 @@ class ServicioEvidenciaVerificacion
             throw new BusinessException('VERIFICATION_EVIDENCE_NOT_FOUND', 'El archivo no existe.', 404);
         }
 
-        Log::info("Descarga de evidencia {$mediaId} realizada por usuario {$userId}");
-        $downloadValues = [
-            'file_name' => $media->original_name,
-            'file_type' => $media->file_type,
-            'mime_type' => $media->mime_type,
-            'size_bytes' => $media->size_bytes,
-        ];
-        AuditHelper::log('VERIFICATION_EVIDENCE_DOWNLOADED', 'MediaFile', $media->id, $userId, $application->branch_id, null, $downloadValues, "Descarga de evidencia: {$media->original_name}", 'SUCCESS');
+        if ($registrarAuditoria) {
+            Log::info("Descarga de evidencia {$mediaId} realizada por usuario {$userId}");
+            $downloadValues = [
+                'file_name' => $media->original_name,
+                'file_type' => $media->file_type,
+                'mime_type' => $media->mime_type,
+                'size_bytes' => $media->size_bytes,
+            ];
+            AuditHelper::log('VERIFICATION_EVIDENCE_DOWNLOADED', 'MediaFile', $media->id, $userId, $application->branch_id, null, $downloadValues, "Descarga de evidencia: {$media->original_name}", 'SUCCESS');
+        }
 
         return Storage::disk($media->disk)->download($media->path, $media->original_name);
     }

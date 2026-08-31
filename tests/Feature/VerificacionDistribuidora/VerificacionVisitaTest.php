@@ -168,6 +168,33 @@ class VerificacionVisitaTest extends Modulo5TestCase
         $this->assertSame('Nombre observado', $audit->new_value['changes'][0]['after']);
     }
 
+    public function test_rechaza_valor_numerico_invalido_en_diferencias(): void
+    {
+        $verifier = User::factory()->create();
+        $visit = VerificationVisit::factory()->create([
+            'verifier_id' => $verifier->id,
+            'status' => VerificationVisitStatus::IN_PROGRESS,
+        ]);
+
+        $this->actingAsMfaUser($verifier, ['verifier'])
+            ->putJson("/api/v1/verification-visits/{$visit->id}/differences", [
+                'differences_payload' => [
+                    'has_differences' => true,
+                    'items' => [[
+                        'section' => 'assets_liabilities',
+                        'field' => 'amount',
+                        'declared_value' => '100.0000',
+                        'observed_value' => '100abc',
+                        'description' => 'El monto observado no coincide.',
+                    ]],
+                ],
+                'lock_version' => $visit->lock_version,
+            ])
+            ->assertUnprocessable();
+
+        $this->assertNull($visit->refresh()->differences_payload);
+    }
+
     public function test_consulta_visita_asignada_incluye_expediente_sin_usar_el_endpoint_general(): void
     {
         $verifier = User::factory()->create();

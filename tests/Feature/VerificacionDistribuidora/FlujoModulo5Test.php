@@ -395,6 +395,24 @@ class FlujoModulo5Test extends Modulo5TestCase
         ]);
     }
 
+    public function test_previsualizar_evidencia_no_registra_descarga_auditada(): void
+    {
+        Storage::fake('local');
+        [$application, $coordinator, $verifier, $branchId] = $this->expediente();
+        $visit = $this->asignar($application, $coordinator, $verifier, $branchId);
+        $this->iniciar($visit, $verifier, $branchId);
+        $this->subirEvidencia($visit, $verifier, $branchId);
+
+        $media = $visit->refresh()->mediaFiles()->firstOrFail();
+        $before = AuditLog::query()->where('event_name', 'VERIFICATION_EVIDENCE_DOWNLOADED')->count();
+
+        $this->actingAsMfaUser($verifier, ['verifier'], $branchId)
+            ->get("/api/v1/verification-evidences/{$media->id}/preview")
+            ->assertOk();
+
+        $this->assertSame($before, AuditLog::query()->where('event_name', 'VERIFICATION_EVIDENCE_DOWNLOADED')->count());
+    }
+
     private function expediente(): array
     {
         $coordinator = User::factory()->create();

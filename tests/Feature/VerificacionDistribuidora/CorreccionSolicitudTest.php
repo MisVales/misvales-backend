@@ -7,6 +7,7 @@ use App\Models\CreditoComercialSolicitud;
 use App\Models\DatosPersonalesSolicitud;
 use App\Models\DistributorApplication;
 use App\Models\FamiliarSolicitud;
+use App\Models\PatrimonioSolicitud;
 use App\Models\User;
 use App\Models\VerificationVisit;
 use App\Services\SolicitudDistribuidora\ProtectorDatosSolicitud;
@@ -122,6 +123,53 @@ class CorreccionSolicitudTest extends Modulo5TestCase
         self::assertSame('LUMA900101HDFABC09', $protector->descifrar($personal->fresh()->curp_ciphertext));
     }
 
+    public function test_corrige_nacionalidad_con_el_codigo_del_select_canonico(): void
+    {
+        $coordinator = User::factory()->create();
+        $app = DistributorApplication::factory()->create([
+            'coordinator_id' => $coordinator->id,
+            'status' => ApplicationStatus::COORDINATOR_CORRECTION,
+        ]);
+        $personal = DatosPersonalesSolicitud::query()->create([
+            'application_id' => $app->id,
+            'first_name' => 'Ana',
+            'first_last_name' => 'Perez',
+            'nationality' => 'FOREIGN',
+            'birth_country' => 'US',
+            'birth_date' => '1990-01-01',
+            'birth_place' => 'Dallas',
+            'birth_state' => 'Texas',
+            'birth_city' => 'Dallas',
+            'email' => 'ana.nacionalidad@example.test',
+            'phone_number' => '+1525550100',
+            'identification_country' => 'US',
+            'official_id_type' => 'PASSPORT',
+        ]);
+        $visit = VerificationVisit::factory()->create([
+            'application_id' => $app->id,
+            'differences_payload' => ['items' => [[
+                'section' => 'personal_info',
+                'field' => 'nationality',
+                'record_id' => null,
+                'observed_value' => 'MEXICAN',
+                'description' => 'La nacionalidad observada es mexicana.',
+            ]]],
+        ]);
+
+        $this->actingAsMfaUser($coordinator, ['coordinator'])
+            ->postJson("/api/v1/distributor-applications/{$app->id}/corrections", [
+                'visit_id' => $visit->id,
+                'section' => 'personal_info',
+                'field_path' => 'nationality',
+                'difference_index' => 0,
+                'new_value' => 'MEXICAN',
+                'lock_version' => $app->lock_version,
+            ])
+            ->assertCreated();
+
+        $this->assertSame('MEXICAN', $personal->refresh()->nationality);
+    }
+
     public function test_acepta_observacion_de_comprobante_sin_escribir_texto_en_columna_uuid(): void
     {
         $coordinator = User::factory()->create();
@@ -148,5 +196,46 @@ class CorreccionSolicitudTest extends Modulo5TestCase
             ]);
         $repeated->assertOk()->assertJsonPath('data.id', $response->json('data.id'));
         $this->assertSame(1, $app->corrections()->count());
+    }
+
+    public function test_rechaza_letras_en_correccion_numerica_y_no_modifica_expediente(): void
+    {
+        $coordinator = User::factory()->create();
+        $app = DistributorApplication::factory()->create([
+            'coordinator_id' => $coordinator->id,
+            'status' => ApplicationStatus::COORDINATOR_CORRECTION,
+        ]);
+        $asset = PatrimonioSolicitud::query()->create([
+            'application_id' => $app->id,
+            'entry_type' => 'ASSET',
+            'name' => 'Equipo',
+            'amount' => '100.0000',
+            'is_active' => true,
+        ]);
+        $visit = VerificationVisit::factory()->create([
+            'application_id' => $app->id,
+            'differences_payload' => ['items' => [[
+                'section' => 'assets_liabilities',
+                'field' => 'amount',
+                'record_id' => $asset->id,
+                'observed_value' => '250.0000',
+                'description' => 'El monto observado requiere corrección.',
+            ]]],
+        ]);
+
+        $this->actingAsMfaUser($coordinator, ['coordinator'])
+            ->postJson("/api/v1/distributor-applications/{$app->id}/corrections", [
+                'visit_id' => $visit->id,
+                'section' => 'assets_liabilities',
+                'field_path' => 'amount',
+                'record_id' => $asset->id,
+                'difference_index' => 0,
+                'new_value' => '250abc',
+                'lock_version' => $app->lock_version,
+            ])
+            ->assertUnprocessable();
+
+        $this->assertSame('100.0000', $asset->refresh()->amount);
+        $this->assertDatabaseCount('application_corrections', 0);
     }
 }

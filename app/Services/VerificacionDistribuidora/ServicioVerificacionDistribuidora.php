@@ -5,6 +5,7 @@ namespace App\Services\VerificacionDistribuidora;
 use App\Enums\ApplicationStatus;
 use App\Enums\VerificationVisitResult;
 use App\Enums\VerificationVisitStatus;
+use App\Exceptions\ApiException;
 use App\Exceptions\BusinessException;
 use App\Helpers\AuditHelper;
 use App\Models\DistributorApplication;
@@ -201,6 +202,22 @@ class ServicioVerificacionDistribuidora
             }
             if ($visit->status === VerificationVisitStatus::COMPLETED) {
                 throw new BusinessException('VERIFICATION_VISIT_ALREADY_COMPLETED', 'Visita completada.', 409);
+            }
+
+            foreach (($differencesPayload['items'] ?? []) as $index => $item) {
+                $message = ValidadorValorVerificacion::mensaje(
+                    (string) ($item['field'] ?? ''),
+                    $item['observed_value'] ?? null,
+                    true,
+                );
+                if ($message !== null) {
+                    throw new ApiException(
+                        'VERIFICATION_DIFFERENCE_VALUE_INVALID',
+                        $message,
+                        422,
+                        ["differences_payload.items.{$index}.observed_value" => [$message]],
+                    );
+                }
             }
 
             $visit->forceFill(['differences_payload' => $differencesPayload])->save();

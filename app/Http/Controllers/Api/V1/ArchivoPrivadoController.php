@@ -40,4 +40,9 @@ final class ArchivoPrivadoController extends Controller
     {
         return $service->descargar($media, $request->user());
     }
+
+    public function preview(MediaFile $media, Request $request, ServicioArchivosPrivados $service): StreamedResponse
+    {
+        return $service->descargar($media, $request->user(), false);
+    }
 }

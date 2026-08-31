@@ -259,6 +259,7 @@ Route::prefix('v1')->group(function () {
         Route::post('verification-visits/{visit}/finish', [VerificacionDistribuidoraController::class, 'finalizarVisita']);
         Route::get('verification-visits/{visit}/evidences', [EvidenciaVerificacionController::class, 'consultarEvidencia']);
         Route::post('verification-visits/{visit}/evidences', [EvidenciaVerificacionController::class, 'adjuntarEvidencia']);
+        Route::get('verification-evidences/{media}/preview', [EvidenciaVerificacionController::class, 'previsualizarEvidencia']);
         Route::get('verification-evidences/{media}/download', [EvidenciaVerificacionController::class, 'descargarEvidencia']);
         Route::delete('verification-evidences/{media}', [EvidenciaVerificacionController::class, 'eliminarEvidenciaAbierta']);
         Route::get('distributor-applications/{application}/corrections', [CorreccionSolicitudController::class, 'listarDiferencias']);
@@ -411,6 +412,7 @@ Route::prefix('v1')->group(function () {
         Route::get('audit-logs', [CentroOperacionController::class, 'audits']);
         Route::get('operational-logs', [CentroOperacionController::class, 'logs']);
         Route::post('media', [ArchivoPrivadoController::class, 'store'])->middleware(['idempotency', 'throttle:20,1']);
+        Route::get('media/{media}/preview', [ArchivoPrivadoController::class, 'preview'])->middleware('throttle:60,1');
         Route::get('media/{media}/download', [ArchivoPrivadoController::class, 'download'])->middleware('throttle:60,1');
     });
 });
