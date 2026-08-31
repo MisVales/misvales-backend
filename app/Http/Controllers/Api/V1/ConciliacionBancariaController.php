@@ -41,10 +41,10 @@ final class ConciliacionBancariaController extends Controller
     public function pendingPeriods(Request $request, ServicioDisponibilidadConciliacion $availability): JsonResponse
     {
         $user = $request->user();
-        abort_unless($user->hasPermissionTo('bank_imports.create_branch') || $user->hasPermissionTo('bank_imports.view_global'), 403);
+        $branchId = $this->bankImportViewBranchId($user);
 
         return response()->json(['data' => $availability->periodosPendientes(
-            $user->hasPermissionTo('bank_imports.view_global') ? null : $this->cashierBranchId($user),
+            $branchId,
         )]);
     }
 
@@ -68,14 +68,11 @@ final class ConciliacionBancariaController extends Controller
     public function imports(Request $request)
     {
         $user = $request->user();
-        $global = $user->hasPermissionTo('bank_imports.view_global');
-        if (! $global && ! $user->hasPermissionTo('bank_imports.view_branch')) {
-            throw new ExcepcionConciliacion('BANK_IMPORT_VIEW_DENIED', 'No tienes permiso para consultar importaciones bancarias.', 403);
-        }
+        $branchId = $this->bankImportViewBranchId($user);
 
         $query = ImportacionArchivoBancario::query()->latest();
-        if (! $global) {
-            $query->whereIn('branch_id', $this->branchIds($user));
+        if ($branchId !== null) {
+            $query->where('branch_id', $branchId);
         }
 
         return ImportacionBancariaResource::collection($query->paginate(25));
@@ -100,7 +97,7 @@ final class ConciliacionBancariaController extends Controller
 
     public function simulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): JsonResponse
     {
-        $branchId = $this->cashierBranchId($request->user());
+        $branchId = $this->bankImportViewBranchId($request->user());
         $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
 
         return response()->json(['data' => $service->listar($branchId, $processRunId)]);
@@ -108,7 +105,7 @@ final class ConciliacionBancariaController extends Controller
 
     public function exportSimulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): BinaryFileResponse
     {
-        $branchId = $this->cashierBranchId($request->user());
+        $branchId = $this->bankImportViewBranchId($request->user());
         $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
         $path = $service->exportar($branchId, $processRunId);
 
@@ -270,5 +267,31 @@ final class ConciliacionBancariaController extends Controller
         }
 
         return $branchId;
+    }
+
+    private function bankImportViewBranchId(User $user): ?string
+    {
+        if ($user->hasPermissionTo('bank_imports.view_global')) {
+            return null;
+        }
+
+        if ($user->hasPermissionTo('bank_imports.view_branch') || $user->hasPermissionTo('bank_imports.create_branch')) {
+            $branchId = $user->branch_id;
+            if ($branchId !== null && $user->hasScopeForBranch($branchId)) {
+                return $branchId;
+            }
+
+            throw new ExcepcionConciliacion(
+                'BANK_IMPORT_SCOPE_DENIED',
+                'El usuario no tiene una sucursal operativa autorizada para consultar conciliaciones.',
+                403,
+            );
+        }
+
+        throw new ExcepcionConciliacion(
+            'BANK_IMPORT_VIEW_DENIED',
+            'No tienes permiso para consultar conciliaciones bancarias.',
+            403,
+        );
     }
 }

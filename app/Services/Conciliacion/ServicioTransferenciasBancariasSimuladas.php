@@ -60,7 +60,7 @@ final class ServicioTransferenciasBancariasSimuladas
         ]);
     }
 
-    public function listar(string $branchId, string $processRunId): Collection
+    public function listar(?string $branchId, string $processRunId): Collection
     {
         $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
 
@@ -71,7 +71,7 @@ final class ServicioTransferenciasBancariasSimuladas
             ->get();
     }
 
-    public function exportar(string $branchId, string $processRunId): string
+    public function exportar(?string $branchId, string $processRunId): string
     {
         $this->asegurarSaldosFavorAplicados($branchId, $processRunId);
 
@@ -137,11 +137,11 @@ final class ServicioTransferenciasBancariasSimuladas
         };
     }
 
-    private function asegurarSaldosFavorAplicados(string $branchId, string $processRunId): void
+    private function asegurarSaldosFavorAplicados(?string $branchId, string $processRunId): void
     {
         $relations = RelacionDistribuidora::query()
             ->with('distribuidora.usuario:id')
-            ->where('branch_id', $branchId)
+            ->when($branchId !== null, fn (Builder $query) => $query->where('branch_id', $branchId))
             ->where('process_run_id', $processRunId)
             ->get();
 
@@ -158,7 +158,9 @@ final class ServicioTransferenciasBancariasSimuladas
             TransferenciaBancariaSimulada::query()->firstOrCreate(
                 ['bank_folio' => 'SALDO-FAVOR-'.$relation->id],
                 [
-                    'branch_id' => $branchId,
+                    // A global query spans multiple branches; persist the transfer
+                    // in the relation's actual branch rather than a null scope.
+                    'branch_id' => $relation->branch_id,
                     'relation_id' => $relation->id,
                     'created_by' => $relation->distribuidora->usuario->id,
                     'concept' => 'Aplicación de saldo a favor',
@@ -175,7 +177,7 @@ final class ServicioTransferenciasBancariasSimuladas
      * Un movimiento pertenece al periodo en que se realizó, no al periodo en que
      * nació la relación. Esto permite conciliar pagos de relaciones anteriores.
      */
-    private function movimientosDelPeriodo(string $branchId, string $processRunId): Builder
+    private function movimientosDelPeriodo(?string $branchId, string $processRunId): Builder
     {
         $run = DB::table('relation_process_runs')->where('id', $processRunId)->firstOrFail();
         $previousCutoff = DB::table('relation_process_runs')
@@ -185,7 +187,7 @@ final class ServicioTransferenciasBancariasSimuladas
             ->value('cutoff_at');
 
         return TransferenciaBancariaSimulada::query()
-            ->where('branch_id', $branchId)
+            ->when($branchId !== null, fn (Builder $query) => $query->where('branch_id', $branchId))
             ->where('paid_at', '<=', $run->cutoff_at)
             ->when($previousCutoff !== null, fn (Builder $query) => $query->where('paid_at', '>', $previousCutoff));
     }
