@@ -36,6 +36,7 @@ use App\Models\RelacionPartidaDistribuidora;
 use App\Models\RestriccionUsoCredito;
 use App\Models\Role;
 use App\Models\SolicitudModificacionVale;
+use App\Models\TransferenciaBancariaSimulada;
 use App\Models\User;
 use App\Models\UserRoleScope;
 use App\Models\Vale;
@@ -354,11 +355,11 @@ final class CajaValeApiTest extends TestCase
         ));
         self::assertSame(1, app(ServicioGeneracionRelacion::class)->generar($cutoff));
         $relation = RelacionDistribuidora::query()->firstOrFail();
-        self::assertSame('7300.0000', $relation->balance);
+        self::assertSame('7600.0000', $relation->balance);
 
         $file = $this->xlsxValido([[
             $relation->payment_reference,
-            '7300.00',
+            '7600.00',
             $cutoff->addDay()->format('Y-m-d H:i:s'),
             'BANK-CAPITAL-EXACTO-001',
             'Liquidación exacta',
@@ -377,6 +378,39 @@ final class CajaValeApiTest extends TestCase
         self::assertSame(1, PagoRelacion::query()->count());
         self::assertSame(1, MovimientoLineaCredito::query()->where('type', 'PAYMENT_RECOVERY')->count());
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '0.0000']);
+    }
+
+    public function test_corte_usa_el_residuo_de_la_parcialidad_y_no_la_cuota_resumida(): void
+    {
+        $cutoff = CarbonImmutable::now('America/Monterrey');
+        $this->voucher->forceFill([
+            'status' => EstadoVale::FERIADO,
+            'cashed_at' => $cutoff->subDays(2),
+            'fortnights_count' => 3,
+            'misvales_total' => '10000.0000',
+            'misvales_payment_per_fortnight' => '3333.0000',
+            'client_payment_per_fortnight' => '3333.0000',
+            'client_total' => '10000.0000',
+        ])->save();
+        $this->voucher->parcialidades()->create([
+            'number' => 3,
+            'capital' => '3000.0000',
+            'loan_commission' => '100.0000',
+            'interest' => '200.0000',
+            'insurance' => '34.0000',
+            'distributor_profit' => '0.0000',
+            'misvales_payment' => '3334.0000',
+            'client_payment' => '3334.0000',
+            'due_at' => $cutoff->subDay(),
+        ]);
+
+        self::assertSame(1, app(ServicioGeneracionRelacion::class)->generar($cutoff));
+        $relation = RelacionDistribuidora::query()->firstOrFail();
+
+        self::assertSame('3334.0000', $relation->portfolio_total);
+        self::assertSame('3334.0000', $relation->misvales_total);
+        self::assertSame('3334.0000', $relation->partidas()->firstOrFail()->portfolio_amount);
+        self::assertSame('3334.0000', $relation->partidas()->firstOrFail()->misvales_amount);
     }
 
     public function test_estado_sucursal_transaccion_y_saldo_se_validan_al_feriar(): void
@@ -1690,6 +1724,138 @@ final class CajaValeApiTest extends TestCase
             ->assertUnprocessable();
     }
 
+    public function test_gerente_general_consulta_conciliacion_global_y_no_puede_cargar_archivo(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $otherBranch = Branch::factory()->create();
+        $otherDistributorUser = $this->user('distributor', $otherBranch->id);
+        $otherDistributor = Distribuidora::factory()->active()->create([
+            'user_id' => $otherDistributorUser->id,
+            'branch_id' => $otherBranch->id,
+        ]);
+        $otherRelation = $this->replicatePaymentRelation(
+            $relation,
+            'REL-GLOBAL-OTHER',
+            '1800.0000',
+            0,
+            $otherDistributor->id,
+            $otherBranch->id,
+        );
+
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'event_name' => 'PaymentDeadlineExpired',
+            'entity_id' => $relation->process_run_id,
+            'actor_id' => $this->cashier->id,
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+        TransferenciaBancariaSimulada::query()->create([
+            'branch_id' => $this->branch->id,
+            'relation_id' => $relation->id,
+            'created_by' => $this->distributorUser->id,
+            'concept' => 'Abono sucursal principal',
+            'payment_reference' => $relation->payment_reference,
+            'amount' => '100.0000',
+            'bank_folio' => 'GLOBAL-001',
+            'paid_at' => $relation->cutoff_at->subHour(),
+            'payment_type' => 'TRANSFER',
+        ]);
+        TransferenciaBancariaSimulada::query()->create([
+            'branch_id' => $otherBranch->id,
+            'relation_id' => $otherRelation->id,
+            'created_by' => $otherDistributorUser->id,
+            'concept' => 'Abono otra sucursal',
+            'payment_reference' => $otherRelation->payment_reference,
+            'amount' => '200.0000',
+            'bank_folio' => 'GLOBAL-002',
+            'paid_at' => $otherRelation->cutoff_at->subHour(),
+            'payment_type' => 'TRANSFER',
+        ]);
+
+        Sanctum::actingAs($this->user('general_manager'));
+        $this->getJson('/api/v1/bank-reconciliation-periods')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.relations', 2)
+            ->assertJsonPath('data.0.pending_total', '4775.0000');
+
+        $simulations = $this->getJson('/api/v1/bank-simulations?process_run_id='.$relation->process_run_id)
+            ->assertSuccessful();
+        $this->assertCount(2, $simulations->json('data'));
+        $this->assertTrue(collect($simulations->json('data'))->contains('concept', 'Abono sucursal principal'));
+        $this->assertTrue(collect($simulations->json('data'))->contains('concept', 'Abono otra sucursal'));
+        $this->get('/api/v1/bank-simulations/export?process_run_id='.$relation->process_run_id)
+            ->assertSuccessful()
+            ->assertDownload();
+
+        $this->postJson('/api/v1/bank-imports', [])->assertForbidden();
+    }
+
+    public function test_conciliacion_de_sucursal_filtra_y_cajera_sin_sucursal_es_rechazada(): void
+    {
+        $relation = $this->createPaymentRelation();
+        $otherBranch = Branch::factory()->create();
+        $otherDistributorUser = $this->user('distributor', $otherBranch->id);
+        $otherDistributor = Distribuidora::factory()->active()->create([
+            'user_id' => $otherDistributorUser->id,
+            'branch_id' => $otherBranch->id,
+        ]);
+        $otherRelation = $this->replicatePaymentRelation(
+            $relation,
+            'REL-BRANCH-OTHER',
+            '1800.0000',
+            0,
+            $otherDistributor->id,
+            $otherBranch->id,
+        );
+
+        AuditLog::query()->create([
+            'entity_type' => 'relation_process_run',
+            'event_name' => 'PaymentDeadlineExpired',
+            'entity_id' => $relation->process_run_id,
+            'actor_id' => $this->cashier->id,
+            'new_value' => ['expired_at' => now()->toIso8601String()],
+            'result' => 'SUCCESS',
+        ]);
+        TransferenciaBancariaSimulada::query()->create([
+            'branch_id' => $this->branch->id,
+            'relation_id' => $relation->id,
+            'created_by' => $this->distributorUser->id,
+            'concept' => 'Solo sucursal autorizada',
+            'payment_reference' => $relation->payment_reference,
+            'amount' => '100.0000',
+            'bank_folio' => 'BRANCH-001',
+            'paid_at' => $relation->cutoff_at->subHour(),
+            'payment_type' => 'TRANSFER',
+        ]);
+        TransferenciaBancariaSimulada::query()->create([
+            'branch_id' => $otherBranch->id,
+            'relation_id' => $otherRelation->id,
+            'created_by' => $otherDistributorUser->id,
+            'concept' => 'Sucursal fuera de alcance',
+            'payment_reference' => $otherRelation->payment_reference,
+            'amount' => '200.0000',
+            'bank_folio' => 'BRANCH-002',
+            'paid_at' => $otherRelation->cutoff_at->subHour(),
+            'payment_type' => 'TRANSFER',
+        ]);
+
+        Sanctum::actingAs($this->user('branch_manager', $this->branch->id));
+        $this->getJson('/api/v1/bank-reconciliation-periods')
+            ->assertSuccessful()
+            ->assertJsonPath('data.0.relations', 1)
+            ->assertJsonPath('data.0.pending_total', '2975.0000');
+        $simulations = $this->getJson('/api/v1/bank-simulations?process_run_id='.$relation->process_run_id)
+            ->assertSuccessful();
+        $this->assertCount(1, $simulations->json('data'));
+        $this->assertSame('Solo sucursal autorizada', $simulations->json('data.0.concept'));
+
+        Sanctum::actingAs($this->user('cashier'));
+        $this->getJson('/api/v1/bank-reconciliation-periods')
+            ->assertForbidden()
+            ->assertJsonPath('error.code', 'BANK_IMPORT_SCOPE_DENIED');
+    }
+
     public function test_pago_simulado_del_corte_vigente_aparece_en_el_excel_del_mismo_proceso(): void
     {
         $relation = $this->createPaymentRelation();
@@ -2756,11 +2922,19 @@ final class CajaValeApiTest extends TestCase
         return RelacionDistribuidora::query()->firstOrFail();
     }
 
-    private function replicatePaymentRelation(RelacionDistribuidora $relation, string $reference, string $balance, int $monthsAfter = 1): RelacionDistribuidora
-    {
+    private function replicatePaymentRelation(
+        RelacionDistribuidora $relation,
+        string $reference,
+        string $balance,
+        int $monthsAfter = 1,
+        ?string $distributorId = null,
+        ?string $branchId = null,
+    ): RelacionDistribuidora {
         $copy = $relation->replicate(['id', 'payment_reference', 'cutoff_at', 'created_at', 'updated_at']);
         $copy->forceFill([
             'id' => (string) Str::uuid(),
+            'distributor_id' => $distributorId ?? $relation->distributor_id,
+            'branch_id' => $branchId ?? $relation->branch_id,
             'payment_reference' => $reference,
             'cutoff_at' => $relation->cutoff_at->addMonths($monthsAfter),
             'portfolio_total' => $balance,

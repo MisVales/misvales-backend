@@ -13,12 +13,12 @@ final class CalculadorFinancieroValeTest extends TestCase
 
         self::assertSame('1000.0000', $resultado['loan_commission_amount']);
         self::assertSame('800.0000', $resultado['interest_total']);
-        self::assertSame('11400.0000', $resultado['misvales_total']);
+        self::assertSame('11900.0000', $resultado['misvales_total']);
         self::assertSame('500.0000', $resultado['distributor_profit_total']);
-        self::assertSame('11900.0000', $resultado['client_total']);
-        self::assertSame('2850.0000', $resultado['misvales_payment_per_fortnight']);
-        self::assertSame('2975.0000', $resultado['client_payment_per_fortnight']);
-        self::assertSame('2850.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
+        self::assertSame('12400.0000', $resultado['client_total']);
+        self::assertSame('2975.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('3100.0000', $resultado['client_payment_per_fortnight']);
+        self::assertSame('2975.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
         self::assertCount(4, $resultado['installments']);
     }
 
@@ -36,13 +36,14 @@ final class CalculadorFinancieroValeTest extends TestCase
         self::assertSame('1500.0000', $resultado['loan_commission_amount']);
         self::assertSame('450.0000', $resultado['interest_per_fortnight']);
         self::assertSame('3600.0000', $resultado['interest_total']);
-        self::assertSame('19300.0000', $resultado['misvales_total']);
-        self::assertSame('2412.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('20200.0000', $resultado['misvales_total']);
+        self::assertSame('2525.0000', $resultado['misvales_payment_per_fortnight']);
         self::assertSame('1875.0000', $resultado['capital_per_fortnight']);
         self::assertSame('900.0000', $resultado['distributor_profit_total']);
         self::assertSame('112.0000', $resultado['distributor_profit_per_fortnight']);
-        self::assertSame('2412.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
-        self::assertSame('2525.0000', $resultado['client_payment_per_fortnight']);
+        self::assertSame('2525.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
+        self::assertSame('2637.0000', $resultado['client_payment_per_fortnight']);
+        self::assertSame('21100.0000', $resultado['client_total']);
     }
 
     public function test_aplica_piso_a_importes_con_centavos(): void
@@ -53,28 +54,30 @@ final class CalculadorFinancieroValeTest extends TestCase
         self::assertSame('100.0000', $resultado['insurance_amount']);
         self::assertSame('100.0000', $resultado['loan_commission_amount']);
         self::assertSame('40.0000', $resultado['interest_total']);
-        self::assertSame('1190.0000', $resultado['misvales_total']);
-        self::assertSame('595.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('1240.0000', $resultado['misvales_total']);
+        self::assertSame('620.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('1290.0000', $resultado['client_total']);
+        self::assertSame('645.0000', $resultado['client_payment_per_fortnight']);
     }
 
     public function test_ejemplo_obligatorio_de_cinco_mil_pesos_en_ocho_quincenas(): void
     {
         $resultado = (new CalculadorFinancieroVale)->calcular('5000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
 
-        self::assertSame('7600.0000', $resultado['client_total']);
-        self::assertSame('950.0000', $resultado['client_payment_per_fortnight']);
+        self::assertSame('7900.0000', $resultado['client_total']);
+        self::assertSame('987.0000', $resultado['client_payment_per_fortnight']);
         self::assertSame('300.0000', $resultado['distributor_profit_total']);
         self::assertSame('37.0000', $resultado['distributor_profit_per_fortnight']);
-        self::assertSame('7300.0000', $resultado['misvales_total']);
-        self::assertSame('912.0000', $resultado['misvales_payment_per_fortnight']);
-        self::assertSame('912.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
+        self::assertSame('7600.0000', $resultado['misvales_total']);
+        self::assertSame('950.0000', $resultado['misvales_payment_per_fortnight']);
+        self::assertSame('950.0000', $resultado['net_payment_after_distributor_profit_per_fortnight']);
     }
 
     public function test_cada_componente_con_division_no_exacta_conserva_su_total_en_la_ultima_parcialidad(): void
     {
         $resultado = (new CalculadorFinancieroVale)->calcular('5003.0000', '0.100000', '0.017000', 7, '103.0000', '0.060000');
 
-        foreach (['capital' => '5003.0000', 'loan_commission' => '500.3000', 'interest' => '595.3500', 'insurance' => '103.0000', 'distributor_profit' => '300.1800', 'client_payment' => '6201.6500', 'misvales_payment' => '5901.4700'] as $component => $total) {
+        foreach (['capital' => '5003.0000', 'loan_commission' => '500.3000', 'interest' => '595.3600', 'insurance' => '103.0000', 'distributor_profit' => '300.1800', 'client_payment' => '6501.8400', 'misvales_payment' => '6201.6600'] as $component => $total) {
             self::assertSame($total, array_reduce(
                 $resultado['installments'],
                 fn (string $sum, array $installment): string => bcadd($sum, $installment[$component], 4),
@@ -82,7 +85,16 @@ final class CalculadorFinancieroValeTest extends TestCase
             ));
         }
 
+        foreach ($resultado['installments'] as $installment) {
+            self::assertSame(
+                bcadd($installment['misvales_payment'], $installment['distributor_profit'], 4),
+                $installment['client_payment'],
+            );
+        }
+
         self::assertSame('714.0000', $resultado['installments'][0]['capital']);
         self::assertSame('719.0000', $resultado['installments'][6]['capital']);
+        self::assertSame('927.0000', $resultado['installments'][0]['client_payment']);
+        self::assertSame('939.8400', $resultado['installments'][6]['client_payment']);
     }
 }

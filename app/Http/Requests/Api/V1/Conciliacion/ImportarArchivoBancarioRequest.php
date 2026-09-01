@@ -8,7 +8,10 @@ final class ImportarArchivoBancarioRequest extends FormRequest
 {
     public function authorize(): bool
     {
-        return $this->user()?->hasPermissionTo('bank_imports.create_branch') ?? false;
+        $user = $this->user();
+
+        return ($user?->hasPermissionTo('bank_imports.create_branch') ?? false)
+            && ($user?->hasRole('cashier') ?? false);
     }
 
     public function rules(): array

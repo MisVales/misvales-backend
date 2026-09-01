@@ -72,10 +72,10 @@ final class GeneracionValeApiTest extends TestCase
     {
         $response = $this->withHeader('Idempotency-Key', (string) Str::uuid())->postJson('/api/v1/vouchers', ['client_id' => $this->cliente->id, 'product_version_id' => $this->producto->id]);
         $response->assertSuccessful()->assertJsonPath('data.type', 'PREVALE')->assertJsonPath('data.status', 'GENERATED')
-            ->assertJsonPath('data.capital', '10000.0000')->assertJsonPath('data.misvales_total', '11400.0000')
+            ->assertJsonPath('data.capital', '10000.0000')->assertJsonPath('data.misvales_total', '11900.0000')
             ->assertJsonPath('data.distributor_profit_total', '500.0000')
-            ->assertJsonPath('data.client_total', '11900.0000')
-            ->assertJsonPath('data.client_payment_per_fortnight', '2975.0000')
+            ->assertJsonPath('data.client_total', '12400.0000')
+            ->assertJsonPath('data.client_payment_per_fortnight', '3100.0000')
             ->assertJsonCount(4, 'data.installments');
         $this->assertMatchesRegularExpression('/^VAL-\d{4}-\d{8}$/', $response->json('data.folio'));
         $this->assertDatabaseCount('vouchers', 1);
@@ -453,11 +453,11 @@ final class GeneracionValeApiTest extends TestCase
 
         $this->assertSame('0.050000', $primerVale->distributor_profit_percentage);
         $this->assertSame('500.0000', $primerVale->distributor_profit_total);
-        $this->assertSame('11900.0000', $primerVale->client_total);
+        $this->assertSame('12400.0000', $primerVale->client_total);
         $this->assertNotSame($versionNueva->id, $primerVale->category_version_id);
         $this->assertSame('0.080000', $segundoVale->distributor_profit_percentage);
         $this->assertSame('800.0000', $segundoVale->distributor_profit_total);
-        $this->assertSame('11900.0000', $segundoVale->client_total);
+        $this->assertSame('12700.0000', $segundoVale->client_total);
         $this->assertSame($versionNueva->id, $segundoVale->category_version_id);
     }
 

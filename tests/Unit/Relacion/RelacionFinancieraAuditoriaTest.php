@@ -50,14 +50,14 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
     public function test_maria_ocho_quincenas_todos_los_cortes(): void
     {
         $esperados = [
-            1 => '1812.0000',
-            2 => '3999.0000',
-            3 => '6186.0000',
-            4 => '8373.0000',
-            5 => '10560.0000',
-            6 => '12747.0000',
-            7 => '14934.0000',
-            8 => '17121.0000',
+            1 => '1887.0000',
+            2 => '4149.0000',
+            3 => '6411.0000',
+            4 => '8673.0000',
+            5 => '10935.0000',
+            6 => '13197.0000',
+            7 => '15459.0000',
+            8 => '17721.0000',
         ];
 
         foreach ($esperados as $corte => $esperado) {
@@ -69,12 +69,12 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
     public function test_luis_ocho_quincenas_hasta_corte_seis(): void
     {
         $esperados = [
-            1 => '2712.0000',
-            2 => '5837.0000',
-            3 => '8962.0000',
-            4 => '12087.0000',
-            5 => '15212.0000',
-            6 => '18337.0000',
+            1 => '2825.0000',
+            2 => '6062.0000',
+            3 => '9299.0000',
+            4 => '12536.0000',
+            5 => '15773.0000',
+            6 => '19010.0000',
         ];
 
         foreach ($esperados as $corte => $esperado) {
@@ -86,9 +86,9 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
     public function test_gabriela_ocho_quincenas_hasta_corte_tres(): void
     {
         $esperados = [
-            1 => '912.0000',
-            2 => '2162.0000',
-            3 => '3412.0000',
+            1 => '950.0000',
+            2 => '2237.0000',
+            3 => '3524.0000',
         ];
 
         foreach ($esperados as $corte => $esperado) {
@@ -100,8 +100,8 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
     public function test_feliz_ocho_quincenas_hasta_corte_dos(): void
     {
         $esperados = [
-            1 => '912.0000',
-            2 => '2162.0000',
+            1 => '950.0000',
+            2 => '2237.0000',
         ];
 
         foreach ($esperados as $corte => $esperado) {
@@ -110,17 +110,17 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         }
     }
 
-    public function test_aceptacion_combinada_suma_cuarenta_y_un_mil_cuatrocientos_siete(): void
+    public function test_aceptacion_combinada_suma_los_saldos_base_canonicos(): void
     {
-        $maria = '17496.0000';
-        $luis = '18337.0000';
-        $gabriela = '3412.0000';
-        $feliz = '2162.0000';
+        $maria = '17721.0000';
+        $luis = '19010.0000';
+        $gabriela = '3524.0000';
+        $feliz = '2237.0000';
         $total = bcadd(bcadd(bcadd($maria, $luis, 4), $gabriela, 4), $feliz, 4);
-        self::assertSame('41407.0000', $total);
+        self::assertSame('42492.0000', $total);
     }
 
-    public function test_maria_si_no_paga_octava_quincena_produce_cuarenta_y_un_mil_cuatrocientos_siete(): void
+    public function test_maria_si_no_paga_octava_quincena_conserva_la_ganancia_en_la_base(): void
     {
         $mariaVencidaTotal = $this->calcularSaldoRelacion(
             '10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8, '300.0000', true
@@ -135,28 +135,28 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         $feliz = $this->calcularSaldoRelacion('5000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 2);
 
         $totalConMariaVencida = bcadd(bcadd(bcadd($mariaVencidaTotal, $luis, 4), $gabriela, 4), $feliz, 4);
-        self::assertSame('41407.0000', $totalConMariaVencida);
+        self::assertSame('42867.0000', $totalConMariaVencida);
     }
 
     public function test_parcialidad_vigente_sin_mora_conserva_ganancia(): void
     {
         $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
-        self::assertSame('1812.0000', $plan['misvales_payment_per_fortnight']);
-        self::assertSame('1887.0000', $plan['client_payment_per_fortnight']);
+        self::assertSame('1887.0000', $plan['misvales_payment_per_fortnight']);
+        self::assertSame('1962.0000', $plan['client_payment_per_fortnight']);
         self::assertSame('75.0000', $plan['distributor_profit_per_fortnight']);
     }
 
     public function test_cinco_vencimientos_consecutivos_maria(): void
     {
         // Caso obligatorio del usuario:
-        // 8/8 vigente = 17121
-        // +375 = 17496
-        // +375 = 17871
-        // +375 = 18246
-        // +375 = 18621
-        // +375 = 18996
+        // 8/8 vigente = 17721
+        // +375 = 18096
+        // +375 = 18471
+        // +375 = 18846
+        // +375 = 19221
+        // +375 = 19596
         $saldoVigente = $this->calcularSaldoRelacion('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000', 8);
-        self::assertSame('17121.0000', $saldoVigente);
+        self::assertSame('17721.0000', $saldoVigente);
 
         $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
         $multa = '300.0000';
@@ -166,33 +166,33 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         self::assertSame('375.0000', $incremento);
 
         $vencimiento1 = bcadd($saldoVigente, $incremento, 4);
-        self::assertSame('17496.0000', $vencimiento1, '1.er vencimiento debe ser 17,496');
+        self::assertSame('18096.0000', $vencimiento1, '1.er vencimiento debe ser 18,096');
 
         $vencimiento2 = bcadd($vencimiento1, $incremento, 4);
-        self::assertSame('17871.0000', $vencimiento2, '2.º vencimiento debe ser 17,871');
+        self::assertSame('18471.0000', $vencimiento2, '2.º vencimiento debe ser 18,471');
 
         $vencimiento3 = bcadd($vencimiento2, $incremento, 4);
-        self::assertSame('18246.0000', $vencimiento3, '3.er vencimiento debe ser 18,246');
+        self::assertSame('18846.0000', $vencimiento3, '3.er vencimiento debe ser 18,846');
 
         $vencimiento4 = bcadd($vencimiento3, $incremento, 4);
-        self::assertSame('18621.0000', $vencimiento4, '4.º vencimiento debe ser 18,621');
+        self::assertSame('19221.0000', $vencimiento4, '4.º vencimiento debe ser 19,221');
 
         $vencimiento5 = bcadd($vencimiento4, $incremento, 4);
-        self::assertSame('18996.0000', $vencimiento5, '5.º vencimiento debe ser 18,996');
+        self::assertSame('19596.0000', $vencimiento5, '5.º vencimiento debe ser 19,596');
     }
 
     public function test_maria_separa_recargo_global_de_ocurrencia_terminal(): void
     {
-        $original = '17121.0000';
+        $original = '17721.0000';
         $overdueOne = bcadd($original, '300.0000', 4);
         $terminalOne = bcadd($overdueOne, '75.0000', 4);
         $overdueTwo = bcadd($terminalOne, '300.0000', 4);
         $terminalTwo = bcadd($overdueTwo, '75.0000', 4);
 
-        self::assertSame('17421.0000', $overdueOne);
-        self::assertSame('17496.0000', $terminalOne);
-        self::assertSame('17796.0000', $overdueTwo);
-        self::assertSame('17871.0000', $terminalTwo);
+        self::assertSame('18021.0000', $overdueOne);
+        self::assertSame('18096.0000', $terminalOne);
+        self::assertSame('18396.0000', $overdueTwo);
+        self::assertSame('18471.0000', $terminalTwo);
     }
 
     public function test_diferentes_porcentajes_categoria_incrementan_dinamicamente(): void
@@ -240,15 +240,15 @@ final class RelacionFinancieraAuditoriaTest extends TestCase
         $pagoParcial = '5000.0000';
         $saldoRestante = bcsub($saldoVigente, $pagoParcial, 4);
 
-        self::assertSame('12121.0000', $saldoRestante);
+        self::assertSame('12721.0000', $saldoRestante);
     }
 
     public function test_redondeo_en_ultima_quincena_mantiene_exactitud(): void
     {
         // Verifica que la cuota fija periódica del cliente y MisVales permanezca exacta
         $plan = $this->calc->calcular('10000.0000', '0.100000', '0.050000', 8, '100.0000', '0.060000');
-        self::assertSame('1887.0000', $plan['client_payment_per_fortnight']);
-        self::assertSame('1812.0000', $plan['misvales_payment_per_fortnight']);
+        self::assertSame('1962.0000', $plan['client_payment_per_fortnight']);
+        self::assertSame('1887.0000', $plan['misvales_payment_per_fortnight']);
         self::assertSame('75.0000', $plan['distributor_profit_per_fortnight']);
     }
 
