@@ -355,11 +355,11 @@ final class CajaValeApiTest extends TestCase
         ));
         self::assertSame(1, app(ServicioGeneracionRelacion::class)->generar($cutoff));
         $relation = RelacionDistribuidora::query()->firstOrFail();
-        self::assertSame('7300.0000', $relation->balance);
+        self::assertSame('7600.0000', $relation->balance);
 
         $file = $this->xlsxValido([[
             $relation->payment_reference,
-            '7300.00',
+            '7600.00',
             $cutoff->addDay()->format('Y-m-d H:i:s'),
             'BANK-CAPITAL-EXACTO-001',
             'Liquidación exacta',
@@ -378,6 +378,39 @@ final class CajaValeApiTest extends TestCase
         self::assertSame(1, PagoRelacion::query()->count());
         self::assertSame(1, MovimientoLineaCredito::query()->where('type', 'PAYMENT_RECOVERY')->count());
         $this->assertDatabaseHas('credit_lines', ['id' => $this->voucher->credit_line_id, 'used_balance' => '0.0000']);
+    }
+
+    public function test_corte_usa_el_residuo_de_la_parcialidad_y_no_la_cuota_resumida(): void
+    {
+        $cutoff = CarbonImmutable::now('America/Monterrey');
+        $this->voucher->forceFill([
+            'status' => EstadoVale::FERIADO,
+            'cashed_at' => $cutoff->subDays(2),
+            'fortnights_count' => 3,
+            'misvales_total' => '10000.0000',
+            'misvales_payment_per_fortnight' => '3333.0000',
+            'client_payment_per_fortnight' => '3333.0000',
+            'client_total' => '10000.0000',
+        ])->save();
+        $this->voucher->parcialidades()->create([
+            'number' => 3,
+            'capital' => '3000.0000',
+            'loan_commission' => '100.0000',
+            'interest' => '200.0000',
+            'insurance' => '34.0000',
+            'distributor_profit' => '0.0000',
+            'misvales_payment' => '3334.0000',
+            'client_payment' => '3334.0000',
+            'due_at' => $cutoff->subDay(),
+        ]);
+
+        self::assertSame(1, app(ServicioGeneracionRelacion::class)->generar($cutoff));
+        $relation = RelacionDistribuidora::query()->firstOrFail();
+
+        self::assertSame('3334.0000', $relation->portfolio_total);
+        self::assertSame('3334.0000', $relation->misvales_total);
+        self::assertSame('3334.0000', $relation->partidas()->firstOrFail()->portfolio_amount);
+        self::assertSame('3334.0000', $relation->partidas()->firstOrFail()->misvales_amount);
     }
 
     public function test_estado_sucursal_transaccion_y_saldo_se_validan_al_feriar(): void

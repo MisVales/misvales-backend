@@ -152,14 +152,17 @@ final class ServicioGeneracionRelacion
             }, ['surcharge' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000', 'commission' => '0.0000', 'capital' => '0.0000']);
             $carriedBalance = array_reduce($carry, fn (string $sum, string $amount): string => bcadd($sum, $amount, 4), '0.0000');
             $newPortfolio = $items->reduce(function (string $sum, $item): string {
-                $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
+                // La última parcialidad puede absorber el residuo de la
+                // división. Siempre se toma el importe materializado en ella,
+                // no la cuota resumida del vale.
+                $clientPayment = (string) ($item->client_payment ?? $item->vale?->client_payment_per_fortnight ?? '0.0000');
 
                 return bcadd($sum, $clientPayment, 4);
             }, '0.0000');
             $terminalCharges = $terminalPositions->reduce(fn (string $sum, array $position): string => bcadd($sum, $this->terminalCharge($position['final_snapshot']), 4), '0.0000');
             $newPortfolio = bcadd($newPortfolio, $terminalCharges, 4);
             $newMisvales = $items->reduce(function (string $sum, $item): string {
-                $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
+                $misvalesPayment = (string) ($item->misvales_payment ?? $item->vale?->misvales_payment_per_fortnight ?? '0.0000');
 
                 return bcadd($sum, $misvalesPayment, 4);
             }, '0.0000');
@@ -172,9 +175,9 @@ final class ServicioGeneracionRelacion
             $processedCount++;
             foreach ($items as $item) {
                 $client = $item->vale->cliente;
-                $clientPayment = (string) ($item->vale?->client_payment_per_fortnight ?? $item->client_payment);
-                $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
-                $distributorProfit = (string) ($item->vale?->distributor_profit_per_fortnight ?? $item->distributor_profit);
+                $clientPayment = (string) ($item->client_payment ?? $item->vale?->client_payment_per_fortnight ?? '0.0000');
+                $misvalesPayment = (string) ($item->misvales_payment ?? $item->vale?->misvales_payment_per_fortnight ?? '0.0000');
+                $distributorProfit = (string) ($item->distributor_profit ?? $item->vale?->distributor_profit_per_fortnight ?? '0.0000');
                 $misvalesCommission = bcsub(
                     $misvalesPayment,
                     $this->sumarImportes([$item->capital, $item->interest, $item->insurance]),

@@ -16,29 +16,45 @@ final class CalculadorFinancieroVale
         $capital = $this->piso($capital);
         $seguro = $this->piso($seguro);
 
-        // Cálculos intermedios: round al centavo (2 decimales)
+        // El interés total debe calcularse con la tasa sin redondear la cuota
+        // primero; de lo contrario, la multiplicación por las quincenas puede
+        // introducir diferencias de un peso (o de centavos).
         $comisionMonto = $this->redondear(bcmul($capital, $comision, 10));
-        $interesQuincena = $this->redondear(bcmul($capital, $interes, 10));
-        $interesTotal = $this->redondear(bcmul($interesQuincena, (string) $quincenas, 10));
+        $interesCalculado = bcmul($capital, $interes, 10);
+        $interesQuincena = $this->redondear($interesCalculado);
+        $interesTotal = $this->redondear(bcmul($interesCalculado, (string) $quincenas, 10));
         $gananciaTotal = $this->redondear(bcmul($capital, $ganancia, 10));
 
         // Deuda total = round(P + CE + S + IT, 2)
         $totalBase = $this->redondear($this->sumar([$capital, $comisionMonto, $seguro, $interesTotal]));
+        // La base es el importe exigible a MisVales. La ganancia pertenece a
+        // la distribuidora y se suma únicamente al total que paga el cliente.
+        $totalMisVales = $totalBase;
+        $totalCliente = bcadd($totalBase, $gananciaTotal, 4);
 
-        // MisVales = total del cliente − ganancia distribuidora
-        $totalMisVales = bcsub($totalBase, $gananciaTotal, 4);
-        if (bccomp($totalMisVales, '0.0000', 4) < 0) {
-            throw new InvalidArgumentException('La ganancia de categoría no puede exceder el pago base.');
-        }
+        $capitales = $this->distribuir($capital, $quincenas);
+        $comisiones = $this->distribuir($comisionMonto, $quincenas);
+        $intereses = $this->distribuir($interesTotal, $quincenas);
+        $seguros = $this->distribuir($seguro, $quincenas);
+        $ganancias = $this->distribuir($gananciaTotal, $quincenas);
+        $pagosMisVales = $this->distribuir($totalMisVales, $quincenas);
+
+        // El cobro al cliente se obtiene por parcialidad (base + ganancia),
+        // para que el residuo de cada componente no genere un peso perdido.
+        $pagosCliente = array_map(
+            static fn (string $base, string $ganancia): string => bcadd($base, $ganancia, 4),
+            $pagosMisVales,
+            $ganancias,
+        );
 
         $componentes = [
-            'capital' => $this->distribuir($capital, $quincenas),
-            'loan_commission' => $this->distribuir($comisionMonto, $quincenas),
-            'interest' => $this->distribuir($interesTotal, $quincenas),
-            'insurance' => $this->distribuir($seguro, $quincenas),
-            'distributor_profit' => $this->distribuir($gananciaTotal, $quincenas),
-            'misvales_payment' => $this->distribuir($totalMisVales, $quincenas),
-            'client_payment' => $this->distribuir($totalBase, $quincenas),
+            'capital' => $capitales,
+            'loan_commission' => $comisiones,
+            'interest' => $intereses,
+            'insurance' => $seguros,
+            'distributor_profit' => $ganancias,
+            'misvales_payment' => $pagosMisVales,
+            'client_payment' => $pagosCliente,
         ];
 
         $parcialidades = [];
@@ -63,7 +79,7 @@ final class CalculadorFinancieroVale
             'distributor_profit_per_fortnight' => $componentes['distributor_profit'][0],
             'net_payment_after_distributor_profit_per_fortnight' => $componentes['misvales_payment'][0],
             'client_payment_per_fortnight' => $componentes['client_payment'][0],
-            'client_total' => $totalBase,
+            'client_total' => $totalCliente,
             'installments' => $parcialidades,
         ];
     }
