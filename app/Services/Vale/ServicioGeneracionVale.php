@@ -25,6 +25,7 @@ use App\Models\ProductVersion;
 use App\Models\RestriccionUsoCredito;
 use App\Models\User;
 use App\Models\Vale;
+use App\Services\Relacion\ServicioSaldoValeRelacion;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -35,6 +36,7 @@ final class ServicioGeneracionVale
         private readonly CalculadorFinancieroVale $calculador,
         private readonly VerificadorDisponibilidadCredito $credito,
         private readonly ConfiguracionFinancieraVale $configuracionFinanciera,
+        private readonly ServicioSaldoValeRelacion $saldosVale,
     ) {}
 
     /** @return Collection<int, Cliente> */
@@ -255,6 +257,8 @@ final class ServicioGeneracionVale
             throw new ExcepcionVale('CLIENT_NOT_ASSIGNED_TO_DISTRIBUTOR', 'El cliente no está asociado a la distribuidora activa.', 404);
         }
 
+        $this->validarSaldoPendienteDelCliente($cliente);
+
         $versionProducto = ProductVersion::query()->with('product')->whereKey($versionProductoId)
             ->where('status', 'PUBLISHED')->where('effective_from', '<=', now())
             ->where(fn ($consulta) => $consulta->whereNull('effective_to')->orWhere('effective_to', '>', now()))->first();
@@ -290,6 +294,26 @@ final class ServicioGeneracionVale
         }
 
         return ['client' => $cliente, 'distributor' => $distribuidora, 'product' => $versionProducto->product, 'product_version' => $versionProducto, 'category_version' => $categoria, 'calculation' => $calculo, 'credit' => $credito, 'financial_conditions' => $condiciones, 'financial_configuration_versions' => []];
+    }
+
+    private function validarSaldoPendienteDelCliente(Cliente $cliente): void
+    {
+        $pending = Vale::query()
+            ->where('client_id', $cliente->id)
+            ->whereNotIn('status', [EstadoVale::CANCELADO, EstadoVale::RECHAZADO])
+            ->get();
+
+        foreach ($pending as $voucher) {
+            $balance = $this->saldosVale->saldoPendienteVale($voucher);
+            if (bccomp($balance, '0', 4) > 0) {
+                throw new ExcepcionVale(
+                    'CLIENT_HAS_PENDING_VOUCHER',
+                    'El cliente todavía tiene un vale con saldo pendiente.',
+                    409,
+                    ['voucher_id' => $voucher->id, 'folio' => $voucher->folio, 'saldo_pendiente' => $balance],
+                );
+            }
+        }
     }
 
     private function resolverCategoriaVigente(Distribuidora $distribuidora): CategoryVersion

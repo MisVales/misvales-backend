@@ -5,6 +5,7 @@ namespace App\Services\Recargo;
 use App\Models\AuditLog;
 use App\Models\ConfigurationVersion;
 use App\Models\RelacionDistribuidora;
+use App\Services\Relacion\ServicioSaldoValeRelacion;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -14,6 +15,7 @@ final class ServicioEvaluacionRecargo
     public function __construct(
         private readonly ServicioConfiguracionRecargo $configuracion,
         private readonly ServicioCalculoRecargoRelacion $calculoRecargo,
+        private readonly ServicioSaldoValeRelacion $saldos,
     ) {}
 
     public function evaluar(CarbonImmutable $now): array
@@ -119,7 +121,11 @@ final class ServicioEvaluacionRecargo
             $locked->header_snapshot = $header;
             AuditLog::create(['entity_type' => 'distributor_relation', 'entity_id' => $locked->id, 'event_name' => 'LateFeeLegacyConfigurationRecovered', 'result' => 'SUCCESS', 'new_value' => $lateFee['snapshot']]);
         }
-        $breakdown = $this->calculoRecargo->calcular($locked, $lateFee['snapshot']['amount']);
+        $breakdown = $this->calculoRecargo->calcular(
+            $locked,
+            $lateFee['snapshot']['amount'],
+            $this->itemFeesForPendingVouchers($locked, $lateFee['snapshot']['amount']),
+        );
         $amount = $breakdown['amount'];
         if (bccomp($amount, '0', 4) <= 0) {
             return 'existing';
@@ -129,6 +135,7 @@ final class ServicioEvaluacionRecargo
             'late_fee_unit_amount' => $breakdown['unit_amount'],
             'late_fee_units' => $breakdown['units'],
             'relation_item_ids' => $breakdown['item_ids'],
+            'late_fee_items' => $breakdown['item_amounts'],
             'total_late_fee' => $amount,
         ]);
         if ($existingFee === null) {
@@ -178,5 +185,35 @@ final class ServicioEvaluacionRecargo
         }
 
         return ['snapshot' => ['amount' => bcadd((string) $version->value, '0', 4), 'configuration_version_id' => (string) $version->id, 'resolved_at' => now()->utc()->toIso8601String(), 'source' => $source], 'recovered' => true];
+    }
+
+    /** @return array<string,string>|null */
+    private function itemFeesForPendingVouchers(RelacionDistribuidora $relation, string $fallback): ?array
+    {
+        $positions = $this->saldos->posiciones($relation, includeCurrentLateFee: false);
+        $pendingVouchers = collect($positions)
+            ->filter(fn (array $position): bool => $position['is_pending'])
+            ->keys()
+            ->all();
+        if ($pendingVouchers === []) {
+            return [];
+        }
+
+        $fees = [];
+        foreach ($relation->partidas()->with(['installment.vale', 'sourceInstallment.vale'])->get() as $item) {
+            $source = $item->sourceInstallment ?? $item->installment;
+            if ($source?->voucher_id === null || ! in_array($source->voucher_id, $pendingVouchers, true)) {
+                continue;
+            }
+            $snapshot = is_array($item->snapshot) ? $item->snapshot : [];
+            $amount = $snapshot['late_fee_amount']
+                ?? $source->vale?->financial_snapshot['financial_conditions']['late_fee_amount']
+                ?? $fallback;
+            if (is_numeric($amount) && bccomp((string) $amount, '0', 4) > 0) {
+                $fees[$item->id] = bcadd((string) $amount, '0', 4);
+            }
+        }
+
+        return $fees !== [] ? $fees : null;
     }
 }

@@ -54,11 +54,19 @@ final class ConciliacionBancariaController extends Controller
         if (! $request->user()->hasRole('cashier') || $branchId === null || ! $request->user()->hasScopeForBranch($branchId)) {
             throw new ExcepcionConciliacion('BANK_IMPORT_SCOPE_DENIED', 'La cajera no tiene una sucursal operativa autorizada.', 403);
         }
-        $processRunId = $availability->asegurarCorteVencido($request->validated('process_run_id'), $branchId);
+        $processRunId = $request->validated('process_run_id');
+        $pendingPeriod = false;
+        if ($processRunId !== null) {
+            $processRunId = $availability->asegurarCorrida($processRunId, $branchId);
+            $pendingPeriod = collect($availability->periodosPendientes($branchId))
+                ->contains('process_run_id', $processRunId);
+        }
 
         $import = $service->importar($request->file('file'), $request->user(), $branchId, $processRunId);
-        $risk->evaluarCorteConciliado($processRunId, $branchId);
-        $paymentPeriod->forzar($request->user(), 'Cierre automático después de procesar el archivo bancario final', $processRunId);
+        if ($processRunId !== null && $pendingPeriod) {
+            $risk->evaluarCorteConciliado($processRunId, $branchId);
+            $paymentPeriod->forzar($request->user(), 'Cierre automático después de procesar el archivo bancario final', $processRunId);
+        }
 
         return (new ImportacionBancariaResource($import))
             ->response()
@@ -101,7 +109,9 @@ final class ConciliacionBancariaController extends Controller
     public function simulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): JsonResponse
     {
         $branchId = $this->cashierBranchId($request->user());
-        $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
+        $processRunId = $request->query('process_run_id') !== null
+            ? $availability->asegurarCorrida($request->query('process_run_id'), $branchId)
+            : $availability->ultimaCorridaDisponible($branchId);
 
         return response()->json(['data' => $service->listar($branchId, $processRunId)]);
     }
@@ -109,7 +119,9 @@ final class ConciliacionBancariaController extends Controller
     public function exportSimulations(Request $request, ServicioTransferenciasBancariasSimuladas $service, ServicioDisponibilidadConciliacion $availability): BinaryFileResponse
     {
         $branchId = $this->cashierBranchId($request->user());
-        $processRunId = $availability->asegurarCorteVencido($request->query('process_run_id'), $branchId);
+        $processRunId = $request->query('process_run_id') !== null
+            ? $availability->asegurarCorrida($request->query('process_run_id'), $branchId)
+            : $availability->ultimaCorridaDisponible($branchId);
         $path = $service->exportar($branchId, $processRunId);
 
         return response()->download(

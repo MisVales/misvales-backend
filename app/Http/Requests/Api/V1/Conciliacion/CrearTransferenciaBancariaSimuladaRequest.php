@@ -24,6 +24,8 @@ final class CrearTransferenciaBancariaSimuladaRequest extends FormRequest
 
         return [
             'relation_id' => ['required', 'uuid', 'exists:distributor_relations,id'],
+            'target_voucher_id' => ['nullable', 'uuid', 'exists:vouchers,id'],
+            'voucher_id' => ['nullable', 'uuid', 'exists:vouchers,id'],
             'amount' => ['required', 'decimal:0,4', 'gt:0'],
             'payment_type' => ['required', Rule::in($paymentTypes)],
             'concept' => ['nullable', 'string', 'max:500'],

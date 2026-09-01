@@ -19,7 +19,7 @@ final class RelacionDistribuidoraController extends Controller
         'distribuidora.usuario',
         'distribuidora.sucursal',
         'distribuidora.lineaCredito',
-        'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio',
+        'pagos.bankMovement:id,amount,applied_amount,surplus_amount,bank_folio,target_voucher_id',
         'pagos.asignaciones.partidaRelacion',
         'partidas',
         'puntosGanados:id,source_id,points',
@@ -63,11 +63,11 @@ final class RelacionDistribuidoraController extends Controller
     {
         $this->authorizeView($relacion, $request);
         $relacion->load(self::DETAIL_RELATIONS);
-        $summaries = $saldos->resumenes($relacion);
+        $summaries = $saldos->resumenes($relacion, includeCurrentLateFee: true);
         $relacion->setAttribute('voucher_summaries', $summaries);
         $relacion->setAttribute('voucher_balance_total', array_reduce(
             $summaries,
-            static fn (string $total, array $summary): string => bcadd($total, $summary['cumulative_misvales_due'], 4),
+            static fn (string $total, array $summary): string => bcadd($total, $summary['pending_balance'] ?? $summary['cumulative_misvales_due'], 4),
             '0.0000',
         ));
 

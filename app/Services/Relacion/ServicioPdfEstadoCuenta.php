@@ -29,7 +29,9 @@ final class ServicioPdfEstadoCuenta
             $pendingByVoucher = collect($this->saldos->resumenes(
                 $relation,
                 includeCurrentLateFee: $includeCurrentLateFee,
-            ))->pluck('cumulative_misvales_due', 'voucher_id');
+            ))->mapWithKeys(fn (array $summary): array => [
+                $summary['voucher_id'] => (string) ($summary['pending_balance'] ?? $summary['cumulative_misvales_due']),
+            ]);
             $rows = $movementRows
                 ->filter(fn (array $row): bool => (int) $relationIndexes[$row['relation_id']] <= $index)
                 ->values();

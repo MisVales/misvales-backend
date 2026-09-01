@@ -15,6 +15,7 @@ final class TransferenciaBancariaSimulada extends Model
     protected $fillable = [
         'branch_id',
         'relation_id',
+        'target_voucher_id',
         'created_by',
         'concept',
         'payment_reference',
@@ -35,5 +36,10 @@ final class TransferenciaBancariaSimulada extends Model
     public function relation(): BelongsTo
     {
         return $this->belongsTo(RelacionDistribuidora::class, 'relation_id');
+    }
+
+    public function targetVoucher(): BelongsTo
+    {
+        return $this->belongsTo(Vale::class, 'target_voucher_id');
     }
 }

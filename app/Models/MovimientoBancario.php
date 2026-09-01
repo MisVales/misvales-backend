@@ -28,6 +28,7 @@ final class MovimientoBancario extends Model
         'classification',
         'reconciliation_status',
         'relation_id',
+        'target_voucher_id',
         'distributor_id',
         'balance_before',
         'applied_amount',
@@ -59,6 +60,11 @@ final class MovimientoBancario extends Model
     public function relation(): BelongsTo
     {
         return $this->belongsTo(RelacionDistribuidora::class, 'relation_id');
+    }
+
+    public function targetVoucher(): BelongsTo
+    {
+        return $this->belongsTo(Vale::class, 'target_voucher_id');
     }
 
     public function distributor(): BelongsTo

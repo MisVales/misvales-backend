@@ -8,6 +8,48 @@ use Illuminate\Support\Facades\DB;
 
 final class ServicioDisponibilidadConciliacion
 {
+    /**
+     * Valida una corrida para que Caja pueda consultar o aplicar movimientos
+     * mientras la relación siga vigente, sin exigir que ya haya vencido.
+     */
+    public function asegurarCorrida(?string $processRunId, string $branchId): string
+    {
+        if ($processRunId === null || ! $this->periodoPerteneceSucursal($processRunId, $branchId)) {
+            throw new ExcepcionConciliacion(
+                'RECONCILIATION_PERIOD_NOT_AVAILABLE',
+                'La corrida de conciliación no pertenece a la sucursal autorizada.',
+                409,
+            );
+        }
+
+        return $processRunId;
+    }
+
+    /** Devuelve la corrida completada más reciente con relaciones de la sucursal. */
+    public function ultimaCorridaDisponible(string $branchId): string
+    {
+        $runId = DB::table('relation_process_runs as runs')
+            ->where('runs.status', 'COMPLETED')
+            ->whereExists(function ($query) use ($branchId): void {
+                $query->selectRaw('1')
+                    ->from('distributor_relations')
+                    ->whereColumn('distributor_relations.process_run_id', 'runs.id')
+                    ->where('distributor_relations.branch_id', $branchId);
+            })
+            ->latest('runs.cutoff_at')
+            ->value('runs.id');
+
+        if ($runId === null) {
+            throw new ExcepcionConciliacion(
+                'RECONCILIATION_PERIOD_NOT_AVAILABLE',
+                'Todavía no existe una corrida de conciliación disponible para la sucursal.',
+                409,
+            );
+        }
+
+        return (string) $runId;
+    }
+
     public function asegurarCorteVencido(?string $processRunId = null, ?string $branchId = null): string
     {
         $expiredAudits = AuditLog::query()

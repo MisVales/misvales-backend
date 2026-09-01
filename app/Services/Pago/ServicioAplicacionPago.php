@@ -10,6 +10,7 @@ use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
 use App\Services\Excedente\AuditorExcedente;
 use App\Services\Puntos\ServicioCanjePuntos;
+use App\Services\Relacion\ServicioSaldoValeRelacion;
 use App\Services\Riesgo\ServicioMorosidadDistribuidora;
 use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
@@ -22,11 +23,12 @@ final class ServicioAplicacionPago
         private readonly AuditorExcedente $auditor,
         private readonly ServicioCanjePuntos $puntos,
         private readonly ServicioMorosidadDistribuidora $morosidad,
+        private readonly ServicioSaldoValeRelacion $saldos,
     ) {}
 
-    public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation): PagoRelacion
+    public function aplicar(MovimientoBancario $movement, RelacionDistribuidora $relation, ?string $targetVoucherId = null): PagoRelacion
     {
-        return $this->distribuir($movement, $relation, 'BANK_MOVEMENT', $movement->id);
+        return $this->distribuir($movement, $relation, 'BANK_MOVEMENT', $movement->id, $targetVoucherId ?? $movement->target_voucher_id);
     }
 
     public function aplicarSaldoFavor(string $amount, CarbonImmutable $paidAt, RelacionDistribuidora $relation, string $surplusId): PagoRelacion
@@ -34,65 +36,108 @@ final class ServicioAplicacionPago
         return $this->distribuir(new MovimientoBancario(['amount' => $amount, 'paid_at' => $paidAt]), $relation, 'CREDIT_BALANCE', $surplusId);
     }
 
-    private function distribuir(MovimientoBancario $movement, RelacionDistribuidora $relation, string $sourceType, string $sourceId): PagoRelacion
+    private function distribuir(MovimientoBancario $movement, RelacionDistribuidora $relation, string $sourceType, string $sourceId, ?string $targetVoucherId = null): PagoRelacion
     {
-        return DB::transaction(function () use ($movement, $relation, $sourceType, $sourceId): PagoRelacion {
+        return DB::transaction(function () use ($movement, $relation, $sourceType, $sourceId, $targetVoucherId): PagoRelacion {
             $relation = RelacionDistribuidora::whereKey($relation->id)->lockForUpdate()->firstOrFail();
             $balanceBefore = (string) $relation->balance;
             if (PagoRelacion::where('source_type', $sourceType)->where('source_id', $sourceId)->exists()) {
                 throw new RuntimeException('PAYMENT_ALREADY_ALLOCATED');
             }
-            $available = bccomp($movement->amount, $relation->balance, 4) > 0 ? $relation->balance : $movement->amount;
-            $applied = $available;
-            $totals = ['SURCHARGE' => '0.0000', 'INTEREST' => '0.0000', 'INSURANCE' => '0.0000', 'LOAN_COMMISSION' => '0.0000', 'CAPITAL' => '0.0000'];
-            $payment = PagoRelacion::create(['relation_id' => $relation->id, 'bank_movement_id' => $movement->exists ? $movement->id : null, 'source_type' => $sourceType, 'source_id' => $sourceId, 'amount' => $applied, 'applied_at' => $movement->paid_at]);
-            $surchargePaid = (string) PagoRelacion::where('relation_id', $relation->id)->whereKeyNot($payment->id)->sum('surcharge_applied');
-            $surchargePending = bcsub($relation->surcharge_total, $surchargePaid, 4);
-            if (bccomp($surchargePending, '0', 4) > 0) {
-                $totals['SURCHARGE'] = bccomp($available, $surchargePending, 4) > 0 ? $surchargePending : $available;
-                $available = bcsub($available, $totals['SURCHARGE'], 4);
-            }
-            $items = $relation->partidas()->with('installment')->get()->sortBy(fn ($i) => sprintf('%s|%s|%05d', $i->installment?->due_at?->toIso8601String() ?? '9999', $i->snapshot['folio'], $i->snapshot['installment']));
-            foreach (['INTEREST' => ['interest', 'carried_interest'], 'INSURANCE' => ['insurance', 'carried_insurance'], 'LOAN_COMMISSION' => ['loan_commission', 'carried_commission'], 'CAPITAL' => ['capital', 'carried_capital']] as $component => [$field, $carriedField]) {
-                $componentPaid = (string) PagoRelacion::query()
-                    ->where('relation_id', $relation->id)
-                    ->whereKeyNot($payment->id)
-                    ->sum(match ($component) {
-                        'INTEREST' => 'interest_applied',
-                        'INSURANCE' => 'insurance_applied',
-                        'LOAN_COMMISSION' => 'commission_applied',
-                        'CAPITAL' => 'capital_applied',
-                    });
-                $currentItemsPaid = (string) DB::table('payment_allocations')
-                    ->join('distributor_relation_items', 'distributor_relation_items.id', '=', 'payment_allocations.relation_item_id')
-                    ->where('distributor_relation_items.relation_id', $relation->id)
-                    ->where('payment_allocations.component', $component)
-                    ->sum('payment_allocations.amount');
-                $carriedPaid = bcsub($componentPaid, $currentItemsPaid, 4);
-                $carriedPending = bcsub((string) $relation->{$carriedField}, $carriedPaid, 4);
-                if (bccomp($available, '0', 4) > 0 && bccomp($carriedPending, '0', 4) > 0) {
-                    $amount = bccomp($available, $carriedPending, 4) > 0 ? $carriedPending : $available;
-                    $totals[$component] = bcadd($totals[$component], $amount, 4);
-                    $available = bcsub($available, $amount, 4);
+
+            $ledger = $this->saldos->paymentLedger($relation);
+            $eligibleIndexes = [];
+            $targetExists = false;
+            $targetPending = '0.0000';
+            foreach ($ledger as $index => $row) {
+                if ($targetVoucherId !== null && $row['voucher_id'] !== $targetVoucherId) {
+                    continue;
                 }
-                foreach ($items as $item) {
+                $eligibleIndexes[] = $index;
+                if ($row['voucher_id'] === $targetVoucherId) {
+                    $targetExists = true;
+                }
+                $targetPending = bcadd(
+                    $targetPending,
+                    $this->sumComponents($row['pending_components']),
+                    4,
+                );
+            }
+            if ($targetVoucherId !== null && ! $targetExists) {
+                throw new RuntimeException('PAYMENT_VOUCHER_NOT_IN_RELATION');
+            }
+            if ($targetVoucherId !== null && bccomp($targetPending, '0', 4) <= 0) {
+                throw new RuntimeException('PAYMENT_VOUCHER_HAS_NO_PENDING_BALANCE');
+            }
+
+            $available = bccomp($movement->amount, $balanceBefore, 4) > 0 ? $balanceBefore : (string) $movement->amount;
+            if (bccomp($available, $targetPending, 4) > 0) {
+                $available = $targetPending;
+            }
+            $applied = $available;
+            $voucherBalancesBefore = [];
+            foreach ($ledger as $row) {
+                if ($row['voucher_id'] === null) {
+                    continue;
+                }
+                $voucherBalancesBefore[$row['voucher_id']] = bcadd(
+                    $voucherBalancesBefore[$row['voucher_id']] ?? '0.0000',
+                    $this->sumComponents($row['pending_components']),
+                    4,
+                );
+            }
+            $totals = ['SURCHARGE' => '0.0000', 'INTEREST' => '0.0000', 'INSURANCE' => '0.0000', 'LOAN_COMMISSION' => '0.0000', 'CAPITAL' => '0.0000'];
+            $payment = PagoRelacion::create([
+                'relation_id' => $relation->id,
+                'bank_movement_id' => $movement->exists ? $movement->id : null,
+                'target_voucher_id' => $targetVoucherId,
+                'source_type' => $sourceType,
+                'source_id' => $sourceId,
+                'amount' => $applied,
+                'applied_at' => $movement->paid_at,
+            ]);
+
+            $affected = [];
+            foreach (['SURCHARGE' => 'surcharge', 'INTEREST' => 'interest', 'INSURANCE' => 'insurance', 'LOAN_COMMISSION' => 'commission', 'CAPITAL' => 'capital'] as $component => $ledgerComponent) {
+                foreach ($eligibleIndexes as $index) {
                     if (bccomp($available, '0', 4) <= 0) {
                         break 2;
-                    }$paid = (string) DB::table('payment_allocations')->where('relation_item_id', $item->id)->where('component', $component)->sum('amount');
-                    $snapshotField = $component === 'LOAN_COMMISSION' && array_key_exists('misvales_commission', $item->snapshot)
-                        ? 'misvales_commission'
-                        : $field;
-                    $pending = bcsub((string) $item->snapshot[$snapshotField], $paid, 4);
+                    }
+                    $row = $ledger[$index];
+                    $pending = (string) $row['pending_components'][$ledgerComponent];
+                    if (bccomp($pending, '0', 4) <= 0) {
+                        continue;
+                    }
                     $amount = bccomp($available, $pending, 4) > 0 ? $pending : $available;
                     if (bccomp($amount, '0', 4) <= 0) {
                         continue;
-                    }DB::table('payment_allocations')->insert(['id' => (string) Str::uuid(), 'payment_id' => $payment->id, 'relation_item_id' => $item->id, 'component' => $component, 'amount' => $amount, 'created_at' => now()]);
+                    }
+
+                    if ($row['relation_item_id'] !== null) {
+                        DB::table('payment_allocations')->insert([
+                            'id' => (string) Str::uuid(),
+                            'payment_id' => $payment->id,
+                            'relation_item_id' => $row['relation_item_id'],
+                            'voucher_id' => $row['voucher_id'],
+                            'component' => $component,
+                            'amount' => $amount,
+                            'created_at' => now(),
+                        ]);
+                    }
+                    $ledger[$index]['pending_components'][$ledgerComponent] = bcsub($pending, $amount, 4);
                     $totals[$component] = bcadd($totals[$component], $amount, 4);
                     $available = bcsub($available, $amount, 4);
+                    if ($row['voucher_id'] !== null) {
+                        $affected[$row['voucher_id']]['client_id'] ??= $row['client_id'];
+                        $affected[$row['voucher_id']]['components'][$ledgerComponent] ??= '0.0000';
+                        $affected[$row['voucher_id']]['components'][$ledgerComponent] = bcadd($affected[$row['voucher_id']]['components'][$ledgerComponent], $amount, 4);
+                    }
                 }
             }
             $line = $relation->distribuidora->lineaCredito()->lockForUpdate()->first();
             $recovered = $totals['CAPITAL'];
+            $creditUsedBefore = $line?->used_balance;
+            $creditUsedAfter = $creditUsedBefore;
             if ($line && bccomp($recovered, '0', 4) > 0) {
                 if (bccomp($recovered, $line->used_balance, 4) > 0) {
                     throw new RuntimeException('CREDIT_LINE_RECOVERY_EXCEEDS_USED_BALANCE');
@@ -103,8 +148,16 @@ final class ServicioAplicacionPago
                 $line->save();
                 $sequence = ((int) MovimientoLineaCredito::where('credit_line_id', $line->id)->max('sequence')) + 1;
                 MovimientoLineaCredito::create(['credit_line_id' => $line->id, 'distributor_id' => $line->distributor_id, 'sequence' => $sequence, 'type' => TipoMovimientoLineaCredito::PAYMENT_RECOVERY, 'amount' => $recovered, 'total_authorized_before' => $line->total_authorized, 'total_authorized_after' => $line->total_authorized, 'used_balance_before' => $before, 'used_balance_after' => $line->used_balance, 'source_type' => 'RELATION_PAYMENT', 'source_id' => $payment->id, 'reason' => 'Recuperación de capital conciliado', 'idempotency_key' => 'relation-payment:'.$payment->id, 'occurred_at' => now()]);
+                $creditUsedAfter = $line->used_balance;
             }
-            $relation->balance = bcsub($relation->balance, $applied, 4);
+            $relation->balance = array_reduce(
+                $ledger,
+                fn (string $total, array $row): string => bcadd($total, $this->sumComponents($row['pending_components']), 4),
+                '0.0000',
+            );
+            if (bccomp((string) $relation->balance, '0', 4) < 0) {
+                $relation->balance = '0.0000';
+            }
             $relation->reconciled_total = bcadd($relation->reconciled_total, $applied, 4);
             $newlySettled = bccomp($balanceBefore, '0', 4) > 0 && bccomp($relation->balance, '0', 4) === 0;
             if ($newlySettled) {
@@ -114,9 +167,47 @@ final class ServicioAplicacionPago
                     ? 'EARLY'
                     : ($movement->paid_at->lte($relation->payment_deadline_at) ? 'ON_TIME' : 'LATE');
             } elseif (bccomp($relation->balance, '0', 4) > 0) {
-                $relation->financial_status = 'PARTIALLY_PAID';
-            }$relation->save();
-            $payment->update(['surcharge_applied' => $totals['SURCHARGE'], 'interest_applied' => $totals['INTEREST'], 'insurance_applied' => $totals['INSURANCE'], 'commission_applied' => $totals['LOAN_COMMISSION'], 'capital_applied' => $totals['CAPITAL'], 'line_recovered' => $recovered]);
+                $relation->financial_status = in_array($relation->financial_status, ['OVERDUE', 'ROLLED_FORWARD'], true)
+                    || ($relation->payment_deadline_at !== null && $movement->paid_at->gt($relation->payment_deadline_at))
+                    ? 'OVERDUE'
+                    : 'PARTIALLY_PAID';
+            }
+            $relation->save();
+
+            $trace = [];
+            foreach ($affected as $voucherId => $data) {
+                $beforeVoucher = $voucherBalancesBefore[$voucherId] ?? '0.0000';
+                $afterVoucher = '0.0000';
+                $clientId = $data['client_id'] ?? null;
+                foreach ($ledger as $row) {
+                    if ($row['voucher_id'] !== $voucherId) {
+                        continue;
+                    }
+                    $afterVoucher = bcadd($afterVoucher, $this->sumComponents($row['pending_components']), 4);
+                    $clientId ??= $row['client_id'];
+                }
+                $covered = $data['components'];
+                $covered += ['surcharge' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000', 'commission' => '0.0000', 'capital' => '0.0000'];
+                $trace[$voucherId] = [
+                    'voucher_id' => $voucherId,
+                    'client_id' => $clientId,
+                    'components_covered' => $covered,
+                    'capital_recovered' => $covered['capital'],
+                    'balance_before' => $beforeVoucher,
+                    'balance_after' => $afterVoucher,
+                    'credit_used_before' => $creditUsedBefore,
+                    'credit_used_after' => $creditUsedAfter,
+                ];
+            }
+            $payment->update([
+                'surcharge_applied' => $totals['SURCHARGE'],
+                'interest_applied' => $totals['INTEREST'],
+                'insurance_applied' => $totals['INSURANCE'],
+                'commission_applied' => $totals['LOAN_COMMISSION'],
+                'capital_applied' => $totals['CAPITAL'],
+                'line_recovered' => $recovered,
+                'trace_snapshot' => array_values($trace),
+            ]);
             if ($newlySettled && $relation->temporal_classification === 'EARLY') {
                 $this->puntos->acreditarLiquidacionAnticipada($relation);
             }
@@ -156,5 +247,15 @@ final class ServicioAplicacionPago
 
             return $payment->fresh();
         });
+    }
+
+    /** @param array<string,string> $components */
+    private function sumComponents(array $components): string
+    {
+        return array_reduce(
+            $components,
+            static fn (string $total, string $amount): string => bcadd($total, (string) $amount, 4),
+            '0.0000',
+        );
     }
 }

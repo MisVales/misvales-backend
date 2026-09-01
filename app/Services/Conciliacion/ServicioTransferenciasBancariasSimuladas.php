@@ -42,6 +42,11 @@ final class ServicioTransferenciasBancariasSimuladas
             throw new ExcepcionConciliacion('BANK_SIMULATION_SCOPE_DENIED', 'La relación no pertenece a la sucursal autorizada.', 403);
         }
 
+        $targetVoucherId = $data['target_voucher_id'] ?? $data['voucher_id'] ?? null;
+        if ($targetVoucherId !== null && ! $this->relationContainsVoucher($relation, $targetVoucherId)) {
+            throw new ExcepcionConciliacion('PAYMENT_VOUCHER_NOT_IN_RELATION', 'El vale seleccionado no pertenece a la relación.', 422);
+        }
+
         $paidAt = isset($data['paid_at'])
             ? CarbonImmutable::parse($data['paid_at'], config('app.timezone'))
             : CarbonImmutable::now(config('app.timezone'));
@@ -50,6 +55,7 @@ final class ServicioTransferenciasBancariasSimuladas
         return TransferenciaBancariaSimulada::query()->create([
             'branch_id' => $branchId,
             'relation_id' => $relation->id,
+            'target_voucher_id' => $targetVoucherId,
             'created_by' => $actor->id,
             'concept' => $concept !== '' ? $concept : 'Abono a referencia '.$relation->payment_reference,
             'payment_reference' => $relation->payment_reference,
@@ -96,6 +102,7 @@ final class ServicioTransferenciasBancariasSimuladas
         $sheet->setColumnWidth(16, 6);
         $sheet->setColumnWidth(12, 7);
         $sheet->setColumnWidth(22, 8);
+        $sheet->setColumnWidth(22, 9);
         $headerStyle = new Style(fontBold: true, fontColor: Color::WHITE, backgroundColor: '0B6B3A');
         $moneyStyle = new Style(format: '$#,##0.00');
         $writer->addRow(Row::fromValuesWithStyle([
@@ -107,6 +114,7 @@ final class ServicioTransferenciasBancariasSimuladas
             'Fecha de pago',
             'Hora',
             'tipo de pago',
+            'Folio del vale',
         ], $headerStyle, 24));
 
         foreach ($transfers->values() as $index => $transfer) {
@@ -119,6 +127,7 @@ final class ServicioTransferenciasBancariasSimuladas
                 $transfer->paid_at->format('d/m/Y'),
                 $transfer->paid_at->format('H:i'),
                 $this->paymentTypeLabel($transfer->payment_type),
+                $transfer->targetVoucher?->folio,
             ], [3 => $moneyStyle]));
         }
 
@@ -178,15 +187,42 @@ final class ServicioTransferenciasBancariasSimuladas
     private function movimientosDelPeriodo(string $branchId, string $processRunId): Builder
     {
         $run = DB::table('relation_process_runs')->where('id', $processRunId)->firstOrFail();
+        $relationIds = DB::table('distributor_relations')
+            ->where('process_run_id', $processRunId)
+            ->where('branch_id', $branchId)
+            ->pluck('id')
+            ->all();
         $previousCutoff = DB::table('relation_process_runs')
             ->where('status', 'COMPLETED')
             ->where('cutoff_at', '<', $run->cutoff_at)
             ->latest('cutoff_at')
             ->value('cutoff_at');
 
+        $deadline = DB::table('distributor_relations')
+            ->where('process_run_id', $processRunId)
+            ->max('payment_deadline_at');
+
         return TransferenciaBancariaSimulada::query()
             ->where('branch_id', $branchId)
-            ->where('paid_at', '<=', $run->cutoff_at)
-            ->when($previousCutoff !== null, fn (Builder $query) => $query->where('paid_at', '>', $previousCutoff));
+            ->where(function (Builder $query) use ($relationIds, $previousCutoff, $deadline, $run): void {
+                $query->whereIn('relation_id', $relationIds)
+                    ->orWhere(function (Builder $legacy) use ($previousCutoff, $deadline, $run): void {
+                        $legacy->where('paid_at', '<=', $deadline ?? $run->cutoff_at)
+                            ->when($previousCutoff !== null, fn (Builder $query) => $query->where('paid_at', '>', $previousCutoff));
+                    });
+            });
+    }
+
+    private function relationContainsVoucher(RelacionDistribuidora $relation, string $voucherId): bool
+    {
+        for ($current = $relation; $current !== null; $current = $current->anterior()->first()) {
+            if ($current->partidas()
+                ->whereHas('sourceInstallment', fn ($query) => $query->where('voucher_id', $voucherId))
+                ->exists()) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

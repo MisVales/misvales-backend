@@ -7,6 +7,7 @@ use App\Models\ImportacionArchivoBancario;
 use App\Models\MovimientoBancario;
 use App\Models\PagoRelacion;
 use App\Models\RelacionDistribuidora;
+use App\Models\Vale;
 use App\Models\User;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Pago\ServicioAplicacionPago;
@@ -28,6 +29,7 @@ final class ServicioImportacionBancaria
         'folio' => ['folio bancario', 'folio de pago'],
         'concept' => ['concepto'],
         'time' => ['hora'],
+        'voucher' => ['folio del vale', 'folio del voucher', 'vale', 'voucher'],
     ];
 
     public function __construct(
@@ -214,13 +216,22 @@ final class ServicioImportacionBancaria
             isset($map['time']) ? Arr::get($values, $map['time']) : null
         );
         $concept = trim((string) Arr::get($values, $map['concept']));
-        $rowData = compact('reference', 'amount', 'date', 'concept');
+        $voucherFolio = isset($map['voucher']) ? trim((string) Arr::get($values, $map['voucher'], '')) : '';
+        $targetVoucherId = null;
+        if ($voucherFolio !== '') {
+            $targetVoucherId = Vale::query()->where('folio', $voucherFolio)->value('id');
+            if ($targetVoucherId === null) {
+                throw new ExcepcionConciliacion('PAYMENT_VOUCHER_NOT_FOUND', 'El folio del vale indicado en el archivo no existe.', 422);
+            }
+        }
+        $rowData = compact('reference', 'amount', 'date', 'concept', 'voucherFolio', 'targetVoucherId');
         $existingMovement = MovimientoBancario::query()->where('idempotency_bank_folio', $folio)->first();
 
         if ($existingMovement !== null) {
             if ($existingMovement->reconciliation_status === 'UNRECONCILED') {
                 $existingMovement->update([
                     'process_run_id' => $selectedProcessRunId ?? $existingMovement->process_run_id,
+                    'target_voucher_id' => $targetVoucherId ?? $existingMovement->target_voucher_id,
                     'errors' => null,
                 ]);
 
@@ -244,6 +255,7 @@ final class ServicioImportacionBancaria
                 'concept' => $concept,
                 'classification' => 'UNRECONCILED',
                 'reconciliation_status' => 'UNRECONCILED',
+                'target_voucher_id' => $targetVoucherId,
             ]));
         } catch (QueryException $exception) {
             $existingMovement = MovimientoBancario::query()->where('idempotency_bank_folio', $folio)->first();
@@ -347,6 +359,7 @@ final class ServicioImportacionBancaria
             'reconciliation_status' => 'DUPLICATE',
             'relation_id' => $canonical->relation_id,
             'distributor_id' => $canonical->distributor_id,
+            'target_voucher_id' => $rowData['targetVoucherId'],
             'balance_before' => $canonical->balance_before,
             'errors' => ['duplicate_of_id' => $canonical->id],
         ]);
@@ -489,6 +502,16 @@ final class ServicioImportacionBancaria
                 'El archivo XLSX está dañado o no puede leerse.',
                 422,
                 ['file' => ['El archivo XLSX está dañado o no puede leerse. Verifica que sea un libro Excel válido.']],
+            ),
+            'PAYMENT_VOUCHER_NOT_IN_RELATION' => new ExcepcionConciliacion(
+                'PAYMENT_VOUCHER_NOT_IN_RELATION',
+                'El folio del vale no pertenece a la relación indicada.',
+                422,
+            ),
+            'PAYMENT_VOUCHER_HAS_NO_PENDING_BALANCE' => new ExcepcionConciliacion(
+                'PAYMENT_VOUCHER_HAS_NO_PENDING_BALANCE',
+                'El vale seleccionado ya no tiene saldo pendiente.',
+                422,
             ),
             default => new ExcepcionConciliacion('BANK_FILE_PROCESSING_FAILED', 'No fue posible procesar el archivo bancario.', 500),
         };

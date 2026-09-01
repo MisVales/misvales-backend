@@ -7,6 +7,7 @@ use App\Models\Distribuidora;
 use App\Models\ParcialidadVale;
 use App\Models\RelacionDistribuidora;
 use App\Models\RelacionPartidaDistribuidora;
+use App\Models\Vale;
 use App\Notifications\NotificacionEventoDominio;
 use App\Services\Excedente\ServicioExcedente;
 use App\Services\Recargo\ServicioEvaluacionRecargo;
@@ -156,7 +157,16 @@ final class ServicioGeneracionRelacion
 
                 return bcadd($sum, $clientPayment, 4);
             }, '0.0000');
-            $terminalCharges = $terminalPositions->reduce(fn (string $sum, array $position): string => bcadd($sum, $this->terminalCharge($position['final_snapshot']), 4), '0.0000');
+            $terminalCharges = $terminalPositions->reduce(
+                fn (string $sum, array $position): string => bcadd(
+                    $sum,
+                    $position['last_terminal_occurrence'] === null
+                        ? $this->terminalCharge($position['final_snapshot'])
+                        : '0.0000',
+                    4,
+                ),
+                '0.0000',
+            );
             $newPortfolio = bcadd($newPortfolio, $terminalCharges, 4);
             $newMisvales = $items->reduce(function (string $sum, $item): string {
                 $misvalesPayment = (string) ($item->vale?->misvales_payment_per_fortnight ?? $item->misvales_payment);
@@ -183,12 +193,42 @@ final class ServicioGeneracionRelacion
                 if (bccomp($misvalesCommission, '0.0000', 4) < 0) {
                     $misvalesCommission = '0.0000';
                 }
-                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode(['product' => $item->vale->versionProducto?->name, 'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name), 'folio' => $item->vale->folio, 'installment' => $item->number, 'total_installments' => $item->vale->fortnights_count, 'capital' => $item->capital, 'loan_commission' => $item->loan_commission, 'misvales_commission' => $misvalesCommission, 'interest' => $item->interest, 'insurance' => $item->insurance, 'distributor_profit' => $distributorProfit, 'distributor_profit_percentage' => $item->vale->distributor_profit_percentage, 'category_version_id' => $item->vale->category_version_id, 'category_version' => $item->vale->versionCategoria?->version, 'category_name' => $item->vale->versionCategoria?->name, 'base_payment' => $clientPayment, 'surcharge' => '0.0000', 'client_payment' => $clientPayment, 'misvales_payment' => $misvalesPayment, 'reconciled_payments' => '0.0000', 'balance' => $misvalesPayment, 'financial_status' => 'PENDING', 'classification' => null]), 'portfolio_amount' => $clientPayment, 'misvales_amount' => $misvalesPayment, 'created_at' => now()]);
+                DB::table('distributor_relation_items')->insert(['id' => (string) Str::uuid(), 'relation_id' => $relation->id, 'voucher_installment_id' => $item->id, 'snapshot' => json_encode([
+                    'product' => $item->vale->versionProducto?->name,
+                    'client' => trim($client->first_name.' '.$client->first_last_name.' '.$client->second_last_name),
+                    'folio' => $item->vale->folio,
+                    'installment' => $item->number,
+                    'total_installments' => $item->vale->fortnights_count,
+                    'capital' => $item->capital,
+                    'loan_commission' => $item->loan_commission,
+                    'misvales_commission' => $misvalesCommission,
+                    'interest' => $item->interest,
+                    'insurance' => $item->insurance,
+                    'distributor_profit' => $distributorProfit,
+                    'distributor_profit_percentage' => $item->vale->distributor_profit_percentage,
+                    'category_version_id' => $item->vale->category_version_id,
+                    'category_version' => $item->vale->versionCategoria?->version,
+                    'category_name' => $item->vale->versionCategoria?->name,
+                    'late_fee_amount' => $item->vale->financial_snapshot['financial_conditions']['late_fee_amount'] ?? null,
+                    'base_payment' => $this->clientPaymentExact($item->vale),
+                    'client_payment_per_fortnight' => $clientPayment,
+                    'misvales_payment' => $misvalesPayment,
+                    'misvales_payment_per_fortnight' => $misvalesPayment,
+                    'surcharge' => '0.0000',
+                    'client_payment' => $clientPayment,
+                    'reconciled_payments' => '0.0000',
+                    'balance' => $misvalesPayment,
+                    'financial_status' => 'PENDING',
+                    'classification' => null,
+                ]), 'portfolio_amount' => $clientPayment, 'misvales_amount' => $misvalesPayment, 'created_at' => now()]);
             }
             DB::table('distributor_relation_items')->where('relation_id', $relation->id)->where('occurrence_type', 'INSTALLMENT')->whereNull('source_voucher_installment_id')->update([
                 'source_voucher_installment_id' => DB::raw('voucher_installment_id'),
             ]);
             $this->materializarOcurrenciasTerminales($relation, $terminalPositions, $cutoff);
+            $realBalance = collect($this->saldoVale->posiciones($relation, asGenerated: true))
+                ->reduce(fn (string $sum, array $position): string => bcadd($sum, (string) $position['balance'], 4), '0.0000');
+            $relation->forceFill(['misvales_total' => $realBalance, 'balance' => $realBalance])->save();
             foreach ($outstandingRelations as $outstandingRelation) {
                 $transferred = $this->sumarImportes(array_values($this->saldoPendientePorComponente($outstandingRelation)));
                 $outstandingRelation->update(['financial_status' => 'ROLLED_FORWARD', 'balance' => '0.0000', 'rolled_forward_to_id' => $relation->id, 'rolled_forward_at' => now(), 'rolled_forward_amount' => $transferred]);
@@ -302,7 +342,9 @@ final class ServicioGeneracionRelacion
         foreach ($positions as $position) {
             $source = ParcialidadVale::query()->with(['vale.cliente', 'vale.versionProducto'])->findOrFail($position['source_voucher_installment_id']);
             $previousTerminal = $position['last_terminal_occurrence'];
-            $charge = $this->terminalCharge($position['final_snapshot']);
+            $charge = $previousTerminal === null
+                ? $this->terminalCharge($position['final_snapshot'])
+                : '0.0000';
             $sequence = $position['next_terminal_sequence'];
             $existing = RelacionPartidaDistribuidora::query()
                 ->where('source_voucher_installment_id', $source->id)
@@ -326,6 +368,7 @@ final class ServicioGeneracionRelacion
                 'source_voucher_installment_id' => $source->id, 'surcharge' => '0.0000',
                 'capital' => '0.0000', 'interest' => '0.0000', 'insurance' => '0.0000',
                 'loan_commission' => $charge, 'misvales_commission' => $charge,
+                'distributor_profit' => '0.0000',
                 'client_payment' => $charge, 'misvales_payment' => $charge,
                 'reconciled_payments' => '0.0000', 'balance' => $charge, 'financial_status' => 'PENDING',
             ]);
@@ -344,8 +387,21 @@ final class ServicioGeneracionRelacion
 
     private function terminalCharge(array $snapshot): string
     {
-        $charge = bcsub((string) ($snapshot['base_payment'] ?? '0.0000'), (string) ($snapshot['misvales_payment'] ?? '0.0000'), 4);
+        $charge = bcsub(
+            (string) ($snapshot['client_payment_per_fortnight'] ?? $snapshot['base_payment'] ?? '0.0000'),
+            (string) ($snapshot['misvales_payment_per_fortnight'] ?? $snapshot['misvales_payment'] ?? '0.0000'),
+            4,
+        );
 
         return bccomp($charge, '0', 4) > 0 ? $charge : '0.0000';
+    }
+
+    private function clientPaymentExact(Vale $voucher): string
+    {
+        if ($voucher->fortnights_count < 1) {
+            return (string) $voucher->client_payment_per_fortnight;
+        }
+
+        return bcdiv((string) $voucher->client_total, (string) $voucher->fortnights_count, 4);
     }
 }

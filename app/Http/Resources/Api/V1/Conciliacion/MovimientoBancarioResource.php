@@ -20,6 +20,8 @@ final class MovimientoBancarioResource extends JsonResource
             'concept' => $this->concept,
             'relation_id' => $this->relation_id,
             'relation_reference' => $this->relation?->payment_reference,
+            'target_voucher_id' => $this->target_voucher_id,
+            'target_voucher_folio' => $this->targetVoucher?->folio,
             'distributor_id' => $this->distributor_id,
             'distributor_number' => $this->distributor?->distributor_number,
             'distributor_name' => $this->relation?->header_snapshot['name'] ?? null,

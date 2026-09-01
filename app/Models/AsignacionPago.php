@@ -25,4 +25,9 @@ final class AsignacionPago extends Model
     {
         return $this->belongsTo(RelacionPartidaDistribuidora::class, 'relation_item_id');
     }
+
+    public function voucher(): BelongsTo
+    {
+        return $this->belongsTo(Vale::class, 'voucher_id');
+    }
 }

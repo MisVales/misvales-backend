@@ -15,7 +15,7 @@ final class ImportarArchivoBancarioRequest extends FormRequest
     {
         return [
             'file' => ['required', 'file', 'mimes:xlsx', 'max:10240'],
-            'process_run_id' => ['required', 'uuid', 'exists:relation_process_runs,id'],
+            'process_run_id' => ['nullable', 'uuid', 'exists:relation_process_runs,id'],
         ];
     }
 
@@ -27,7 +27,6 @@ final class ImportarArchivoBancarioRequest extends FormRequest
             'file.file' => 'El archivo bancario no es válido.',
             'file.mimes' => 'Archivo inválido. Solo se aceptan archivos Excel XLSX.',
             'file.max' => 'El archivo bancario no puede exceder 10 MB.',
-            'process_run_id.required' => 'La corrida de conciliación es obligatoria.',
             'process_run_id.uuid' => 'La corrida de conciliación no es válida.',
             'process_run_id.exists' => 'La corrida de conciliación no existe.',
         ];
